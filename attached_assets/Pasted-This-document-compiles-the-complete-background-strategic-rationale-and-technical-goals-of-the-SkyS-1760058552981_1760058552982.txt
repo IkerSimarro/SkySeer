@@ -1,0 +1,48 @@
+This document compiles the complete background, strategic rationale, and technical goals of the SkySeer AI Pipeline, serving as a comprehensive blueprint for your aerospace/ML portfolio.
+This narrative is fully informed by your roadmap and the project’s goal to apply Machine Learning to UAP and Anomaly Detection.
+📑 SkySeer AI Pipeline: Project Genesis and Strategic Rationale
+1. Executive Summary: The Strategic Mission
+The SkySeer project is the direct result of a strategic decision to apply advanced Unsupervised Machine Learning (UML) and Time-Series Analysis to the field of atmospheric and space-based anomaly detection.
+The project’s goal is to transcend the limitations of manual observation and noisy Computer Vision (CV) by creating a stable, autonomous data pipeline capable of:
+
+Efficiently harvesting every genuine transient event from long-duration video archives.
+Statistically filtering out 99% of common traffic (satellites, meteors, noise).
+Flagging rare, anomalous events (potential UAPs) for high-priority human review.
+This project directly addresses the Short-Term Goal (0–12 months) of your ML Roadmap: building a functional "Sky Anomaly Detector" suitable for integration with civilian aerospace research groups (like SCU or UAPx).
+2. Phase I: The Technical Necessity and Project Pivot
+The core challenge that led to the current design was the unreliable nature of initial Computer Vision methods when applied to low-light, low-cost equipment (like the RPi Camera Module NoIR).
+The Failure of Heuristics and Visual Classification
+Early iterations of the project attempted real-time visual classification using simple pixel rules (e.g., "if contour size > 5 pixels, it's a plane"). This strategy failed because:
+
+Noise Amplification: Low-light amplification in the camera generates significant flicker and noise around bright objects (stationary stars), which the initial detector often flagged as real motion.
+The Timelapse Trap: In your processed videos, the slow movement of stars across the frame was continuously detected as movement, generating a massive, unusable volume of false positive clips.
+Classification Contamination: Due to noise, a faint satellite would be mislabeled as "Junk," while random sensor noise would trigger a "Meteor" flag.
+This failure confirmed that visual analysis is too subjective and noisy for automated sorting. The project required a pivot from image processing to data processing.
+3. Phase II: The Core Innovation — Non-Visual AI
+The final SkySeer pipeline is built on the concept of Feature Engineering—turning visual evidence into abstract numerical "Flight Signatures."
+A. Data Engineering (Feature Creation)
+The Harvester (Stage 2) was redesigned to log key kinematic and geometric metrics for every moving object:
+Metric (Feature)Strategic PurposeRationaleAverage Speed (μs
+​)Differentiates object type based on velocity.High μs
+​ is a meteor/fast satellite; Low μs
+​ is stationary noise or slow traffic.Speed Consistency (σs
+​)Measures the stability of the movement path.Low σs
+​ (low standard deviation) indicates controlled, stable orbit (Satellite). High σs
+​ indicates erratic, uncontrolled movement (Noise, atmospheric influence, debris).Total DurationDistinguishes between short flashes and long transits.Essential filter for filtering out common brief camera glitches.
+Export to Sheets
+B. The Final Filter Layers
+The subsequent stages use Unsupervised Learning (UML)—a perfect technique for anomaly hunting, as it doesn't require prior labeled examples of a UAP.
+StageModel UsedAI FunctionValue to the ProjectStage 4K-Means ClusteringAutomatic Sorting: Groups data points by similarity in their "Flight Signature," automatically creating clusters for 'Satellite Orbit,' 'Meteor Events,' and 'Noise/Junk.'Cleans 99% of the noise, leaving only high-confidence groups.Stage 5Isolation ForestAnomaly Flagging: This is the UAP filter. It identifies data points that are statistical outliers—events whose speed, consistency, and duration do not fit any of the common clusters.Delivers a list of statistically unique events directly to the human expert.
+Export to Sheets
+4. Final Product and Portfolio Impact
+The SkySeer AI Pipeline provides a complete, robust system ready for integration into a professional aerospace or scientific anomaly research setting.
+Key Deliverables:
+Sorted Output Folders: The final output is not raw video, but a structured directory (motion_clips/) with automatically labeled folders:
+0_ANOMALY_UAP_REVIEW (Highest Priority): Contains clips flagged by the Isolation Forest as statistically rare.
+1_METEOR_EVENT / 2_SATELLITE_ORBIT: Contains clips confirmed to follow predictable patterns.
+3_PLANE_OR_JUNK: Contains clips flagged by K-Means as low-priority noise/common debris.
+Demonstrated Skills: The project showcases competency in four critical areas for aerospace ML roles:
+Data Engineering: Turning complex video into clean numerical features.
+Time-Series Analysis: Calculating and leveraging movement statistics.
+Unsupervised Learning: Using K-Means and Isolation Forest to manage high-volume, unlabeled data.
+Robust Filtering: Designing systems that maintain high sensitivity while blocking intractable real-world noise.

@@ -1,0 +1,150 @@
+# ===============================
+# 🌌 Satellite / Meteor Motion Detector (Larger Rectangles)
+# ===============================
+import cv2
+import os
+from google.colab import files
+
+# 1️⃣ Upload video
+uploaded = files.upload()
+video_path = next(iter(uploaded.keys()))
+print("Using video:", video_path)
+
+# 2️⃣ Convert to MP4 if needed
+if not video_path.lower().endswith(".mp4"):
+    mp4_path = os.path.splitext(video_path)[0] + ".mp4"
+    !ffmpeg -i "{video_path}" -c:v libx264 "{mp4_path}" -y
+    video_path = mp4_path
+    print("Converted to MP4:", video_path)
+
+# 3️⃣ Prepare folders
+frames_folder = "motion_frames"
+clips_folder = "motion_clips"
+os.makedirs(frames_folder, exist_ok=True)
+os.makedirs(clips_folder, exist_ok=True)
+
+# 4️⃣ Motion detection setup
+cap = cv2.VideoCapture(video_path)
+fps = int(cap.get(cv2.CAP_PROP_FPS))
+frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+ret, prev_frame = cap.read()
+if not ret:
+    raise ValueError("Video could not be read")
+prev_gray = cv2.cvtColor(prev_frame, cv2.COLOR_BGR2GRAY)
+
+frame_count = 0
+motion_frame_count = 0
+save_every_n_frames = 1  # save every motion frame
+
+# Clip variables
+min_frames_for_clip = 15           # minimum frames to save a clip
+pre_buffer_frames = fps            # 1 second before motion
+post_buffer_frames = fps           # 1 second after motion
+from collections import deque
+pre_motion_buffer = deque(maxlen=pre_buffer_frames)
+post_motion_buffer = deque()
+post_motion_count = 0
+
+clip_frames_count = 0
+clip_index = 0
+motion_active = False
+clip_writer = None
+
+# ===============================
+# 5️⃣ Motion detection loop
+# ===============================
+while True:
+    ret, frame = cap.read()
+    if not ret:
+        # Close last clip if still open
+        if motion_active and clip_writer is not None:
+            if clip_frames_count >= min_frames_for_clip:
+                for f in post_motion_buffer:
+                    clip_writer.write(f)
+                clip_writer.release()
+            else:
+                clip_writer.release()
+                os.remove(clip_filename)
+        break
+
+    frame_count += 1
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
+    # Ensure frames same size
+    if gray.shape != prev_gray.shape:
+        prev_gray = cv2.resize(prev_gray, (gray.shape[1], gray.shape[0]))
+
+    # Blur to reduce noise
+    gray_blur = cv2.GaussianBlur(gray, (3,3), 0)
+    prev_gray_blur = cv2.GaussianBlur(prev_gray, (3,3), 0)
+
+    # Compute difference & threshold
+    diff = cv2.absdiff(prev_gray_blur, gray_blur)
+    _, thresh = cv2.threshold(diff, 16, 255, cv2.THRESH_BINARY)
+
+    # Detect contours
+    contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    motion_detected = False
+    for c in contours:
+        if cv2.contourArea(c) > 3:  # satellites / meteors are tiny
+            motion_detected = True
+            x, y, w, h = cv2.boundingRect(c)
+            pad = 5  # rectangle padding to make it larger
+            cv2.rectangle(
+                frame,
+                (max(0, x-pad), max(0, y-pad)),
+                (min(frame.shape[1]-1, x+w+pad), min(frame.shape[0]-1, y+h+pad)),
+                (0, 0, 255),
+                2
+            )
+
+    # Save frame to pre-motion buffer
+    pre_motion_buffer.append(frame.copy())
+
+    # Handle clip writing
+    if motion_detected:
+        clip_frames_count += 1
+        if not motion_active:
+            clip_index += 1
+            clip_filename = os.path.join(clips_folder, f"clip_{clip_index}.mp4")
+            clip_writer = cv2.VideoWriter(
+                clip_filename,
+                cv2.VideoWriter_fourcc(*'mp4v'),
+                fps,
+                (frame.shape[1], frame.shape[0])
+            )
+            motion_active = True
+            # Write pre-motion frames
+            for f in pre_motion_buffer:
+                clip_writer.write(f)
+
+        clip_writer.write(frame)
+        post_motion_count = 0
+        post_motion_buffer.clear()
+
+    else:
+        if motion_active:
+            post_motion_buffer.append(frame.copy())
+            post_motion_count += 1
+            if post_motion_count >= post_buffer_frames:
+                if clip_frames_count >= min_frames_for_clip:
+                    for f in post_motion_buffer:
+                        clip_writer.write(f)
+                    clip_writer.release()
+                else:
+                    clip_writer.release()
+                    os.remove(clip_filename)
+                    clip_index -= 1
+                clip_writer = None
+                motion_active = False
+                clip_frames_count = 0
+                post_motion_buffer.clear()
+
+    prev_gray = gray
+
+cap.release()
+print("🎬 Video processing complete!")
+print(f"Total motion frames: {motion_frame_count}")
+print(f"All motion clips saved in: {clips_folder}")
