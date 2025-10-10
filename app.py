@@ -15,7 +15,7 @@ import base64
 from video_processor import VideoProcessor
 from feature_extractor import FeatureExtractor
 from ml_classifier import MLClassifier
-from utils import create_download_zip, format_duration, get_video_info
+from utils import create_download_zip, format_duration, get_video_info, recommend_settings
 from db_service import DatabaseService
 from trajectory_visualizer import TrajectoryVisualizer
 
@@ -40,6 +40,8 @@ if 'metadata' not in st.session_state:
     st.session_state.metadata = []
 if 'video_info' not in st.session_state:
     st.session_state.video_info = {}
+if 'recommendations' not in st.session_state:
+    st.session_state.recommendations = None
 
 def main():
     st.title("🌌 SkySeer AI Pipeline")
@@ -96,6 +98,21 @@ def main():
         )
         
         st.markdown("---")
+        
+        # Settings recommendations (shown after video upload)
+        if st.session_state.recommendations:
+            st.info("💡 **Recommended Settings for Your Video:**")
+            rec = st.session_state.recommendations
+            for explanation in rec['explanations']:
+                st.markdown(f"• {explanation}")
+            
+            # Display recommended values
+            st.markdown(f"**Suggested values:** Sensitivity={rec['sensitivity']}, " +
+                       f"Min Duration={rec['min_duration']}s, " +
+                       f"Max Duration={'Enabled' if rec['max_duration_enabled'] else 'Disabled'} " +
+                       f"({rec['max_duration']}s), Frame Skip={rec['frame_skip']}")
+        
+        st.markdown("---")
         st.markdown("**Classification Categories:**")
         st.markdown("🛰️ **Satellite** - Steady orbital motion")
         st.markdown("☄️ **Meteor** - Fast, straight trajectory")
@@ -118,9 +135,14 @@ def main():
         st.info("💡 **Tip for large videos:** For videos over 500MB, consider compressing or splitting them into smaller clips for faster processing.")
         
         if uploaded_file is not None:
-            # Display video info
+            # Display video info and generate recommendations
             with st.expander("📊 Video Information", expanded=True):
                 video_info = get_video_info(uploaded_file)
+                
+                # Generate recommendations based on video properties
+                if 'error' not in video_info:
+                    st.session_state.recommendations = recommend_settings(video_info)
+                
                 col_a, col_b, col_c = st.columns(3)
                 
                 with col_a:
@@ -470,6 +492,7 @@ def reset_session():
     st.session_state.processed_clips = []
     st.session_state.metadata = []
     st.session_state.video_info = {}
+    st.session_state.recommendations = None
     
     # Clean up directories
     for directory in ['temp_uploads', 'processed_clips', 'results']:

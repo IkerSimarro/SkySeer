@@ -237,3 +237,85 @@ def estimate_processing_time(file_size_mb, duration_seconds):
     total_time = base_processing_time + ml_processing_time
     
     return format_duration(total_time)
+
+def recommend_settings(video_info):
+    """
+    Analyze video and recommend optimal settings for detection
+    
+    Args:
+        video_info (dict): Video information from get_video_info()
+        
+    Returns:
+        dict: Recommended settings with explanations
+    """
+    recommendations = {
+        'sensitivity': 4,
+        'min_duration': 1.5,
+        'max_duration': 15.0,
+        'max_duration_enabled': True,
+        'frame_skip': 3,
+        'explanations': []
+    }
+    
+    duration_seconds = video_info.get('duration_seconds', 0)
+    fps_numeric = video_info.get('fps_numeric', 30)
+    resolution = video_info.get('resolution', '1920x1080')
+    
+    # Parse resolution
+    try:
+        width, height = map(int, resolution.split('x'))
+        total_pixels = width * height
+    except:
+        total_pixels = 1920 * 1080
+    
+    # Recommendation 1: Frame skip based on duration
+    if duration_seconds > 300:  # > 5 minutes
+        recommendations['frame_skip'] = 5
+        recommendations['explanations'].append(
+            "📹 Long video detected - using frame skip=5 for faster processing"
+        )
+    elif duration_seconds > 180:  # > 3 minutes
+        recommendations['frame_skip'] = 4
+        recommendations['explanations'].append(
+            "📹 Medium-length video - using frame skip=4 for balanced speed"
+        )
+    else:
+        recommendations['explanations'].append(
+            "📹 Short video - using frame skip=3 for good accuracy"
+        )
+    
+    # Recommendation 2: Sensitivity based on resolution
+    if total_pixels > 2073600:  # > 1920x1080
+        recommendations['sensitivity'] = 3
+        recommendations['explanations'].append(
+            "🎯 High resolution video - lowering sensitivity to reduce noise"
+        )
+    else:
+        recommendations['explanations'].append(
+            "🎯 Standard resolution - using moderate sensitivity"
+        )
+    
+    # Recommendation 3: Duration settings
+    if fps_numeric > 0:
+        # For high FPS, we can use shorter durations
+        if fps_numeric >= 60:
+            recommendations['min_duration'] = 1.0
+            recommendations['explanations'].append(
+                "⏱️ High FPS video - can use shorter min duration (1.0s)"
+            )
+        else:
+            recommendations['explanations'].append(
+                "⏱️ Standard FPS - using conservative min duration (1.5s)"
+            )
+    
+    # Always recommend max duration to filter stars
+    recommendations['explanations'].append(
+        "⭐ Max duration enabled (15s) to filter out stationary stars"
+    )
+    
+    # General advice
+    recommendations['explanations'].append(
+        "💡 These settings aim for <10 obvious detections per video"
+    )
+    
+    return recommendations
