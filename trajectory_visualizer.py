@@ -315,6 +315,12 @@ class TrajectoryVisualizer:
         if not metadata:
             return self._create_empty_plot()
         
+        # Convert fps to float if it's a string
+        try:
+            fps = float(fps)
+        except (ValueError, TypeError):
+            fps = 30.0
+        
         # Group by clip
         clips_data = {}
         for item in metadata:
