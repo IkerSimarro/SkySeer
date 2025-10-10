@@ -35,25 +35,29 @@ class FeatureExtractor:
             # Sort detections by frame number
             clip_detections.sort(key=lambda x: x['frame_number'])
             
+            # Get FPS from first detection (all should have same FPS)
+            video_fps = clip_detections[0].get('fps', 30) if clip_detections else 30
+            
             # Extract basic trajectory features
-            features = self._extract_clip_features(clip_id, clip_detections)
+            features = self._extract_clip_features(clip_id, clip_detections, video_fps)
             features_list.append(features)
         
         return pd.DataFrame(features_list)
     
-    def _extract_clip_features(self, clip_id, detections):
+    def _extract_clip_features(self, clip_id, detections, fps=30):
         """
         Extract comprehensive features for a single clip
         
         Args:
             clip_id (int): Unique identifier for the clip
             detections (list): List of detection dictionaries for this clip
+            fps (float): Video frame rate for accurate speed/duration calculations
             
         Returns:
             dict: Dictionary of extracted features
         """
         if len(detections) < 2:
-            return self._create_minimal_features(clip_id, detections)
+            return self._create_minimal_features(clip_id, detections, fps)
         
         # Extract position data
         positions = [(d['centroid_x'], d['centroid_y']) for d in detections]
@@ -85,7 +89,7 @@ class FeatureExtractor:
                                       (positions[i][1] - positions[i-1][1])**2) 
                             for i in range(1, len(positions))])
         
-        duration = (frame_numbers[-1] - frame_numbers[0]) / 30.0  # Assuming 30 FPS
+        duration = (frame_numbers[-1] - frame_numbers[0]) / float(fps)  # Use actual FPS
         
         # Trajectory linearity (straight line vs actual path)
         if len(positions) >= 2:
@@ -185,7 +189,7 @@ class FeatureExtractor:
             'detection_count': len(detections)
         }
     
-    def _create_minimal_features(self, clip_id, detections):
+    def _create_minimal_features(self, clip_id, detections, fps=30):
         """Create minimal feature set for clips with insufficient data"""
         if not detections:
             return {
@@ -217,7 +221,7 @@ class FeatureExtractor:
         detection = detections[0]
         return {
             'clip_id': clip_id,
-            'duration': 1.0 / 30.0,  # Single frame duration
+            'duration': 1.0 / float(fps),  # Single frame duration using actual FPS
             'avg_speed': 0,
             'max_speed': 0,
             'min_speed': 0,

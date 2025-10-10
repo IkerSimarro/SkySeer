@@ -67,6 +67,7 @@ class VideoProcessor:
         # Metadata collection
         metadata = []
         current_clip_metadata = []
+        video_fps = fps  # Store FPS for feature extraction
         
         # Results storage
         motion_clips = []
@@ -156,7 +157,8 @@ class VideoProcessor:
                         'bbox_y': y,
                         'bbox_width': w,
                         'bbox_height': h,
-                        'aspect_ratio': aspect_ratio
+                        'aspect_ratio': aspect_ratio,
+                        'fps': video_fps
                     }
                     frame_objects.append(object_data)
                     

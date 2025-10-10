@@ -59,8 +59,19 @@ class MLClassifier:
             return self._classify_single_object(features_df)
         
         # Step 1: K-Means Clustering for primary classification
+        # Adjust number of clusters based on available samples
+        n_samples = X.shape[0]
+        n_clusters = min(self.n_clusters, n_samples)
+        
         X_scaled = self.scaler.fit_transform(X)
-        cluster_labels = self.kmeans.fit_predict(X_scaled)
+        
+        # Only use KMeans if we have enough samples
+        if n_clusters >= 2:
+            kmeans = KMeans(n_clusters=n_clusters, random_state=self.random_state, n_init=10)
+            cluster_labels = kmeans.fit_predict(X_scaled)
+        else:
+            # Fall back to rule-based for single sample
+            return self._classify_single_object(features_df)
         
         # Step 2: Isolation Forest for anomaly detection
         anomaly_scores = self.isolation_forest.fit_predict(X_scaled)
@@ -114,7 +125,10 @@ class MLClassifier:
         """Interpret K-Means clusters and assign object classifications"""
         cluster_interpretations = {}
         
-        for cluster_id in range(self.n_clusters):
+        # Get actual number of clusters from the data
+        n_actual_clusters = results_df['cluster'].nunique()
+        
+        for cluster_id in range(n_actual_clusters):
             cluster_data = results_df[results_df['cluster'] == cluster_id]
             
             if cluster_data.empty:
