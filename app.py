@@ -16,6 +16,7 @@ from video_processor import VideoProcessor
 from feature_extractor import FeatureExtractor
 from ml_classifier import MLClassifier
 from utils import create_download_zip, format_duration, get_video_info
+from db_service import DatabaseService
 
 # Configure page
 st.set_page_config(
@@ -32,6 +33,8 @@ if 'results_data' not in st.session_state:
     st.session_state.results_data = None
 if 'processed_clips' not in st.session_state:
     st.session_state.processed_clips = []
+if 'db_service' not in st.session_state:
+    st.session_state.db_service = DatabaseService()
 
 def main():
     st.title("🌌 SkySeer AI Pipeline")
@@ -148,6 +151,9 @@ def process_video(uploaded_file, sensitivity, min_duration, frame_skip):
     with open(temp_path, "wb") as f:
         f.write(uploaded_file.getbuffer())
     
+    # Get video info for database
+    video_info = get_video_info(uploaded_file)
+    
     # Progress tracking
     progress_bar = st.progress(0)
     status_text = st.empty()
@@ -194,6 +200,16 @@ def process_video(uploaded_file, sensitivity, min_duration, frame_skip):
         st.session_state.results_data = results_df
         st.session_state.processed_clips = motion_clips
         st.session_state.processing_complete = True
+        
+        # Save to database
+        try:
+            session_id = st.session_state.db_service.save_analysis_session(
+                video_info, results_df, motion_clips
+            )
+            if session_id:
+                st.session_state.current_session_id = session_id
+        except Exception as e:
+            st.warning(f"Could not save to database: {e}")
         
         progress_bar.progress(100)
         status_text.text("✅ Analysis Complete!")

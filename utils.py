@@ -52,11 +52,14 @@ def get_video_info(uploaded_file):
         
         return {
             'duration': duration_formatted,
+            'duration_seconds': duration_seconds,
             'fps': f"{fps:.1f}" if fps > 0 else "Unknown",
+            'fps_numeric': fps,
             'resolution': f"{width}x{height}",
             'file_size': file_size_formatted,
             'format': uploaded_file.name.split('.')[-1].upper(),
-            'bitrate': bitrate_formatted
+            'bitrate': bitrate_formatted,
+            'filename': uploaded_file.name
         }
         
     except Exception as e:
