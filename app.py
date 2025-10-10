@@ -61,11 +61,11 @@ def main():
         # Minimum clip duration
         min_duration = st.slider(
             "Minimum Clip Duration (seconds)",
-            min_value=0.5,
+            min_value=0.3,
             max_value=5.0,
-            value=1.0,
-            step=0.5,
-            help="Minimum duration for a valid detection clip"
+            value=0.5,
+            step=0.1,
+            help="Minimum duration for a valid detection clip. Lower values catch fast objects like meteors."
         )
         
         # Frame skip rate for performance
@@ -183,7 +183,21 @@ def process_video(uploaded_file, sensitivity, min_duration, frame_skip):
             st.error("No motion detected in video. Try lowering sensitivity or check video quality.")
             return
         
-        st.success(f"✅ Detected {len(motion_clips)} motion events")
+        if not metadata:
+            st.error(f"""⚠️ Motion detected but all objects were filtered out!
+            
+**Possible causes:**
+- Objects appear for less than {min_duration} seconds (current minimum duration)
+- Objects are intermittent or flickering
+
+**Solutions:**
+- Lower the minimum duration threshold (try 0.3 or 0.5 seconds)
+- Increase sensitivity to capture more motion
+- Check if video has stable objects that move continuously
+            """)
+            return
+        
+        st.success(f"✅ Detected {len(motion_clips)} motion events with {len(set([m['clip_id'] for m in metadata]))} tracked objects")
         
         # Stage 2: Feature Extraction
         status_text.text("📊 Stage 2/4: Extracting movement features...")
