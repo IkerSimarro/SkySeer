@@ -68,6 +68,24 @@ def main():
             help="Minimum duration for a valid detection clip. Lower values catch fast objects like meteors."
         )
         
+        # Maximum clip duration
+        max_duration_enabled = st.checkbox(
+            "Enable Maximum Duration Filter",
+            value=False,
+            help="Filter out objects that stay on screen too long (like stationary stars)"
+        )
+        
+        max_duration = None
+        if max_duration_enabled:
+            max_duration = st.slider(
+                "Maximum Clip Duration (seconds)",
+                min_value=1.0,
+                max_value=30.0,
+                value=10.0,
+                step=1.0,
+                help="Objects visible longer than this will be filtered out (e.g., to exclude stars)"
+            )
+        
         # Frame skip rate for performance
         frame_skip = st.slider(
             "Frame Skip Rate",
@@ -120,7 +138,7 @@ def main():
             
             # Process video button
             if st.button("🚀 Start Analysis", type="primary", use_container_width=True):
-                process_video(uploaded_file, sensitivity, min_duration, frame_skip)
+                process_video(uploaded_file, sensitivity, min_duration, max_duration, frame_skip)
     
     with col2:
         st.header("📈 Processing Status")
@@ -146,7 +164,7 @@ def main():
     if st.session_state.processing_complete and st.session_state.results_data is not None:
         display_results()
 
-def process_video(uploaded_file, sensitivity, min_duration, frame_skip):
+def process_video(uploaded_file, sensitivity, min_duration, max_duration, frame_skip):
     """Process the uploaded video through the complete pipeline"""
     
     # Create temporary file
@@ -173,6 +191,7 @@ def process_video(uploaded_file, sensitivity, min_duration, frame_skip):
         processor = VideoProcessor(
             sensitivity=sensitivity,
             min_duration=min_duration,
+            max_duration=max_duration,
             frame_skip=frame_skip
         )
         
@@ -184,15 +203,18 @@ def process_video(uploaded_file, sensitivity, min_duration, frame_skip):
             return
         
         if not metadata:
+            max_filter_msg = f"\n- Objects appear for more than {max_duration} seconds (maximum duration filter enabled)" if max_duration else ""
+            max_solution_msg = "\n- Disable or increase the maximum duration filter" if max_duration else ""
+            
             st.error(f"""⚠️ Motion detected but all objects were filtered out!
             
 **Possible causes:**
-- Objects appear for less than {min_duration} seconds (current minimum duration)
+- Objects appear for less than {min_duration} seconds (current minimum duration){max_filter_msg}
 - Objects are intermittent or flickering
 
 **Solutions:**
 - Lower the minimum duration threshold (try 0.3 or 0.5 seconds)
-- Increase sensitivity to capture more motion
+- Increase sensitivity to capture more motion{max_solution_msg}
 - Check if video has stable objects that move continuously
             """)
             return

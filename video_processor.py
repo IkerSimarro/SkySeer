@@ -7,17 +7,19 @@ from datetime import datetime
 from object_tracker import ObjectTracker
 
 class VideoProcessor:
-    def __init__(self, sensitivity=5, min_duration=1.0, frame_skip=3):
+    def __init__(self, sensitivity=5, min_duration=1.0, max_duration=None, frame_skip=3):
         """
         Initialize video processor with configurable parameters
         
         Args:
             sensitivity (int): Motion detection sensitivity (1-10)
             min_duration (float): Minimum clip duration in seconds
+            max_duration (float): Maximum clip duration in seconds (None = no limit)
             frame_skip (int): Process every Nth frame for performance
         """
         self.sensitivity = sensitivity
         self.min_duration = min_duration
+        self.max_duration = max_duration
         self.frame_skip = frame_skip
         
         # Convert sensitivity to contour area threshold
@@ -187,12 +189,14 @@ class VideoProcessor:
         
         cap.release()
         
-        # Filter objects that have sufficient duration
+        # Filter objects by duration (min and max)
         min_frames_for_clip = int(fps * self.min_duration)
+        max_frames_for_clip = int(fps * self.max_duration) if self.max_duration else float('inf')
         filtered_metadata = []
         
         for obj_id, detections in object_metadata.items():
-            if len(detections) >= min_frames_for_clip:
+            num_frames = len(detections)
+            if min_frames_for_clip <= num_frames <= max_frames_for_clip:
                 filtered_metadata.extend(detections)
         
         # Prepare motion clips list
