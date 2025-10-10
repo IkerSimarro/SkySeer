@@ -24,7 +24,8 @@ class VideoProcessor:
         
         # Convert sensitivity to contour area threshold
         # Higher sensitivity = lower threshold (detects smaller objects)
-        self.min_contour_area = max(1, 15 - sensitivity)
+        # Increased base values to reduce noise detection
+        self.min_contour_area = max(5, 30 - (sensitivity * 2))
         
     def process_video(self, video_path):
         """
@@ -46,14 +47,19 @@ class VideoProcessor:
         frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         
         # Setup MOG2 background subtractor for better motion detection
+        # Increased varThreshold to reduce noise detection (higher = less sensitive)
         backSub = cv2.createBackgroundSubtractorMOG2(
             history=500,
-            varThreshold=32,
+            varThreshold=50,  # Increased from 32 to reduce noise
             detectShadows=False
         )
         
         # Initialize object tracker
-        tracker = ObjectTracker(max_disappeared=int(fps * 0.5), max_distance=100)
+        # Account for frame skipping when calculating max_disappeared
+        # We want 2 seconds of real time, but we only process every frame_skip frames
+        # So: max_disappeared = (fps / frame_skip) * desired_seconds
+        max_disappeared_frames = int((fps / self.frame_skip) * 2.0)  # 2 seconds of tracked frames
+        tracker = ObjectTracker(max_disappeared=max_disappeared_frames, max_distance=150)
         
         # Metadata collection per object
         object_metadata = defaultdict(list)
