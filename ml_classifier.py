@@ -172,15 +172,14 @@ class MLClassifier:
                 'Junk': 0.1  # Base score for junk category
             }
             
-            # Additional heuristics
-            if avg_speed > 20 and avg_linearity > 0.8 and avg_duration < 2:
-                scores['Meteor'] *= 2
-            elif avg_speed < 10 and avg_consistency > 0.7 and avg_linearity > 0.7:
-                scores['Satellite'] *= 2
-            elif avg_duration > 5 and avg_consistency > 0.6:
-                scores['Plane'] *= 2
-            else:
-                scores['Junk'] *= 2
+            # Apply minimal heuristics - mostly trust the base ML scores
+            # Only boost when there's VERY strong evidence
+            if avg_speed > 30 and avg_linearity > 0.85 and avg_duration < 1.5:
+                # Extremely fast, linear, brief -> Definitely Meteor
+                scores['Meteor'] *= 1.8
+            elif avg_consistency < 0.3 or avg_linearity < 0.3:
+                # Very poor quality trajectory -> Likely Junk
+                scores['Junk'] *= 1.5
             
             # Select best classification
             best_class = max(scores, key=scores.get)
@@ -201,22 +200,31 @@ class MLClassifier:
         return results_df
     
     def _rule_based_classification(self, row):
-        """Rule-based classification for edge cases"""
-        # High-speed, linear, short duration -> Meteor
-        if row['avg_speed'] > 25 and row['linearity'] > 0.8 and row['duration'] < 3:
-            return 'Meteor', 0.8
+        """Rule-based classification for edge cases - trust the feature scores"""
+        # Use the pre-computed scores from feature_extractor
+        satellite_score = row.get('satellite_score', 0)
+        meteor_score = row.get('meteor_score', 0)
+        plane_score = row.get('plane_score', 0)
         
-        # Low speed, consistent, linear -> Satellite
-        elif row['avg_speed'] < 15 and row['speed_consistency'] > 0.7 and row['linearity'] > 0.6:
-            return 'Satellite', 0.7
+        # Determine best classification based on scores
+        scores = {
+            'Satellite': satellite_score,
+            'Meteor': meteor_score,
+            'Plane': plane_score,
+            'Junk': 0.1
+        }
         
-        # Moderate speed, consistent, longer duration -> Plane
-        elif 10 < row['avg_speed'] < 25 and row['speed_consistency'] > 0.6 and row['duration'] > 3:
-            return 'Plane', 0.7
+        # Apply minimal adjustments for extreme cases
+        if row['avg_speed'] > 30 and row['linearity'] > 0.85 and row['duration'] < 1.5:
+            scores['Meteor'] *= 1.8
+        elif row['speed_consistency'] < 0.3 or row['linearity'] < 0.3:
+            scores['Junk'] *= 1.5
         
-        # Default to Junk (noise, artifacts, etc.)
-        else:
-            return 'Junk', 0.5
+        # Select best classification
+        best_class = max(scores, key=scores.get)
+        confidence = min(scores[best_class], 0.85)  # Cap at 85% for single objects
+        
+        return best_class, confidence
     
     def _calculate_confidence_scores(self, results_df):
         """Calculate and refine confidence scores based on multiple factors"""
