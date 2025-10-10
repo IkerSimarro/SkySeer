@@ -43,7 +43,7 @@ if 'video_info' not in st.session_state:
 
 def main():
     st.title("🌌 SkySeer AI Pipeline")
-    st.markdown("**Advanced Sky Anomaly Detection & UAP Classification System**")
+    st.markdown("**Advanced Sky Object Detection & Classification System**")
     
     # Sidebar configuration
     with st.sidebar:
@@ -101,7 +101,6 @@ def main():
         st.markdown("☄️ **Meteor** - Fast, straight trajectory")
         st.markdown("✈️ **Plane** - Predictable flight path")
         st.markdown("🗑️ **Junk** - Noise/artifacts")
-        st.markdown("🛸 **ANOMALY** - Unusual patterns (UAP)")
 
     # Main content area
     col1, col2 = st.columns([2, 1])
@@ -151,8 +150,7 @@ def main():
             st.markdown("1. 🎥 Motion Detection")
             st.markdown("2. 📊 Feature Extraction") 
             st.markdown("3. 🧠 ML Classification")
-            st.markdown("4. 🔍 Anomaly Detection")
-            st.markdown("5. 📋 Results Generation")
+            st.markdown("4. 📋 Results Generation")
         else:
             st.success("✅ Processing Complete!")
             
@@ -277,7 +275,7 @@ def display_results():
     results_df = st.session_state.results_data
     
     # Summary metrics
-    col1, col2, col3, col4, col5, col6 = st.columns(6)
+    col1, col2, col3, col4, col5 = st.columns(5)
     
     with col1:
         total_detections = len(results_df)
@@ -299,10 +297,6 @@ def display_results():
         planes = len(results_df[results_df['classification'] == 'Plane'])
         st.metric("✈️ Planes", planes)
     
-    with col6:
-        anomalies = len(results_df[results_df['classification'] == 'ANOMALY_UAP'])
-        st.metric("🛸 Anomalies", anomalies, delta="HIGH PRIORITY" if anomalies > 0 else None)
-    
     # Classification distribution chart
     st.subheader("📊 Classification Distribution")
     
@@ -317,8 +311,7 @@ def display_results():
             'Satellite': '#1f77b4',
             'Meteor': '#ff7f0e', 
             'Plane': '#2ca02c',
-            'Junk': '#d62728',
-            'ANOMALY_UAP': '#9467bd'
+            'Junk': '#d62728'
         }
     )
     
@@ -348,27 +341,6 @@ def display_results():
             labels={'duration': 'Duration (seconds)'}
         )
         st.plotly_chart(fig_duration, use_container_width=True)
-    
-    # Anomaly detection visualization
-    if anomalies > 0:
-        st.subheader("🚨 Anomaly Analysis")
-        anomaly_df = results_df[results_df['classification'] == 'ANOMALY_UAP']
-        
-        fig_anomaly = px.scatter(
-            results_df,
-            x='avg_speed',
-            y='speed_consistency',
-            color='classification',
-            size='duration',
-            title="Anomaly Detection - Speed vs Consistency",
-            labels={
-                'avg_speed': 'Average Speed',
-                'speed_consistency': 'Speed Consistency'
-            }
-        )
-        st.plotly_chart(fig_anomaly, use_container_width=True)
-        
-        st.warning(f"⚠️ {anomalies} anomalous object(s) detected with unusual movement patterns!")
     
     # Trajectory Visualization
     if st.session_state.metadata:
@@ -430,7 +402,7 @@ def display_results():
     with col3:
         sort_by = st.selectbox(
             "Sort by",
-            options=['confidence', 'avg_speed', 'duration', 'anomaly_score'],
+            options=['confidence', 'avg_speed', 'duration'],
             index=0
         )
     
@@ -455,8 +427,7 @@ def display_results():
             ),
             'avg_speed': 'Avg Speed',
             'speed_consistency': 'Speed Consistency', 
-            'duration': 'Duration (s)',
-            'anomaly_score': 'Anomaly Score'
+            'duration': 'Duration (s)'
         }
     )
     

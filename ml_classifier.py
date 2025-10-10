@@ -9,27 +9,20 @@ import warnings
 warnings.filterwarnings('ignore')
 
 class MLClassifier:
-    def __init__(self, n_clusters=4, contamination=0.1, random_state=42):
+    def __init__(self, n_clusters=3, random_state=42):
         """
-        Initialize ML classifier with K-Means clustering and Isolation Forest
+        Initialize ML classifier with K-Means clustering (simplified - no anomaly detection)
         
         Args:
-            n_clusters (int): Number of clusters for K-Means (default: 4)
-            contamination (float): Expected proportion of anomalies (default: 0.1)
+            n_clusters (int): Number of clusters for K-Means (default: 3 for Satellite/Meteor/Plane)
             random_state (int): Random seed for reproducibility
         """
         self.n_clusters = n_clusters
-        self.contamination = contamination
         self.random_state = random_state
         
-        # Initialize models
+        # Initialize models (removed Isolation Forest)
         self.scaler = StandardScaler()
         self.kmeans = KMeans(n_clusters=n_clusters, random_state=random_state, n_init=10)
-        self.isolation_forest = IsolationForest(
-            contamination=contamination,
-            random_state=random_state,
-            n_estimators=100
-        )
         
         # Feature columns for ML processing
         self.feature_columns = [
@@ -61,8 +54,6 @@ class MLClassifier:
                 results_df['classification'] = ''
                 results_df['confidence'] = 0.0
                 results_df['cluster'] = 0
-                results_df['is_anomaly'] = False
-                results_df['anomaly_score'] = 0.0
                 
                 # Classify stars
                 results_df.loc[star_mask, 'classification'] = 'Star'
@@ -72,13 +63,13 @@ class MLClassifier:
                 non_star_df = features_df[~star_mask].copy()
                 if not non_star_df.empty and len(non_star_df) >= 2:
                     non_star_results = self._classify_non_stars(non_star_df)
-                    for col in ['classification', 'confidence', 'cluster', 'is_anomaly', 'anomaly_score']:
+                    for col in ['classification', 'confidence', 'cluster']:
                         if col in non_star_results.columns:
                             results_df.loc[~star_mask, col] = non_star_results[col].values
                 elif not non_star_df.empty:
                     # Single non-star object, use rule-based
                     single_result = self._classify_single_object(non_star_df)
-                    for col in ['classification', 'confidence', 'cluster', 'is_anomaly', 'anomaly_score']:
+                    for col in ['classification', 'confidence', 'cluster']:
                         if col in single_result.columns:
                             results_df.loc[~star_mask, col] = single_result[col].values
                 
@@ -114,24 +105,14 @@ class MLClassifier:
             # Fall back to rule-based for single sample
             return self._classify_single_object(features_df)
         
-        # Step 2: Isolation Forest for anomaly detection
-        anomaly_scores = self.isolation_forest.fit_predict(X_scaled)
-        anomaly_outlier_scores = self.isolation_forest.score_samples(X_scaled)
-        
         # Create results dataframe
         results_df = features_df.copy()
         results_df['cluster'] = cluster_labels
-        results_df['is_anomaly'] = anomaly_scores == -1
-        results_df['anomaly_score'] = -anomaly_outlier_scores  # Convert to positive scores
         
-        # Step 3: Interpret clusters and assign classifications
+        # Step 2: Interpret clusters and assign classifications
         results_df = self._interpret_clusters(results_df)
         
-        # Step 4: Override classifications for detected anomalies
-        results_df.loc[results_df['is_anomaly'], 'classification'] = 'ANOMALY_UAP'
-        results_df.loc[results_df['is_anomaly'], 'confidence'] = 0.9
-        
-        # Step 5: Calculate final confidence scores
+        # Step 3: Calculate final confidence scores
         results_df = self._calculate_confidence_scores(results_df)
         
         return results_df
@@ -157,8 +138,6 @@ class MLClassifier:
             results_df.loc[idx, 'classification'] = classification
             results_df.loc[idx, 'confidence'] = confidence
             results_df.loc[idx, 'cluster'] = 0
-            results_df.loc[idx, 'is_anomaly'] = classification == 'ANOMALY_UAP'
-            results_df.loc[idx, 'anomaly_score'] = 0.5
         
         return results_df
     
@@ -235,11 +214,7 @@ class MLClassifier:
         elif 10 < row['avg_speed'] < 25 and row['speed_consistency'] > 0.6 and row['duration'] > 3:
             return 'Plane', 0.7
         
-        # High anomaly indicators -> Potential UAP
-        elif row['anomaly_indicators'] > 2:
-            return 'ANOMALY_UAP', 0.6
-        
-        # Default to Junk
+        # Default to Junk (noise, artifacts, etc.)
         else:
             return 'Junk', 0.5
     
@@ -259,12 +234,6 @@ class MLClassifier:
                 base_confidence = min(base_confidence * 1.2, 0.95)  # High quality trajectory
             elif row['linearity'] < 0.3 or row['speed_consistency'] < 0.3:
                 base_confidence *= 0.7  # Poor quality trajectory
-            
-            # Special handling for anomalies
-            if row['classification'] == 'ANOMALY_UAP':
-                # Higher anomaly score = higher confidence in anomaly detection
-                anomaly_confidence = min(0.6 + (row['anomaly_score'] * 0.3), 0.95)
-                base_confidence = max(base_confidence, anomaly_confidence)
             
             results_df.loc[idx, 'confidence'] = round(base_confidence, 3)
         

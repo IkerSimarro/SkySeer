@@ -144,14 +144,14 @@ def create_download_zip(clip_paths, results_df):
         readme_content = """SkySeer AI Pipeline - Analysis Results
 =====================================
 
-This ZIP file contains the results of your sky anomaly detection analysis.
+This ZIP file contains the results of your sky object detection analysis.
 
 Folder Structure:
-- ANOMALY_UAP/: Clips flagged as potential unidentified aerial phenomena
 - Satellite/: Clips classified as satellites
 - Meteor/: Clips classified as meteors  
 - Plane/: Clips classified as aircraft
 - Junk/: Clips classified as noise/artifacts
+- Star/: Clips classified as stars (if detected)
 
 Files:
 - analysis_report.csv: Detailed analysis data with confidence scores
