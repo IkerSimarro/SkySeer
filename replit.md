@@ -2,30 +2,38 @@
 
 ## Overview
 
-SkySeer is an advanced sky anomaly detection and UAP (Unidentified Aerial Phenomena) classification system that uses unsupervised machine learning to analyze long-duration astronomical video footage. The system processes video files to detect motion events, extract kinematic features, and automatically classify detected objects into categories (satellites, meteors, planes, or anomalies) without requiring labeled training data.
+SkySeer is an advanced sky object detection and classification system that uses computer vision and machine learning to analyze night sky video footage. The system is optimized to detect **very obvious movement only** - focusing on clear satellite passes and meteor events while minimizing false positives from noise and atmospheric artifacts.
 
 The pipeline transforms raw video into structured data by:
-1. Detecting motion events using computer vision techniques
+1. Detecting motion events using conservative computer vision techniques
 2. Extracting numerical "flight signatures" (speed, trajectory, consistency metrics)
-3. Applying unsupervised ML (K-Means clustering and Isolation Forest) to automatically categorize detections
-4. Flagging statistically rare events for human review
+3. Applying K-Means clustering to automatically categorize detections (satellites, meteors, planes)
+4. Filtering aggressively to achieve <10 detections per typical video
 
-This system is designed for aerospace research and civilian anomaly detection projects, particularly suited for low-light camera equipment like Raspberry Pi NoIR modules.
+This system is designed for amateur astronomy and sky observation projects, particularly suited for low-light camera equipment like Raspberry Pi NoIR modules. The focus is on precision over recall - it's better to miss an edge case than to flood results with false positives.
 
 ## Recent Changes
 
-**October 10, 2025**:
+**October 10, 2025** (Major Overhaul):
+
+**Detection System Improvements:**
+- **Removed UAP/anomaly detection** - Eliminated Isolation Forest and all anomaly classification (excessive false positives)
+- **Made detection much more conservative** - System now targets <10 satellites and 1 meteor per video:
+  - Increased background subtractor variance threshold: 50 → 100 (only obvious motion)
+  - Increased minimum contour area: 3x larger (55 pixels for sensitivity=5)
+  - Fixed critical duration filtering bug that didn't account for frame skipping
+  - Increased default minimum duration: 0.5s → 1.5s
+  - Enabled maximum duration filter by default (15s) to filter out stationary stars
+- **Added automatic settings recommendations** - System analyzes uploaded video and suggests optimal parameters based on:
+  - Video duration (adjusts frame skip)
+  - Resolution (adjusts sensitivity for noise)
+  - FPS (adjusts duration thresholds)
+  - Recommendations appear in sidebar below configuration with explanations
+
+**Previous Changes:**
 - Fixed 502 timeout error for large video uploads (900MB+)
-  - Increased maxMessageSize to 1000MB in Streamlit config
-  - Increased maxUploadSize to 5000MB (5GB)
-  - Optimized server settings for large file transfers
 - Added advanced trajectory visualization system
-  - Interactive path tracking with start/end markers
-  - Speed heatmap showing movement patterns
-  - Direction distribution polar plots
-  - Timeline visualization for temporal analysis
 - Enhanced database persistence with metadata storage
-- Added helpful UI tips for large video processing
 
 ## User Preferences
 
@@ -73,9 +81,9 @@ The system follows a sequential processing model:
 
 3. **ML Classification** (`ml_classifier.py`)
    - Applies StandardScaler for feature normalization
-   - Uses K-Means clustering (4 clusters) to group similar motion patterns
-   - Implements Isolation Forest for anomaly detection
-   - Assigns confidence scores and classifications to each detection
+   - Uses K-Means clustering (3 clusters) to group similar motion patterns
+   - Classifies objects as: Satellite, Meteor, Plane, or Junk
+   - Assigns confidence scores based on trajectory quality and consistency
 
 4. **Utility Functions** (`utils.py`)
    - Handles video metadata extraction
@@ -116,10 +124,11 @@ The system follows a sequential processing model:
 **File-Based Storage**:
 - **Input**: Video files uploaded through Streamlit interface (temporary storage, up to 5GB)
 - **Output**: Organized directory structure with classified motion clips
-  - `0_ANOMALY_UAP_REVIEW/`: Statistically rare detections
-  - `1_METEOR_EVENT/`: High-speed, short-duration events
-  - `2_SATELLITE_ORBIT/`: Stable, linear trajectories
-  - `3_PLANE_OR_JUNK/`: Common or low-priority detections
+  - `Satellite/`: Stable, linear orbital trajectories
+  - `Meteor/`: High-speed, short-duration events
+  - `Plane/`: Aircraft with predictable flight paths
+  - `Junk/`: Noise, artifacts, and low-confidence detections
+  - `Star/`: Stationary star field movement (if detected)
 - **Temporary Files**: OpenCV processing requires temporary file creation for video analysis
 
 **PostgreSQL Database** (`db_models.py`, `db_service.py`):
@@ -145,35 +154,30 @@ The application is designed as a standalone analysis tool without user authentic
 
 ### Machine Learning Model Architecture
 
-**Unsupervised Learning Approach**: K-Means + Isolation Forest ensemble
+**Unsupervised Learning Approach**: K-Means Clustering (simplified, conservative)
 
 **K-Means Clustering**:
 - Purpose: Automatic categorization of motion patterns
-- Configuration: 4 clusters representing distinct object types
+- Configuration: 3 clusters representing distinct object types (Satellite, Meteor, Plane)
 - Features: 10-dimensional feature space (speed, consistency, trajectory metrics)
-- Output: Cluster assignments representing satellite/meteor/plane/other categories
-
-**Isolation Forest**:
-- Purpose: Anomaly detection for rare/unusual events
-- Configuration: 10% contamination rate (expects ~10% anomalies)
-- Features: Same 10-dimensional space as K-Means
-- Output: Binary anomaly flag and anomaly score
+- Output: Cluster assignments with confidence scores based on trajectory quality
 
 **Design Rationale**: Unsupervised learning was chosen because:
-1. No labeled UAP dataset exists for supervised training
-2. Common objects (satellites, meteors) have consistent kinematic signatures
-3. Anomalies are defined by statistical rarity rather than visual features
-4. System adapts to new data patterns without retraining
+1. No labeled dataset exists for supervised training
+2. Common objects (satellites, meteors, planes) have consistent kinematic signatures
+3. System focuses on obvious detections rather than edge cases
+4. Unsupervised approach adapts to new data patterns without retraining
 
 **Feature Engineering Strategy**: The system extracts kinematic "flight signatures" rather than visual features because:
 - Visual analysis is unreliable in low-light/noisy conditions
 - Motion physics are more consistent than appearance
 - Numerical features enable statistical analysis and ML processing
+- Conservative thresholds minimize false positives
 
 **Alternatives Considered**:
 - CNN-based visual classification: Rejected due to lack of labeled data and noise sensitivity
 - Rule-based heuristics: Rejected due to poor performance with real-world noise
-- Deep learning time-series models (LSTM): Considered future enhancement but unnecessary complexity for current feature set
+- Isolation Forest anomaly detection: Removed due to excessive false positives
 
 ## External Dependencies
 
@@ -184,7 +188,6 @@ The application is designed as a standalone analysis tool without user authentic
 ### Machine Learning Libraries
 - **scikit-learn**: 
   - K-Means clustering (`sklearn.cluster.KMeans`)
-  - Isolation Forest anomaly detection (`sklearn.ensemble.IsolationForest`)
   - Feature scaling (`sklearn.preprocessing.StandardScaler`)
   - Dimensionality reduction (`sklearn.decomposition.PCA`)
 
