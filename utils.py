@@ -86,27 +86,29 @@ def format_file_size(bytes_size):
         bytes_size /= 1024.0
     return f"{bytes_size:.1f} TB"
 
-def create_download_zip(clip_paths, results_df):
+def create_download_zip(clip_paths, results_df, classification_filter=None):
     """
-    Create a ZIP file containing all classified clips
+    Create a ZIP file containing classified clips
     
     Args:
         clip_paths (list): List of paths to video clips
         results_df (pd.DataFrame): Results dataframe with classifications
+        classification_filter (str, optional): Only include clips of this classification
         
     Returns:
         BytesIO: ZIP file buffer
     """
     zip_buffer = BytesIO()
     
+    # Filter results if classification specified
+    if classification_filter:
+        results_df = results_df[results_df['classification'] == classification_filter]
+    
     with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-        # Create folders for each classification
-        classifications = results_df['classification'].unique()
+        # Track which clip files we've already added to avoid duplicates
+        added_clips = set()
         
         # Add clips organized by classification
-        # Note: With object tracking, all objects may be in one video file
-        # We include the video for each object even if it's the same physical file
-        
         for idx, row in results_df.iterrows():
             clip_id = row['clip_id']
             classification = row['classification']
@@ -127,12 +129,15 @@ def create_download_zip(clip_paths, results_df):
                 clip_path = clip_paths[0]
             
             if clip_path and os.path.exists(clip_path):
-                # Create descriptive filename with object ID
-                safe_classification = classification.replace('/', '_')
-                new_filename = f"{safe_classification}/object_{clip_id}_{safe_classification}_conf{confidence:.2f}.mp4"
-                
-                # Add the clip (may be same file multiple times for different objects)
-                zip_file.write(clip_path, new_filename)
+                # Only add each unique clip file once
+                if clip_path not in added_clips:
+                    # Create descriptive filename with object ID
+                    safe_classification = classification.replace('/', '_')
+                    new_filename = f"{safe_classification}/object_{clip_id}_{safe_classification}_conf{confidence:.2f}.mp4"
+                    
+                    # Add the clip
+                    zip_file.write(clip_path, new_filename)
+                    added_clips.add(clip_path)
         
         # Add CSV report
         csv_buffer = BytesIO()

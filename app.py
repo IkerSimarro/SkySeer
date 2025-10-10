@@ -456,34 +456,61 @@ def display_results():
     # Download section
     st.subheader("📥 Download Results")
     
-    col1, col2 = st.columns(2)
+    # CSV download (always available)
+    csv_buffer = BytesIO()
+    results_df.to_csv(csv_buffer, index=False)
+    csv_buffer.seek(0)
     
-    with col1:
-        # CSV download
-        csv_buffer = BytesIO()
-        results_df.to_csv(csv_buffer, index=False)
-        csv_buffer.seek(0)
-        
-        st.download_button(
-            label="📊 Download CSV Report",
-            data=csv_buffer,
-            file_name=f"skyseer_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-            mime="text/csv",
-            use_container_width=True
-        )
+    st.download_button(
+        label="📊 Download CSV Report",
+        data=csv_buffer,
+        file_name=f"skyseer_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+        mime="text/csv",
+        use_container_width=True
+    )
     
-    with col2:
-        # Create and offer zip download of clips
-        if st.button("🎥 Prepare Clip Downloads", use_container_width=True):
-            zip_buffer = create_download_zip(st.session_state.processed_clips, results_df)
+    # Classification-specific clip downloads
+    st.markdown("**Download Video Clips by Category:**")
+    
+    # Get unique classifications with counts
+    classification_counts = results_df['classification'].value_counts()
+    
+    # Create emoji mapping
+    emoji_map = {
+        'Satellite': '🛰️',
+        'Meteor': '☄️',
+        'Plane': '✈️',
+        'Star': '⭐',
+        'Junk': '🗑️'
+    }
+    
+    # Create download buttons for each classification
+    cols = st.columns(min(len(classification_counts), 5))
+    
+    for idx, (classification, count) in enumerate(classification_counts.items()):
+        with cols[idx % len(cols)]:
+            emoji = emoji_map.get(classification, '📦')
             
-            st.download_button(
-                label="📦 Download All Clips (ZIP)",
-                data=zip_buffer,
-                file_name=f"skyseer_clips_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip",
-                mime="application/zip",
+            if st.button(
+                f"{emoji} {classification} ({count})",
+                key=f"download_{classification}",
                 use_container_width=True
-            )
+            ):
+                with st.spinner(f"Preparing {classification} clips..."):
+                    zip_buffer = create_download_zip(
+                        st.session_state.processed_clips, 
+                        results_df,
+                        classification_filter=classification
+                    )
+                    
+                    st.download_button(
+                        label=f"📦 Download {classification} ZIP",
+                        data=zip_buffer,
+                        file_name=f"skyseer_{classification.lower()}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip",
+                        mime="application/zip",
+                        use_container_width=True,
+                        key=f"download_btn_{classification}"
+                    )
 
 def reset_session():
     """Reset session state for new analysis"""
