@@ -1,0 +1,406 @@
+import streamlit as st
+import os
+import cv2
+import pandas as pd
+import numpy as np
+import plotly.express as px
+import plotly.graph_objects as go
+from io import BytesIO
+import zipfile
+import shutil
+from datetime import datetime
+import base64
+
+# Import custom modules
+from video_processor import VideoProcessor
+from feature_extractor import FeatureExtractor
+from ml_classifier import MLClassifier
+from utils import create_download_zip, format_duration, get_video_info
+
+# Configure page
+st.set_page_config(
+    page_title="SkySeer AI Pipeline",
+    page_icon="🌌",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# Initialize session state
+if 'processing_complete' not in st.session_state:
+    st.session_state.processing_complete = False
+if 'results_data' not in st.session_state:
+    st.session_state.results_data = None
+if 'processed_clips' not in st.session_state:
+    st.session_state.processed_clips = []
+
+def main():
+    st.title("🌌 SkySeer AI Pipeline")
+    st.markdown("**Advanced Sky Anomaly Detection & UAP Classification System**")
+    
+    # Sidebar configuration
+    with st.sidebar:
+        st.header("⚙️ Configuration")
+        
+        # Motion detection sensitivity
+        sensitivity = st.slider(
+            "Motion Detection Sensitivity",
+            min_value=1,
+            max_value=10,
+            value=5,
+            help="Higher values detect smaller objects but may increase false positives"
+        )
+        
+        # Minimum clip duration
+        min_duration = st.slider(
+            "Minimum Clip Duration (seconds)",
+            min_value=0.5,
+            max_value=5.0,
+            value=1.0,
+            step=0.5,
+            help="Minimum duration for a valid detection clip"
+        )
+        
+        # Frame skip rate for performance
+        frame_skip = st.slider(
+            "Frame Skip Rate",
+            min_value=1,
+            max_value=10,
+            value=3,
+            help="Process every Nth frame (higher = faster but less accurate)"
+        )
+        
+        st.markdown("---")
+        st.markdown("**Classification Categories:**")
+        st.markdown("🛰️ **Satellite** - Steady orbital motion")
+        st.markdown("☄️ **Meteor** - Fast, straight trajectory")
+        st.markdown("✈️ **Plane** - Predictable flight path")
+        st.markdown("🗑️ **Junk** - Noise/artifacts")
+        st.markdown("🛸 **ANOMALY** - Unusual patterns (UAP)")
+
+    # Main content area
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        st.header("📁 Video Upload")
+        
+        # File uploader with drag and drop
+        uploaded_file = st.file_uploader(
+            "Drop your night sky video here or click to browse",
+            type=['mp4', 'avi', 'mov', 'mkv'],
+            help="Supported formats: MP4, AVI, MOV, MKV. Best results with stable, tripod-mounted footage."
+        )
+        
+        if uploaded_file is not None:
+            # Display video info
+            with st.expander("📊 Video Information", expanded=True):
+                video_info = get_video_info(uploaded_file)
+                col_a, col_b, col_c = st.columns(3)
+                
+                with col_a:
+                    st.metric("Duration", video_info.get('duration', 'Unknown'))
+                    st.metric("FPS", video_info.get('fps', 'Unknown'))
+                
+                with col_b:
+                    st.metric("Resolution", video_info.get('resolution', 'Unknown'))
+                    st.metric("File Size", video_info.get('file_size', 'Unknown'))
+                
+                with col_c:
+                    st.metric("Format", video_info.get('format', 'Unknown'))
+                    st.metric("Bitrate", video_info.get('bitrate', 'Unknown'))
+            
+            # Process video button
+            if st.button("🚀 Start Analysis", type="primary", use_container_width=True):
+                process_video(uploaded_file, sensitivity, min_duration, frame_skip)
+    
+    with col2:
+        st.header("📈 Processing Status")
+        
+        if not st.session_state.processing_complete:
+            st.info("Upload a video to begin analysis")
+            
+            # Processing pipeline visualization
+            st.markdown("**Analysis Pipeline:**")
+            st.markdown("1. 🎥 Motion Detection")
+            st.markdown("2. 📊 Feature Extraction") 
+            st.markdown("3. 🧠 ML Classification")
+            st.markdown("4. 🔍 Anomaly Detection")
+            st.markdown("5. 📋 Results Generation")
+        else:
+            st.success("✅ Processing Complete!")
+            
+            if st.button("🔄 Process New Video", use_container_width=True):
+                reset_session()
+                st.rerun()
+
+    # Results section
+    if st.session_state.processing_complete and st.session_state.results_data is not None:
+        display_results()
+
+def process_video(uploaded_file, sensitivity, min_duration, frame_skip):
+    """Process the uploaded video through the complete pipeline"""
+    
+    # Create temporary file
+    temp_path = f"temp_uploads/{uploaded_file.name}"
+    os.makedirs("temp_uploads", exist_ok=True)
+    os.makedirs("processed_clips", exist_ok=True)
+    os.makedirs("results", exist_ok=True)
+    
+    with open(temp_path, "wb") as f:
+        f.write(uploaded_file.getbuffer())
+    
+    # Progress tracking
+    progress_bar = st.progress(0)
+    status_text = st.empty()
+    
+    try:
+        # Stage 1: Motion Detection
+        status_text.text("🎥 Stage 1/4: Detecting motion in video...")
+        progress_bar.progress(10)
+        
+        processor = VideoProcessor(
+            sensitivity=sensitivity,
+            min_duration=min_duration,
+            frame_skip=frame_skip
+        )
+        
+        motion_clips, metadata = processor.process_video(temp_path)
+        progress_bar.progress(30)
+        
+        if not motion_clips:
+            st.error("No motion detected in video. Try lowering sensitivity or check video quality.")
+            return
+        
+        st.success(f"✅ Detected {len(motion_clips)} motion events")
+        
+        # Stage 2: Feature Extraction
+        status_text.text("📊 Stage 2/4: Extracting movement features...")
+        progress_bar.progress(50)
+        
+        extractor = FeatureExtractor()
+        features_df = extractor.extract_features(metadata)
+        progress_bar.progress(70)
+        
+        # Stage 3: ML Classification
+        status_text.text("🧠 Stage 3/4: Classifying objects with AI...")
+        
+        classifier = MLClassifier()
+        results_df = classifier.classify_objects(features_df)
+        progress_bar.progress(90)
+        
+        # Stage 4: Generate Results
+        status_text.text("📋 Stage 4/4: Generating results...")
+        
+        # Store results in session state
+        st.session_state.results_data = results_df
+        st.session_state.processed_clips = motion_clips
+        st.session_state.processing_complete = True
+        
+        progress_bar.progress(100)
+        status_text.text("✅ Analysis Complete!")
+        
+        # Clean up temp file
+        os.remove(temp_path)
+        
+        st.rerun()
+        
+    except Exception as e:
+        st.error(f"Error processing video: {str(e)}")
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+
+def display_results():
+    """Display the analysis results with interactive dashboard"""
+    
+    st.header("🎯 Detection Results")
+    
+    results_df = st.session_state.results_data
+    
+    # Summary metrics
+    col1, col2, col3, col4, col5 = st.columns(5)
+    
+    with col1:
+        total_detections = len(results_df)
+        st.metric("Total Detections", total_detections)
+    
+    with col2:
+        satellites = len(results_df[results_df['classification'] == 'Satellite'])
+        st.metric("🛰️ Satellites", satellites)
+    
+    with col3:
+        meteors = len(results_df[results_df['classification'] == 'Meteor'])
+        st.metric("☄️ Meteors", meteors)
+    
+    with col4:
+        planes = len(results_df[results_df['classification'] == 'Plane'])
+        st.metric("✈️ Planes", planes)
+    
+    with col5:
+        anomalies = len(results_df[results_df['classification'] == 'ANOMALY_UAP'])
+        st.metric("🛸 Anomalies", anomalies, delta="HIGH PRIORITY" if anomalies > 0 else None)
+    
+    # Classification distribution chart
+    st.subheader("📊 Classification Distribution")
+    
+    classification_counts = results_df['classification'].value_counts()
+    
+    fig_pie = px.pie(
+        values=classification_counts.values,
+        names=classification_counts.index,
+        title="Object Classification Breakdown",
+        color_discrete_map={
+            'Satellite': '#1f77b4',
+            'Meteor': '#ff7f0e', 
+            'Plane': '#2ca02c',
+            'Junk': '#d62728',
+            'ANOMALY_UAP': '#9467bd'
+        }
+    )
+    
+    st.plotly_chart(fig_pie, use_container_width=True)
+    
+    # Feature analysis
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.subheader("🏃 Speed Analysis")
+        fig_speed = px.histogram(
+            results_df,
+            x='avg_speed',
+            color='classification',
+            title="Speed Distribution by Classification",
+            labels={'avg_speed': 'Average Speed (pixels/frame)'}
+        )
+        st.plotly_chart(fig_speed, use_container_width=True)
+    
+    with col2:
+        st.subheader("📏 Duration Analysis") 
+        fig_duration = px.histogram(
+            results_df,
+            x='duration',
+            color='classification',
+            title="Duration Distribution by Classification",
+            labels={'duration': 'Duration (seconds)'}
+        )
+        st.plotly_chart(fig_duration, use_container_width=True)
+    
+    # Anomaly detection visualization
+    if anomalies > 0:
+        st.subheader("🚨 Anomaly Analysis")
+        anomaly_df = results_df[results_df['classification'] == 'ANOMALY_UAP']
+        
+        fig_anomaly = px.scatter(
+            results_df,
+            x='avg_speed',
+            y='speed_consistency',
+            color='classification',
+            size='duration',
+            title="Anomaly Detection - Speed vs Consistency",
+            labels={
+                'avg_speed': 'Average Speed',
+                'speed_consistency': 'Speed Consistency'
+            }
+        )
+        st.plotly_chart(fig_anomaly, use_container_width=True)
+        
+        st.warning(f"⚠️ {anomalies} anomalous object(s) detected with unusual movement patterns!")
+    
+    # Detailed results table
+    st.subheader("📋 Detailed Results")
+    
+    # Filter options
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        selected_classifications = st.multiselect(
+            "Filter by Classification",
+            options=results_df['classification'].unique(),
+            default=results_df['classification'].unique()
+        )
+    
+    with col2:
+        min_confidence = st.slider(
+            "Minimum Confidence",
+            min_value=0.0,
+            max_value=1.0,
+            value=0.0,
+            step=0.1
+        )
+    
+    with col3:
+        sort_by = st.selectbox(
+            "Sort by",
+            options=['confidence', 'avg_speed', 'duration', 'anomaly_score'],
+            index=0
+        )
+    
+    # Apply filters
+    filtered_df = results_df[
+        (results_df['classification'].isin(selected_classifications)) &
+        (results_df['confidence'] >= min_confidence)
+    ].sort_values(sort_by, ascending=False)
+    
+    # Display filtered table
+    st.dataframe(
+        filtered_df,
+        use_container_width=True,
+        column_config={
+            'clip_id': 'Clip ID',
+            'classification': 'Classification',
+            'confidence': st.column_config.ProgressColumn(
+                'Confidence',
+                min_value=0,
+                max_value=1,
+                format='%.2f'
+            ),
+            'avg_speed': 'Avg Speed',
+            'speed_consistency': 'Speed Consistency', 
+            'duration': 'Duration (s)',
+            'anomaly_score': 'Anomaly Score'
+        }
+    )
+    
+    # Download section
+    st.subheader("📥 Download Results")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        # CSV download
+        csv_buffer = BytesIO()
+        results_df.to_csv(csv_buffer, index=False)
+        csv_buffer.seek(0)
+        
+        st.download_button(
+            label="📊 Download CSV Report",
+            data=csv_buffer,
+            file_name=f"skyseer_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+            mime="text/csv",
+            use_container_width=True
+        )
+    
+    with col2:
+        # Create and offer zip download of clips
+        if st.button("🎥 Prepare Clip Downloads", use_container_width=True):
+            zip_buffer = create_download_zip(st.session_state.processed_clips, results_df)
+            
+            st.download_button(
+                label="📦 Download All Clips (ZIP)",
+                data=zip_buffer,
+                file_name=f"skyseer_clips_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip",
+                mime="application/zip",
+                use_container_width=True
+            )
+
+def reset_session():
+    """Reset session state for new analysis"""
+    st.session_state.processing_complete = False
+    st.session_state.results_data = None
+    st.session_state.processed_clips = []
+    
+    # Clean up directories
+    for directory in ['temp_uploads', 'processed_clips', 'results']:
+        if os.path.exists(directory):
+            shutil.rmtree(directory)
+
+if __name__ == "__main__":
+    main()
