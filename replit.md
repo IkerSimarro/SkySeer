@@ -12,6 +12,21 @@ The pipeline transforms raw video into structured data by:
 
 This system is designed for aerospace research and civilian anomaly detection projects, particularly suited for low-light camera equipment like Raspberry Pi NoIR modules.
 
+## Recent Changes
+
+**October 10, 2025**:
+- Fixed 502 timeout error for large video uploads (900MB+)
+  - Increased maxMessageSize to 1000MB in Streamlit config
+  - Increased maxUploadSize to 5000MB (5GB)
+  - Optimized server settings for large file transfers
+- Added advanced trajectory visualization system
+  - Interactive path tracking with start/end markers
+  - Speed heatmap showing movement patterns
+  - Direction distribution polar plots
+  - Timeline visualization for temporal analysis
+- Enhanced database persistence with metadata storage
+- Added helpful UI tips for large video processing
+
 ## User Preferences
 
 Preferred communication style: Simple, everyday language.
@@ -23,9 +38,10 @@ Preferred communication style: Simple, everyday language.
 **Technology Stack**: Streamlit web application framework
 
 The application uses Streamlit for the user interface, providing:
-- Web-based video upload and processing interface
+- Web-based video upload and processing interface (supports files up to 5GB)
 - Real-time processing feedback with progress indicators
 - Interactive data visualization using Plotly (charts and graphs)
+- Advanced trajectory visualization (path tracking, heatmaps, direction analysis, timeline)
 - Session state management for maintaining processing results
 - Downloadable results packages (ZIP files with classified clips)
 
@@ -35,6 +51,7 @@ The interface is organized into:
 - Main content area for video upload, processing controls, and results display
 - Sidebar for configuration parameters (sensitivity, duration thresholds)
 - Session state persistence to maintain results between interactions
+- Tabbed trajectory analysis section with interactive visualizations
 
 ### Backend Architecture
 
@@ -65,6 +82,18 @@ The system follows a sequential processing model:
    - Manages file operations (ZIP creation, temporary files)
    - Provides formatting utilities for duration and file sizes
 
+5. **Trajectory Visualization** (`trajectory_visualizer.py`)
+   - Creates interactive path visualizations showing object trajectories
+   - Generates speed heatmaps showing object movement across the frame
+   - Produces polar plots for direction distribution analysis
+   - Builds timeline visualizations for temporal analysis
+
+6. **Database Service** (`db_service.py`)
+   - Manages PostgreSQL database connections and operations
+   - Persists analysis sessions, detection clips, and object detections
+   - Enables multi-night analysis and historical tracking
+   - Handles data serialization and NaN value conversion
+
 **Design Rationale**: The pipeline architecture separates concerns between video processing, feature engineering, and machine learning. This modular approach allows each stage to be optimized independently and makes the system maintainable and extensible.
 
 **Alternative Considered**: Real-time visual classification using heuristic rules was attempted but abandoned due to noise amplification in low-light conditions and excessive false positives from star field movement.
@@ -82,18 +111,29 @@ The system follows a sequential processing model:
 
 ### Data Storage Solutions
 
-**File-Based Storage**: The system uses local filesystem storage
+**Hybrid Storage Architecture**: File-based + PostgreSQL database
 
-- **Input**: Video files uploaded through Streamlit interface (temporary storage)
+**File-Based Storage**:
+- **Input**: Video files uploaded through Streamlit interface (temporary storage, up to 5GB)
 - **Output**: Organized directory structure with classified motion clips
   - `0_ANOMALY_UAP_REVIEW/`: Statistically rare detections
   - `1_METEOR_EVENT/`: High-speed, short-duration events
   - `2_SATELLITE_ORBIT/`: Stable, linear trajectories
   - `3_PLANE_OR_JUNK/`: Common or low-priority detections
-- **Metadata**: CSV files containing detection features and classifications
 - **Temporary Files**: OpenCV processing requires temporary file creation for video analysis
 
-**Design Rationale**: File-based storage is appropriate for this batch processing system. Video processing is compute-intensive rather than data-query intensive, so a database would add unnecessary complexity without performance benefits.
+**PostgreSQL Database** (`db_models.py`, `db_service.py`):
+- **AnalysisSession**: Stores video metadata, processing parameters, and session info
+- **DetectionClip**: Stores clip metadata, file paths, and processing results
+- **ObjectDetection**: Stores individual object detections with features and classifications
+- **Purpose**: Enables multi-night analysis, historical tracking, and data aggregation
+- **Features**: Automatic NaN handling, JSON serialization, relationship management
+
+**Design Rationale**: File-based storage handles video clips efficiently while the database enables:
+1. Multi-night analysis and trend detection
+2. Historical comparison of detections
+3. Query-based filtering and analysis
+4. Data persistence across sessions
 
 ### Authentication and Authorization
 

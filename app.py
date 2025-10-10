@@ -17,6 +17,7 @@ from feature_extractor import FeatureExtractor
 from ml_classifier import MLClassifier
 from utils import create_download_zip, format_duration, get_video_info
 from db_service import DatabaseService
+from trajectory_visualizer import TrajectoryVisualizer
 
 # Configure page
 st.set_page_config(
@@ -35,6 +36,10 @@ if 'processed_clips' not in st.session_state:
     st.session_state.processed_clips = []
 if 'db_service' not in st.session_state:
     st.session_state.db_service = DatabaseService()
+if 'metadata' not in st.session_state:
+    st.session_state.metadata = []
+if 'video_info' not in st.session_state:
+    st.session_state.video_info = {}
 
 def main():
     st.title("🌌 SkySeer AI Pipeline")
@@ -92,6 +97,8 @@ def main():
             type=['mp4', 'avi', 'mov', 'mkv'],
             help="Supported formats: MP4, AVI, MOV, MKV. Best results with stable, tripod-mounted footage."
         )
+        
+        st.info("💡 **Tip for large videos:** For videos over 500MB, consider compressing or splitting them into smaller clips for faster processing.")
         
         if uploaded_file is not None:
             # Display video info
@@ -199,6 +206,8 @@ def process_video(uploaded_file, sensitivity, min_duration, frame_skip):
         # Store results in session state
         st.session_state.results_data = results_df
         st.session_state.processed_clips = motion_clips
+        st.session_state.metadata = metadata
+        st.session_state.video_info = video_info
         st.session_state.processing_complete = True
         
         # Save to database
@@ -320,6 +329,41 @@ def display_results():
         
         st.warning(f"⚠️ {anomalies} anomalous object(s) detected with unusual movement patterns!")
     
+    # Trajectory Visualization
+    if st.session_state.metadata:
+        st.subheader("🎯 Trajectory Analysis")
+        
+        # Create visualizer
+        video_info = st.session_state.video_info
+        width = video_info.get('width', 1920)
+        height = video_info.get('height', 1080)
+        fps = video_info.get('fps', 30)
+        
+        visualizer = TrajectoryVisualizer(frame_width=width, frame_height=height)
+        
+        # Create tabs for different visualizations
+        tab1, tab2, tab3, tab4 = st.tabs(["📍 Trajectories", "🌡️ Speed Heatmap", "🧭 Directions", "⏱️ Timeline"])
+        
+        with tab1:
+            traj_fig = visualizer.create_trajectory_plot(st.session_state.metadata)
+            st.plotly_chart(traj_fig, use_container_width=True)
+            st.caption("Interactive trajectory plot showing object paths. Green stars = start, Red X = end")
+        
+        with tab2:
+            heatmap_fig = visualizer.create_speed_heatmap(st.session_state.metadata)
+            st.plotly_chart(heatmap_fig, use_container_width=True)
+            st.caption("Heatmap showing average object speed across different regions of the frame")
+        
+        with tab3:
+            direction_fig = visualizer.create_direction_plot(st.session_state.metadata)
+            st.plotly_chart(direction_fig, use_container_width=True)
+            st.caption("Polar plot showing the distribution of object movement directions")
+        
+        with tab4:
+            timeline_fig = visualizer.create_timeline_plot(st.session_state.metadata, fps=fps)
+            st.plotly_chart(timeline_fig, use_container_width=True)
+            st.caption("Timeline showing when objects were detected throughout the video")
+    
     # Detailed results table
     st.subheader("📋 Detailed Results")
     
@@ -412,6 +456,8 @@ def reset_session():
     st.session_state.processing_complete = False
     st.session_state.results_data = None
     st.session_state.processed_clips = []
+    st.session_state.metadata = []
+    st.session_state.video_info = {}
     
     # Clean up directories
     for directory in ['temp_uploads', 'processed_clips', 'results']:
