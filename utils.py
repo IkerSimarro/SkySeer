@@ -104,6 +104,9 @@ def create_download_zip(clip_paths, results_df):
         classifications = results_df['classification'].unique()
         
         # Add clips organized by classification
+        # Note: With object tracking, all objects may be in one video file
+        # We include the video for each object even if it's the same physical file
+        
         for idx, row in results_df.iterrows():
             clip_id = row['clip_id']
             classification = row['classification']
@@ -118,11 +121,17 @@ def create_download_zip(clip_paths, results_df):
                     clip_path = path
                     break
             
+            # If specific clip not found, use the first available clip
+            # (with object tracking, all objects are in one video)
+            if not clip_path and clip_paths:
+                clip_path = clip_paths[0]
+            
             if clip_path and os.path.exists(clip_path):
-                # Create descriptive filename
+                # Create descriptive filename with object ID
                 safe_classification = classification.replace('/', '_')
-                new_filename = f"{safe_classification}/{clip_filename.replace('.mp4', '')}_{safe_classification}_conf{confidence:.2f}.mp4"
+                new_filename = f"{safe_classification}/object_{clip_id}_{safe_classification}_conf{confidence:.2f}.mp4"
                 
+                # Add the clip (may be same file multiple times for different objects)
                 zip_file.write(clip_path, new_filename)
         
         # Add CSV report

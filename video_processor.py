@@ -1,9 +1,10 @@
 import cv2
 import os
 import numpy as np
-from collections import deque
+from collections import deque, defaultdict
 import csv
 from datetime import datetime
+from object_tracker import ObjectTracker
 
 class VideoProcessor:
     def __init__(self, sensitivity=5, min_duration=1.0, frame_skip=3):
@@ -25,7 +26,7 @@ class VideoProcessor:
         
     def process_video(self, video_path):
         """
-        Process video to detect and extract motion clips
+        Process video to detect and track individual objects
         
         Args:
             video_path (str): Path to input video file
@@ -45,67 +46,41 @@ class VideoProcessor:
         # Setup MOG2 background subtractor for better motion detection
         backSub = cv2.createBackgroundSubtractorMOG2(
             history=500,
-            varThreshold=32,  # Adjusted based on sensitivity
+            varThreshold=32,
             detectShadows=False
         )
         
-        # Clip management variables
-        min_frames_for_clip = int(fps * self.min_duration)
-        pre_buffer_frames = fps // 2  # 0.5 seconds before motion
-        post_buffer_frames = fps // 2  # 0.5 seconds after motion
+        # Initialize object tracker
+        tracker = ObjectTracker(max_disappeared=int(fps * 0.5), max_distance=100)
         
-        pre_motion_buffer = deque(maxlen=pre_buffer_frames)
-        post_motion_buffer = deque()
-        
-        frame_count = 0
-        clip_index = 0
-        motion_active = False
-        clip_writer = None
-        clip_frames_count = 0
-        post_motion_count = 0
-        
-        # Metadata collection
-        metadata = []
-        current_clip_metadata = []
-        video_fps = fps  # Store FPS for feature extraction
+        # Metadata collection per object
+        object_metadata = defaultdict(list)
+        video_fps = fps
         
         # Results storage
-        motion_clips = []
         clips_folder = "processed_clips"
         os.makedirs(clips_folder, exist_ok=True)
         
         # Maximum contour area to filter out large objects (clouds, etc.)
         max_contour_area = int(frame_width * frame_height * 0.005)
         
+        frame_count = 0
+        motion_active = False
+        clip_writer = None
+        clip_filename = None
+        
         while True:
             ret, frame = cap.read()
             if not ret:
-                # Handle final clip cleanup
-                if motion_active and clip_writer is not None:
-                    if clip_frames_count >= min_frames_for_clip:
-                        # Write remaining post-motion frames
-                        for f in post_motion_buffer:
-                            clip_writer.write(f)
-                        clip_writer.release()
-                        
-                        # Save metadata for this clip
-                        for meta in current_clip_metadata:
-                            meta['clip_id'] = clip_index
-                        metadata.extend(current_clip_metadata)
-                        
-                    else:
-                        # Clip too short, discard
-                        clip_writer.release()
-                        clip_filename = os.path.join(clips_folder, f"clip_{clip_index:04d}.mp4")
-                        if os.path.exists(clip_filename):
-                            os.remove(clip_filename)
+                # Close video writer if active
+                if clip_writer is not None:
+                    clip_writer.release()
                 break
             
             frame_count += 1
             
             # Frame skipping for performance
             if frame_count % self.frame_skip != 0:
-                pre_motion_buffer.append(frame.copy())
                 continue
             
             # Motion detection pipeline
@@ -123,16 +98,15 @@ class VideoProcessor:
             # Find contours
             contours, _ = cv2.findContours(fgMask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
             
-            motion_detected = False
-            frame_objects = []
+            # Detect objects and extract their properties
+            current_frame_objects = []
+            current_frame_centroids = []
             
             for contour in contours:
                 area = cv2.contourArea(contour)
                 
                 # Filter by area (sensitivity-based)
                 if self.min_contour_area < area < max_contour_area:
-                    motion_detected = True
-                    
                     # Extract object properties
                     x, y, w, h = cv2.boundingRect(contour)
                     
@@ -147,7 +121,7 @@ class VideoProcessor:
                     # Calculate aspect ratio
                     aspect_ratio = w / h if h > 0 else 0
                     
-                    # Store object data
+                    # Store object data (without clip_id yet)
                     object_data = {
                         'frame_number': frame_count,
                         'area': area,
@@ -160,81 +134,68 @@ class VideoProcessor:
                         'aspect_ratio': aspect_ratio,
                         'fps': video_fps
                     }
-                    frame_objects.append(object_data)
-                    
-                    # Draw bounding rectangle on frame
-                    pad = 8
-                    cv2.rectangle(frame, 
-                                (max(0, x-pad), max(0, y-pad)),
-                                (min(frame_width-1, x+w+pad), min(frame_height-1, y+h+pad)),
-                                (0, 0, 255), 2)
+                    current_frame_objects.append(object_data)
+                    current_frame_centroids.append((centroid_x, centroid_y))
             
-            # Add frame to pre-motion buffer
-            pre_motion_buffer.append(frame.copy())
+            # Update tracker with detected centroids
+            tracked_objects = tracker.update(current_frame_centroids)
             
-            # Handle clip recording
-            if motion_detected:
-                # Add frame objects to current clip metadata
-                current_clip_metadata.extend(frame_objects)
-                clip_frames_count += 1
-                
-                if not motion_active:
-                    # Start new clip
-                    clip_index += 1
-                    clip_filename = os.path.join(clips_folder, f"clip_{clip_index:04d}.mp4")
+            # Assign object_id (as clip_id) to each detection
+            if len(tracked_objects) > 0 and len(current_frame_objects) > 0:
+                # Match detections to tracked objects by centroid
+                for i, (centroid_x, centroid_y) in enumerate(current_frame_centroids):
+                    # Find closest tracked object
+                    min_dist = float('inf')
+                    assigned_id = None
                     
-                    clip_writer = cv2.VideoWriter(
-                        clip_filename,
-                        cv2.VideoWriter_fourcc(*'mp4v'),
-                        fps,
-                        (frame_width, frame_height)
-                    )
+                    for obj_id, (tx, ty) in tracked_objects.items():
+                        dist = np.sqrt((centroid_x - tx)**2 + (centroid_y - ty)**2)
+                        if dist < min_dist:
+                            min_dist = dist
+                            assigned_id = obj_id
                     
-                    motion_active = True
-                    motion_clips.append(clip_filename)
-                    
-                    # Write pre-motion buffer
-                    for f in pre_motion_buffer:
-                        clip_writer.write(f)
-                
-                # Write current frame
-                clip_writer.write(frame)
-                post_motion_count = 0
-                post_motion_buffer.clear()
-                
-            else:
-                # No motion in current frame
-                if motion_active:
-                    post_motion_buffer.append(frame.copy())
-                    post_motion_count += 1
-                    
-                    # Check if we should end the clip
-                    if post_motion_count >= post_buffer_frames:
-                        if clip_frames_count >= min_frames_for_clip:
-                            # Valid clip - write post-motion frames and close
-                            for f in post_motion_buffer:
-                                clip_writer.write(f)
-                            clip_writer.release()
-                            
-                            # Save metadata for this clip
-                            for meta in current_clip_metadata:
-                                meta['clip_id'] = clip_index
-                            metadata.extend(current_clip_metadata)
-                            
-                        else:
-                            # Clip too short - discard
-                            clip_writer.release()
-                            if os.path.exists(clip_filename):
-                                os.remove(clip_filename)
-                            motion_clips.pop()  # Remove from clips list
+                    if assigned_id is not None:
+                        # Add clip_id and store metadata
+                        current_frame_objects[i]['clip_id'] = assigned_id
+                        object_metadata[assigned_id].append(current_frame_objects[i])
                         
-                        # Reset for next clip
-                        clip_writer = None
-                        motion_active = False
-                        clip_frames_count = 0
-                        post_motion_buffer.clear()
-                        current_clip_metadata = []
+                        # Draw bounding rectangle with object ID
+                        obj = current_frame_objects[i]
+                        x, y, w, h = obj['bbox_x'], obj['bbox_y'], obj['bbox_width'], obj['bbox_height']
+                        pad = 8
+                        cv2.rectangle(frame, 
+                                    (max(0, x-pad), max(0, y-pad)),
+                                    (min(frame_width-1, x+w+pad), min(frame_height-1, y+h+pad)),
+                                    (0, 0, 255), 2)
+                        cv2.putText(frame, f"ID:{assigned_id}", (x, y-10),
+                                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+            
+            # Start video writer if we have detections
+            if len(tracked_objects) > 0 and not motion_active:
+                motion_active = True
+                clip_filename = os.path.join(clips_folder, "clip_0001.mp4")
+                clip_writer = cv2.VideoWriter(
+                    clip_filename,
+                    cv2.VideoWriter_fourcc(*'mp4v'),
+                    fps,
+                    (frame_width, frame_height)
+                )
+            
+            # Write frame if writer is active
+            if clip_writer is not None:
+                clip_writer.write(frame)
         
         cap.release()
         
-        return motion_clips, metadata
+        # Filter objects that have sufficient duration
+        min_frames_for_clip = int(fps * self.min_duration)
+        filtered_metadata = []
+        
+        for obj_id, detections in object_metadata.items():
+            if len(detections) >= min_frames_for_clip:
+                filtered_metadata.extend(detections)
+        
+        # Prepare motion clips list
+        motion_clips = [clip_filename] if clip_filename and os.path.exists(clip_filename) else []
+        
+        return motion_clips, filtered_metadata
