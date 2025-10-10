@@ -123,6 +123,11 @@ class VideoProcessor:
                     # Calculate aspect ratio
                     aspect_ratio = w / h if h > 0 else 0
                     
+                    # Calculate brightness (mean intensity in bounding box)
+                    roi = gray[y:y+h, x:x+w]
+                    mean_brightness = np.mean(roi) if roi.size > 0 else 0
+                    max_brightness = np.max(roi) if roi.size > 0 else 0
+                    
                     # Store object data (without clip_id yet)
                     object_data = {
                         'frame_number': frame_count,
@@ -134,6 +139,8 @@ class VideoProcessor:
                         'bbox_width': w,
                         'bbox_height': h,
                         'aspect_ratio': aspect_ratio,
+                        'mean_brightness': mean_brightness,
+                        'max_brightness': max_brightness,
                         'fps': video_fps
                     }
                     current_frame_objects.append(object_data)

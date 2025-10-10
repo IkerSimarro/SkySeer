@@ -73,6 +73,10 @@ class FeatureExtractor:
         areas = [d['area'] for d in detections]
         aspect_ratios = [d['aspect_ratio'] for d in detections]
         
+        # Extract brightness data
+        mean_brightness_values = [d.get('mean_brightness', 0) for d in detections]
+        max_brightness_values = [d.get('max_brightness', 0) for d in detections]
+        
         # Calculate speeds between consecutive positions
         speeds = []
         for i in range(1, len(positions)):
@@ -154,15 +158,27 @@ class FeatureExtractor:
         avg_acceleration = np.mean(accelerations) if accelerations else 0
         max_acceleration = max(accelerations) if accelerations else 0
         
+        # Brightness statistics (for distinguishing planes from satellites)
+        avg_brightness = np.mean(mean_brightness_values) if mean_brightness_values else 0
+        brightness_std = np.std(mean_brightness_values) if len(mean_brightness_values) > 1 else 0
+        max_brightness = max(max_brightness_values) if max_brightness_values else 0
+        
+        # Brightness consistency (low variance = constant like satellite, high variance = blinking like plane)
+        brightness_consistency = 1.0 / (1.0 + brightness_std / max(avg_brightness, 1))
+        
+        # Detect blinking pattern (coefficient of variation)
+        brightness_variation_coeff = (brightness_std / max(avg_brightness, 1)) if avg_brightness > 0 else 0
+        
         # Movement pattern classification hints
-        # Satellite: consistent speed, linear, steady size
-        satellite_score = speed_consistency * linearity * size_consistency
+        # Satellite: consistent speed, linear, steady size, constant brightness
+        satellite_score = speed_consistency * linearity * size_consistency * brightness_consistency
         
         # Meteor: high speed, very linear, brief duration
         meteor_score = (avg_speed / 50.0) * linearity * (1.0 / max(duration, 0.1))
         
-        # Plane: moderate speed, fairly linear, longer duration
-        plane_score = speed_consistency * linearity * min(duration / 5.0, 1.0)
+        # Plane: moderate speed, fairly linear, longer duration, blinking lights (high brightness variation)
+        blinking_factor = min(brightness_variation_coeff * 2.0, 1.0)  # Normalize blinking
+        plane_score = speed_consistency * linearity * min(duration / 5.0, 1.0) * (0.5 + blinking_factor * 0.5)
         
         # Anomaly indicators: erratic movement, inconsistent speed/size
         anomaly_indicators = (
@@ -190,6 +206,11 @@ class FeatureExtractor:
             'aspect_ratio_std': aspect_ratio_std,
             'avg_acceleration': avg_acceleration,
             'max_acceleration': max_acceleration,
+            'avg_brightness': avg_brightness,
+            'brightness_std': brightness_std,
+            'max_brightness': max_brightness,
+            'brightness_consistency': brightness_consistency,
+            'brightness_variation_coeff': brightness_variation_coeff,
             'satellite_score': satellite_score,
             'meteor_score': meteor_score,
             'plane_score': plane_score,
@@ -218,6 +239,11 @@ class FeatureExtractor:
                 'aspect_ratio_std': 0,
                 'avg_acceleration': 0,
                 'max_acceleration': 0,
+                'avg_brightness': 0,
+                'brightness_std': 0,
+                'max_brightness': 0,
+                'brightness_consistency': 0,
+                'brightness_variation_coeff': 0,
                 'satellite_score': 0,
                 'meteor_score': 0,
                 'plane_score': 0,
@@ -245,6 +271,11 @@ class FeatureExtractor:
             'aspect_ratio_std': 0,
             'avg_acceleration': 0,
             'max_acceleration': 0,
+            'avg_brightness': detection.get('mean_brightness', 0),
+            'brightness_std': 0,
+            'max_brightness': detection.get('max_brightness', 0),
+            'brightness_consistency': 1,
+            'brightness_variation_coeff': 0,
             'satellite_score': 0,
             'meteor_score': 0,
             'plane_score': 0,
