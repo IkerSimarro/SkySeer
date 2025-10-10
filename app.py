@@ -63,15 +63,15 @@ def main():
             "Minimum Clip Duration (seconds)",
             min_value=0.3,
             max_value=5.0,
-            value=0.5,
+            value=1.5,
             step=0.1,
-            help="Minimum duration for a valid detection clip. Lower values catch fast objects like meteors."
+            help="Minimum duration for a valid detection clip. Higher values reduce false positives from noise."
         )
         
         # Maximum clip duration
         max_duration_enabled = st.checkbox(
             "Enable Maximum Duration Filter",
-            value=False,
+            value=True,
             help="Filter out objects that stay on screen too long (like stationary stars)"
         )
         
@@ -81,7 +81,7 @@ def main():
                 "Maximum Clip Duration (seconds)",
                 min_value=1.0,
                 max_value=30.0,
-                value=10.0,
+                value=15.0,
                 step=1.0,
                 help="Objects visible longer than this will be filtered out (e.g., to exclude stars)"
             )

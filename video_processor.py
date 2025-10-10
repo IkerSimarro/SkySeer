@@ -24,8 +24,8 @@ class VideoProcessor:
         
         # Convert sensitivity to contour area threshold
         # Higher sensitivity = lower threshold (detects smaller objects)
-        # Increased base values to reduce noise detection
-        self.min_contour_area = max(5, 30 - (sensitivity * 2))
+        # Very conservative to minimize false positives - aim for obvious objects only
+        self.min_contour_area = max(10, 80 - (sensitivity * 5))
         
     def process_video(self, video_path):
         """
@@ -47,10 +47,10 @@ class VideoProcessor:
         frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         
         # Setup MOG2 background subtractor for better motion detection
-        # Increased varThreshold to reduce noise detection (higher = less sensitive)
+        # Very high varThreshold to minimize false positives - only detect obvious motion
         backSub = cv2.createBackgroundSubtractorMOG2(
             history=500,
-            varThreshold=50,  # Increased from 32 to reduce noise
+            varThreshold=100,  # Very high threshold - only obvious movement
             detectShadows=False
         )
         
@@ -203,13 +203,14 @@ class VideoProcessor:
         cap.release()
         
         # Filter objects by duration (min and max)
-        min_frames_for_clip = int(fps * self.min_duration)
-        max_frames_for_clip = int(fps * self.max_duration) if self.max_duration else float('inf')
+        # Account for frame skipping: we only get detections every frame_skip frames
+        min_detections = int((fps / self.frame_skip) * self.min_duration)
+        max_detections = int((fps / self.frame_skip) * self.max_duration) if self.max_duration else float('inf')
         filtered_metadata = []
         
         for obj_id, detections in object_metadata.items():
-            num_frames = len(detections)
-            if min_frames_for_clip <= num_frames <= max_frames_for_clip:
+            num_detections = len(detections)
+            if min_detections <= num_detections <= max_detections:
                 filtered_metadata.extend(detections)
         
         # Prepare motion clips list
