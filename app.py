@@ -241,25 +241,29 @@ def display_results():
     results_df = st.session_state.results_data
     
     # Summary metrics
-    col1, col2, col3, col4, col5 = st.columns(5)
+    col1, col2, col3, col4, col5, col6 = st.columns(6)
     
     with col1:
         total_detections = len(results_df)
         st.metric("Total Detections", total_detections)
     
     with col2:
+        stars = len(results_df[results_df['classification'] == 'Star'])
+        st.metric("⭐ Stars", stars)
+    
+    with col3:
         satellites = len(results_df[results_df['classification'] == 'Satellite'])
         st.metric("🛰️ Satellites", satellites)
     
-    with col3:
+    with col4:
         meteors = len(results_df[results_df['classification'] == 'Meteor'])
         st.metric("☄️ Meteors", meteors)
     
-    with col4:
+    with col5:
         planes = len(results_df[results_df['classification'] == 'Plane'])
         st.metric("✈️ Planes", planes)
     
-    with col5:
+    with col6:
         anomalies = len(results_df[results_df['classification'] == 'ANOMALY_UAP'])
         st.metric("🛸 Anomalies", anomalies, delta="HIGH PRIORITY" if anomalies > 0 else None)
     
@@ -273,6 +277,7 @@ def display_results():
         names=classification_counts.index,
         title="Object Classification Breakdown",
         color_discrete_map={
+            'Star': '#ffd700',
             'Satellite': '#1f77b4',
             'Meteor': '#ff7f0e', 
             'Plane': '#2ca02c',

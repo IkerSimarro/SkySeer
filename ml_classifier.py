@@ -51,6 +51,47 @@ class MLClassifier:
         if features_df.empty:
             return pd.DataFrame()
         
+        # Step 0: Check for star groups first (highest priority)
+        # Stars are identified by group movement analysis
+        if 'is_star_group' in features_df.columns:
+            star_mask = features_df['is_star_group'] == 1
+            if star_mask.any():
+                # Classify stars separately and return
+                results_df = features_df.copy()
+                results_df['classification'] = ''
+                results_df['confidence'] = 0.0
+                results_df['cluster'] = 0
+                results_df['is_anomaly'] = False
+                results_df['anomaly_score'] = 0.0
+                
+                # Classify stars
+                results_df.loc[star_mask, 'classification'] = 'Star'
+                results_df.loc[star_mask, 'confidence'] = 0.9
+                
+                # Classify non-stars using normal pipeline
+                non_star_df = features_df[~star_mask].copy()
+                if not non_star_df.empty and len(non_star_df) >= 2:
+                    non_star_results = self._classify_non_stars(non_star_df)
+                    for col in ['classification', 'confidence', 'cluster', 'is_anomaly', 'anomaly_score']:
+                        if col in non_star_results.columns:
+                            results_df.loc[~star_mask, col] = non_star_results[col].values
+                elif not non_star_df.empty:
+                    # Single non-star object, use rule-based
+                    single_result = self._classify_single_object(non_star_df)
+                    for col in ['classification', 'confidence', 'cluster', 'is_anomaly', 'anomaly_score']:
+                        if col in single_result.columns:
+                            results_df.loc[~star_mask, col] = single_result[col].values
+                
+                return results_df
+        
+        # No stars detected, use normal classification pipeline
+        return self._classify_non_stars(features_df)
+    
+    def _classify_non_stars(self, features_df):
+        """Classify non-star objects using the normal ML pipeline"""
+        if features_df.empty:
+            return pd.DataFrame()
+        
         # Prepare features for ML
         X = self._prepare_features(features_df)
         

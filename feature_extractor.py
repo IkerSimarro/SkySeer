@@ -2,11 +2,12 @@ import pandas as pd
 import numpy as np
 from collections import defaultdict
 import math
+from star_detector import StarDetector
 
 class FeatureExtractor:
     def __init__(self):
         """Initialize feature extractor for motion analysis"""
-        pass
+        self.star_detector = StarDetector()
     
     def extract_features(self, metadata):
         """
@@ -20,6 +21,9 @@ class FeatureExtractor:
         """
         if not metadata:
             return pd.DataFrame()
+        
+        # Detect star groups first
+        star_clip_ids = self.star_detector.detect_star_groups(metadata)
         
         # Group metadata by clip_id
         clips_data = defaultdict(list)
@@ -40,6 +44,10 @@ class FeatureExtractor:
             
             # Extract basic trajectory features
             features = self._extract_clip_features(clip_id, clip_detections, video_fps)
+            
+            # Add star detection feature
+            features['is_star_group'] = 1 if clip_id in star_clip_ids else 0
+            
             features_list.append(features)
         
         return pd.DataFrame(features_list)
