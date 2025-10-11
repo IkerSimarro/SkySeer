@@ -161,7 +161,7 @@ def main():
             help="Supported formats: MP4, AVI, MOV, MKV. Best results with stable, tripod-mounted footage."
         )
         
-        st.info("💡 **Tip for large videos:** For videos over 500MB, consider compressing or splitting them into smaller clips for faster processing.")
+        st.warning("⚠️ **Important for videos >3 minutes:** Use the recommended Frame Skip settings shown in the sidebar after uploading. Higher frame skip (5-6) prevents connection timeouts during processing.")
         
         if uploaded_file is not None:
             # Display video info and generate recommendations
@@ -244,7 +244,24 @@ def process_video(uploaded_file, sensitivity, min_duration, max_duration, frame_
             frame_skip=frame_skip
         )
         
-        motion_clips, metadata = processor.process_video(temp_path)
+        # Progress callback to keep connection alive during long processing
+        callback_count = [0]
+        
+        def video_progress_callback(current_frame, total_frames):
+            callback_count[0] += 1
+            
+            # Calculate actual progress percentage
+            frame_percent = (current_frame / max(total_frames, 1)) * 100
+            stage_progress = 10 + min(int(frame_percent * 0.2), 20)  # 10-30%
+            
+            # Update progress bar
+            progress_bar.progress(stage_progress)
+            
+            # CRITICAL: Update status text with unique content to prevent timeout
+            # This keeps WebSocket alive even if progress bar value repeats
+            status_text.text(f"🎥 Stage 1/4: Detecting motion... ({callback_count[0]} updates, frame {current_frame})")
+        
+        motion_clips, metadata = processor.process_video(temp_path, progress_callback=video_progress_callback)
         progress_bar.progress(30)
         
         if not motion_clips:

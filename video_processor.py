@@ -27,12 +27,13 @@ class VideoProcessor:
         # Adjusted to better detect small satellites that don't cross entire screen
         self.min_contour_area = max(5, 70 - (sensitivity * 6))
         
-    def process_video(self, video_path):
+    def process_video(self, video_path, progress_callback=None):
         """
         Process video to detect and track individual objects
         
         Args:
             video_path (str): Path to input video file
+            progress_callback (callable): Optional callback function(current, total) for progress updates
             
         Returns:
             tuple: (list of clip paths, metadata list)
@@ -45,6 +46,7 @@ class VideoProcessor:
         fps = int(cap.get(cv2.CAP_PROP_FPS)) or 30
         frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) or 0
         
         # Setup MOG2 background subtractor for better motion detection
         # Balanced varThreshold to detect small satellites while minimizing false positives
@@ -90,6 +92,17 @@ class VideoProcessor:
             # Frame skipping for performance
             if frame_count % self.frame_skip != 0:
                 continue
+            
+            # Send progress updates every 30 PROCESSED frames to keep connection alive
+            # (every 30 * frame_skip actual frames)
+            if progress_callback and frame_count % (30 * self.frame_skip) == 0:
+                if total_frames > 0:
+                    progress_callback(frame_count, total_frames)
+                else:
+                    # If total_frames unknown, estimate growing total for monotonic progress
+                    # Use current_frame * 1.5 so progress gradually increases (66% -> 70% -> 75%...)
+                    estimated_total = int(frame_count * 1.5) + 1000  # +1000 to start slower
+                    progress_callback(frame_count, estimated_total)
             
             # Motion detection pipeline
             gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
