@@ -21,7 +21,7 @@ from trajectory_visualizer import TrajectoryVisualizer
 
 # Configure page
 st.set_page_config(
-    page_title="SkySeer AI Pipeline",
+    page_title="SkySeer AI",
     page_icon="🌌",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -44,8 +44,46 @@ if 'recommendations' not in st.session_state:
     st.session_state.recommendations = None
 
 def main():
-    st.title("🌌 SkySeer AI Pipeline")
+    st.title("🌌 SkySeer AI")
     st.markdown("**Advanced Sky Object Detection & Classification System**")
+    
+    # About Me and How It Works sections
+    col_about, col_how = st.columns(2)
+    
+    with col_about:
+        st.info("""
+        **👨‍💻 About Me**
+        
+        I'm a 22-year-old Computer Science student passionate about AI and space exploration. 
+        Living just 20 minutes from ESA-ESAC in Spain, I've always dreamed of working in the 
+        space industry, combining machine learning with aerospace applications.
+        
+        I created SkySeer to showcase how AI can help amateur astronomers and researchers 
+        automatically detect and classify objects in night sky footage. This project represents 
+        my commitment to building practical AI solutions for space observation and my goal of 
+        contributing to the future of space technology.
+        """)
+    
+    with col_how:
+        st.success("""
+        **🔍 How Does It Work?**
+        
+        SkySeer uses a three-step process to find satellites and meteors in your videos:
+        
+        1. **Motion Detection** - Computer vision scans your video frame-by-frame to spot 
+           objects moving across the sky, filtering out background stars and noise.
+        
+        2. **Feature Extraction** - Each detected object is analyzed to measure its speed, 
+           trajectory, brightness, and consistency, creating a unique "flight signature."
+        
+        3. **Smart Classification** - Machine learning algorithms categorize objects as 
+           satellites, meteors, planes, or noise based on their flight patterns.
+        
+        The system is designed to only catch **very obvious movement**, minimizing false 
+        positives and giving you clean, reliable results!
+        """)
+    
+    st.markdown("---")
     
     # Sidebar configuration
     with st.sidebar:
