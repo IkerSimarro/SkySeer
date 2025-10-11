@@ -4,6 +4,20 @@
 
 SkySeer is an advanced computer vision and machine learning system for detecting and classifying sky objects in night sky video footage. It focuses on identifying very obvious movements like satellite passes and meteor events, minimizing false positives. The system processes raw video into structured data through motion detection, numerical "flight signature" extraction, and K-Means clustering for categorization (satellites, meteors, planes). It aggressively filters results to achieve less than 10 detections per typical video, prioritizing precision over recall. This project is ideal for amateur astronomy and low-light camera setups.
 
+## Recent Changes
+
+**October 11, 2025:**
+
+**502 Timeout Fix for Long Videos:**
+- Fixed critical WebSocket timeout issue that occurred with videos longer than 5 minutes
+- Implemented progress callback system that fires every (30 × frame_skip) processed frames
+- Status text updates with unique content (callback count + frame number) to prevent Streamlit deduplication
+- WebSocket now receives fresh data every 3-6 seconds, preventing 60-second timeout
+- Works with all video lengths and handles unknown frame counts gracefully
+
+**UI Improvements:**
+- Corrected Maximum Clip Duration slider range from 5-120s to 5-30s to align with typical recommendation values (~15s)
+
 ## User Preferences
 
 Preferred communication style: Simple, everyday language.
