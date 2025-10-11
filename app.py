@@ -55,8 +55,8 @@ def main():
         **👨‍💻 About Me**
         
         I'm a 22-year-old Computer Science student passionate about AI and space exploration. 
-        Living just 20 minutes from ESA-ESAC in Spain, I've always dreamed of working in the 
-        space industry, combining machine learning with aerospace applications.
+        I've always dreamed of working in the space industry, combining machine learning with 
+        aerospace applications.
         
         I created SkySeer to showcase how AI can help amateur astronomers and researchers 
         automatically detect and classify objects in night sky footage. This project represents 
@@ -95,7 +95,7 @@ def main():
             min_value=1,
             max_value=10,
             value=5,
-            help="Higher values detect smaller objects but may increase false positives"
+            help="Controls how small of an object can be detected. Higher = detects smaller/fainter satellites. Lower = only bright, obvious objects. Increase if missing small satellites."
         )
         
         # Minimum clip duration
@@ -105,7 +105,7 @@ def main():
             max_value=5.0,
             value=1.5,
             step=0.1,
-            help="Minimum duration for a valid detection clip. Higher values reduce false positives from noise."
+            help="Filters out quick flashes and noise. Objects must be visible for at least this long to be saved. Increase to reduce false positives from camera noise or birds."
         )
         
         # Maximum clip duration (always enabled)
@@ -115,7 +115,7 @@ def main():
             max_value=120.0,
             value=15.0,
             step=1.0,
-            help="Objects visible longer than this will be filtered out. Stars won't move out of frame even at 120s."
+            help="Filters out stationary objects like stars (which appear to move due to Earth's rotation). Objects visible longer than this are discarded. Most satellites cross in 5-30 seconds."
         )
         
         # Frame skip rate for performance
@@ -124,7 +124,7 @@ def main():
             min_value=1,
             max_value=10,
             value=3,
-            help="Process every Nth frame (higher = faster but less accurate)"
+            help="Processes every Nth frame to speed up analysis. Higher = faster processing but may miss very fast meteors. Use 1 for high accuracy, 3-5 for balanced, 7+ for long videos."
         )
         
         st.markdown("---")
@@ -325,26 +325,22 @@ def display_results():
     
     results_df = st.session_state.results_data
     
-    # Summary metrics
-    col1, col2, col3, col4, col5 = st.columns(5)
+    # Summary metrics (without stars - users won't download those anyway)
+    col1, col2, col3, col4 = st.columns(4)
     
     with col1:
         total_detections = len(results_df)
         st.metric("Total Detections", total_detections)
     
     with col2:
-        stars = len(results_df[results_df['classification'] == 'Star'])
-        st.metric("⭐ Stars", stars)
-    
-    with col3:
         satellites = len(results_df[results_df['classification'] == 'Satellite'])
         st.metric("🛰️ Satellites", satellites)
     
-    with col4:
+    with col3:
         meteors = len(results_df[results_df['classification'] == 'Meteor'])
         st.metric("☄️ Meteors", meteors)
     
-    with col5:
+    with col4:
         planes = len(results_df[results_df['classification'] == 'Plane'])
         st.metric("✈️ Planes", planes)
     
