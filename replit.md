@@ -25,10 +25,12 @@ This system is designed for amateur astronomy and sky observation projects, part
 
 **UI/UX Improvements:**
 - **Removed "Pipeline" from title** - Changed to "SkySeer AI" for cleaner branding
-- **Added "About Me" section** - Two-column intro box explaining creator's background (22yo CS student near ESA-ESAC in Spain), passion for AI and space exploration, and goals
+- **Added "About Me" section** - Two-column intro box explaining creator's background (22yo CS student), passion for AI and space exploration, and goals
 - **Added "How Does It Work" section** - Simple 3-step explanation of the detection process (Motion Detection → Feature Extraction → Smart Classification) in non-technical language
 - **Removed "Enable Maximum Duration Filter" checkbox** - Max duration slider now always active
 - **Increased max duration limit to 120 seconds** (up from 30s) - Stars won't move out of frame even at 120s
+- **Removed star count display** - Stars metric no longer shown in results (users won't download those clips anyway)
+- **Improved help text for all sliders** - Clearer, more actionable explanations for each configuration option
 - **Simplified configuration** - One less control to worry about
 
 **Smart Video Analysis:**
@@ -42,6 +44,13 @@ This system is designed for amateur astronomy and sky observation projects, part
   - Bright videos: Lower sensitivity to avoid over-detection
   - High noise videos: Suggests longer min duration for reliability
   - Long videos (>10min): Higher frame skip and adaptive max duration
+
+**Small Satellite Detection Fix:**
+- **Lowered variance threshold** - MOG2 varThreshold: 100 → 60 for better detection of small/faint satellites
+- **Adjusted contour area formula** - Changed from max(10, 80 - sensitivity*5) to max(5, 70 - sensitivity*6):
+  - At sensitivity=5: 55 pixels → 40 pixels (more sensitive)
+  - At sensitivity=10: 30 pixels → 10 pixels (detects very small objects)
+- **Better detects small satellites** - Now catches satellites that don't cross the entire screen
 
 **October 10, 2025** (Major Overhaul):
 
