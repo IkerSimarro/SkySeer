@@ -1,4 +1,4 @@
-# SkySeer AI Pipeline
+# SkySeer AI
 
 ## Overview
 
@@ -24,6 +24,9 @@ This system is designed for amateur astronomy and sky observation projects, part
   - New formula: speed_factor * linearity * duration_factor * brightness_factor
 
 **UI/UX Improvements:**
+- **Removed "Pipeline" from title** - Changed to "SkySeer AI" for cleaner branding
+- **Added "About Me" section** - Two-column intro box explaining creator's background (22yo CS student near ESA-ESAC in Spain), passion for AI and space exploration, and goals
+- **Added "How Does It Work" section** - Simple 3-step explanation of the detection process (Motion Detection → Feature Extraction → Smart Classification) in non-technical language
 - **Removed "Enable Maximum Duration Filter" checkbox** - Max duration slider now always active
 - **Increased max duration limit to 120 seconds** (up from 30s) - Stars won't move out of frame even at 120s
 - **Simplified configuration** - One less control to worry about
