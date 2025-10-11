@@ -70,23 +70,15 @@ def main():
             help="Minimum duration for a valid detection clip. Higher values reduce false positives from noise."
         )
         
-        # Maximum clip duration
-        max_duration_enabled = st.checkbox(
-            "Enable Maximum Duration Filter",
-            value=True,
-            help="Filter out objects that stay on screen too long (like stationary stars)"
+        # Maximum clip duration (always enabled)
+        max_duration = st.slider(
+            "Maximum Clip Duration (seconds)",
+            min_value=5.0,
+            max_value=120.0,
+            value=15.0,
+            step=1.0,
+            help="Objects visible longer than this will be filtered out. Stars won't move out of frame even at 120s."
         )
-        
-        max_duration = None
-        if max_duration_enabled:
-            max_duration = st.slider(
-                "Maximum Clip Duration (seconds)",
-                min_value=1.0,
-                max_value=30.0,
-                value=15.0,
-                step=1.0,
-                help="Objects visible longer than this will be filtered out (e.g., to exclude stars)"
-            )
         
         # Frame skip rate for performance
         frame_skip = st.slider(
@@ -109,8 +101,7 @@ def main():
             # Display recommended values
             st.markdown(f"**Suggested values:** Sensitivity={rec['sensitivity']}, " +
                        f"Min Duration={rec['min_duration']}s, " +
-                       f"Max Duration={'Enabled' if rec['max_duration_enabled'] else 'Disabled'} " +
-                       f"({rec['max_duration']}s), Frame Skip={rec['frame_skip']}")
+                       f"Max Duration={rec['max_duration']}s, Frame Skip={rec['frame_skip']}")
         
         st.markdown("---")
         st.markdown("**Classification Categories:**")
@@ -139,9 +130,9 @@ def main():
             with st.expander("📊 Video Information", expanded=True):
                 video_info = get_video_info(uploaded_file)
                 
-                # Generate recommendations based on video properties
+                # Generate recommendations based on video properties and content analysis
                 if 'error' not in video_info:
-                    st.session_state.recommendations = recommend_settings(video_info)
+                    st.session_state.recommendations = recommend_settings(video_info, uploaded_file)
                 
                 col_a, col_b, col_c = st.columns(3)
                 

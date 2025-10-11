@@ -3,6 +3,7 @@ import cv2
 import zipfile
 from io import BytesIO
 import pandas as pd
+import numpy as np
 import tempfile
 import shutil
 
@@ -243,12 +244,81 @@ def estimate_processing_time(file_size_mb, duration_seconds):
     
     return format_duration(total_time)
 
-def recommend_settings(video_info):
+def analyze_video_content(uploaded_file, video_info):
+    """
+    Analyze video content by sampling frames to detect brightness, noise, and motion characteristics
+    
+    Args:
+        uploaded_file: Streamlit uploaded file object
+        video_info (dict): Basic video info from get_video_info()
+        
+    Returns:
+        dict: Content analysis results
+    """
+    try:
+        # Create temporary file
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as tmp_file:
+            tmp_file.write(uploaded_file.getbuffer())
+            tmp_path = tmp_file.name
+        
+        cap = cv2.VideoCapture(tmp_path)
+        if not cap.isOpened():
+            os.unlink(tmp_path)
+            return {'error': True}
+        
+        fps = video_info.get('fps_numeric', 30)
+        frame_count = cap.get(cv2.CAP_PROP_FRAME_COUNT)
+        
+        # Sample 10 frames evenly distributed across the video
+        sample_indices = [int(i * frame_count / 10) for i in range(10)] if frame_count > 10 else [0]
+        
+        brightness_values = []
+        contrast_values = []
+        noise_levels = []
+        
+        for idx in sample_indices:
+            cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
+            ret, frame = cap.read()
+            if not ret:
+                continue
+            
+            # Convert to grayscale for analysis
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            
+            # Brightness: average pixel intensity
+            brightness = np.mean(gray)
+            brightness_values.append(brightness)
+            
+            # Contrast: standard deviation of pixel intensities
+            contrast = np.std(gray)
+            contrast_values.append(contrast)
+            
+            # Noise level: apply Laplacian to detect high-frequency noise
+            laplacian = cv2.Laplacian(gray, cv2.CV_64F)
+            noise = np.var(laplacian)
+            noise_levels.append(noise)
+        
+        cap.release()
+        os.unlink(tmp_path)
+        
+        return {
+            'avg_brightness': np.mean(brightness_values) if brightness_values else 0,
+            'avg_contrast': np.mean(contrast_values) if contrast_values else 0,
+            'avg_noise': np.mean(noise_levels) if noise_levels else 0,
+            'brightness_std': np.std(brightness_values) if brightness_values else 0,
+            'error': False
+        }
+        
+    except Exception as e:
+        return {'error': True, 'message': str(e)}
+
+def recommend_settings(video_info, uploaded_file=None):
     """
     Analyze video and recommend optimal settings for detection
     
     Args:
         video_info (dict): Video information from get_video_info()
+        uploaded_file: Streamlit uploaded file object (optional, for deep analysis)
         
     Returns:
         dict: Recommended settings with explanations
@@ -257,7 +327,7 @@ def recommend_settings(video_info):
         'sensitivity': 4,
         'min_duration': 1.5,
         'max_duration': 15.0,
-        'max_duration_enabled': True,
+        'max_duration_enabled': True,  # Always enabled now
         'frame_skip': 3,
         'explanations': []
     }
@@ -273,54 +343,117 @@ def recommend_settings(video_info):
     except:
         total_pixels = 1920 * 1080
     
-    # Recommendation 1: Frame skip based on duration
-    if duration_seconds > 300:  # > 5 minutes
+    # Deep content analysis if uploaded file provided
+    content_analysis = None
+    if uploaded_file:
+        content_analysis = analyze_video_content(uploaded_file, video_info)
+    
+    # Recommendation 1: Frame skip based on duration and FPS
+    if duration_seconds > 600:  # > 10 minutes
+        recommendations['frame_skip'] = 6
+        recommendations['explanations'].append(
+            "📹 Very long video (>10min) - using frame skip=6 for faster processing"
+        )
+    elif duration_seconds > 300:  # > 5 minutes
         recommendations['frame_skip'] = 5
         recommendations['explanations'].append(
-            "📹 Long video detected - using frame skip=5 for faster processing"
+            "📹 Long video (>5min) - using frame skip=5 for efficient processing"
         )
     elif duration_seconds > 180:  # > 3 minutes
         recommendations['frame_skip'] = 4
         recommendations['explanations'].append(
-            "📹 Medium-length video - using frame skip=4 for balanced speed"
+            "📹 Medium video (>3min) - using frame skip=4 for balanced speed/accuracy"
+        )
+    elif fps_numeric >= 60:
+        recommendations['frame_skip'] = 4
+        recommendations['explanations'].append(
+            "📹 High FPS video (60+) - using frame skip=4 to handle extra frames"
         )
     else:
         recommendations['explanations'].append(
-            "📹 Short video - using frame skip=3 for good accuracy"
+            "📹 Short/standard video - using frame skip=3 for good accuracy"
         )
     
-    # Recommendation 2: Sensitivity based on resolution
-    if total_pixels > 2073600:  # > 1920x1080
+    # Recommendation 2: Sensitivity based on resolution and brightness
+    if content_analysis and not content_analysis.get('error'):
+        brightness = content_analysis['avg_brightness']
+        noise = content_analysis['avg_noise']
+        
+        # Very dark video (night sky)
+        if brightness < 30:
+            if noise > 100:
+                recommendations['sensitivity'] = 3
+                recommendations['explanations'].append(
+                    "🌑 Very dark & noisy video - using low sensitivity (3) to reduce false positives"
+                )
+            else:
+                recommendations['sensitivity'] = 5
+                recommendations['explanations'].append(
+                    "🌑 Very dark but clean video - using moderate sensitivity (5)"
+                )
+        # Dark video (twilight/dusk)
+        elif brightness < 80:
+            recommendations['sensitivity'] = 4
+            recommendations['explanations'].append(
+                "🌆 Dark video detected - using sensitivity=4 for twilight conditions"
+            )
+        # Brighter video
+        else:
+            recommendations['sensitivity'] = 3
+            recommendations['explanations'].append(
+                "☀️ Relatively bright video - lowering sensitivity to avoid false detections"
+            )
+    elif total_pixels > 2073600:  # Fallback to resolution-based
         recommendations['sensitivity'] = 3
         recommendations['explanations'].append(
-            "🎯 High resolution video - lowering sensitivity to reduce noise"
+            "🎯 High resolution video (>1080p) - using lower sensitivity to reduce noise"
         )
     else:
         recommendations['explanations'].append(
-            "🎯 Standard resolution - using moderate sensitivity"
+            "🎯 Standard video - using moderate sensitivity (4)"
         )
     
-    # Recommendation 3: Duration settings
+    # Recommendation 3: Duration settings based on FPS and content
     if fps_numeric > 0:
-        # For high FPS, we can use shorter durations
         if fps_numeric >= 60:
             recommendations['min_duration'] = 1.0
             recommendations['explanations'].append(
-                "⏱️ High FPS video - can use shorter min duration (1.0s)"
+                "⏱️ High FPS (60+) - can detect shorter events (min 1.0s)"
+            )
+        elif fps_numeric >= 30:
+            recommendations['min_duration'] = 1.5
+            recommendations['explanations'].append(
+                "⏱️ Standard FPS (30+) - using conservative min duration (1.5s)"
             )
         else:
+            recommendations['min_duration'] = 2.0
             recommendations['explanations'].append(
-                "⏱️ Standard FPS - using conservative min duration (1.5s)"
+                "⏱️ Low FPS (<30) - using longer min duration (2.0s) for reliability"
             )
     
-    # Always recommend max duration to filter stars
-    recommendations['explanations'].append(
-        "⭐ Max duration enabled (15s) to filter out stationary stars"
-    )
+    # Recommendation 4: Max duration based on video length
+    if duration_seconds > 600:  # Long videos might have slower satellites
+        recommendations['max_duration'] = 25.0
+        recommendations['explanations'].append(
+            "⭐ Long video - max duration 25s (allows slower-moving satellites)"
+        )
+    else:
+        recommendations['max_duration'] = 15.0
+        recommendations['explanations'].append(
+            "⭐ Max duration 15s to filter stationary stars"
+        )
+    
+    # Recommendation 5: Noise-specific advice
+    if content_analysis and not content_analysis.get('error'):
+        noise = content_analysis['avg_noise']
+        if noise > 150:
+            recommendations['explanations'].append(
+                "⚠️ High noise detected - consider increasing min duration to 2.0s"
+            )
     
     # General advice
     recommendations['explanations'].append(
-        "💡 These settings aim for <10 obvious detections per video"
+        "💡 Settings optimized for <10 obvious detections per video"
     )
     
     return recommendations

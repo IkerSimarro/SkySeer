@@ -186,8 +186,14 @@ class FeatureExtractor:
         satellite_consistency = size_consistency * brightness_consistency
         satellite_score = speed_consistency * linearity * satellite_consistency * duration_satellite_factor
         
-        # Meteor: high speed, very linear, brief duration
-        meteor_score = (avg_speed / 50.0) * linearity * (1.0 / max(duration, 0.1))
+        # Meteor: high speed, very linear, brief duration, often bright/flashing
+        # Meteors are fast-moving (high speed), very straight (high linearity), 
+        # short duration (<3s), and often have brightness spikes
+        speed_factor = min(avg_speed / 30.0, 3.0)  # Cap at 3x for very fast objects
+        duration_factor = (1.0 / max(duration, 0.1)) if duration < 3 else 0.3  # Heavily penalize >3s
+        brightness_factor = 1.0 + min(max_brightness / 255.0, 0.5)  # Bonus for bright objects (up to 1.5x)
+        
+        meteor_score = speed_factor * linearity * duration_factor * brightness_factor
         
         # Plane: consistent movement, HIGH score for 15+ sec duration (planes stay visible longer)
         # Score increases with duration, peaks at 15+ seconds
