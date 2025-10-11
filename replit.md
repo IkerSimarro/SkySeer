@@ -14,6 +14,32 @@ This system is designed for amateur astronomy and sky observation projects, part
 
 ## Recent Changes
 
+**October 11, 2025** (User-Requested Improvements):
+
+**Meteor Detection Enhancement:**
+- **Improved meteor scoring algorithm** - Now better detects fast, bright, short-duration objects:
+  - Speed factor: avg_speed/30 capped at 3x for very fast meteors
+  - Duration factor: Heavy penalty for objects >3s (meteors are brief)
+  - Brightness factor: Up to 1.5x boost for bright objects (meteors often flash brightly)
+  - New formula: speed_factor * linearity * duration_factor * brightness_factor
+
+**UI/UX Improvements:**
+- **Removed "Enable Maximum Duration Filter" checkbox** - Max duration slider now always active
+- **Increased max duration limit to 120 seconds** (up from 30s) - Stars won't move out of frame even at 120s
+- **Simplified configuration** - One less control to worry about
+
+**Smart Video Analysis:**
+- **Deep content analysis** - System now samples 10 frames across video to analyze:
+  - Average brightness (detects very dark night sky vs twilight)
+  - Noise levels (detects grainy/noisy footage)
+  - Contrast levels (overall video quality)
+- **Personalized recommendations** - Settings now tailored to actual video content:
+  - Very dark & noisy videos: Lower sensitivity to reduce false positives
+  - Clean dark videos: Higher sensitivity for better detection
+  - Bright videos: Lower sensitivity to avoid over-detection
+  - High noise videos: Suggests longer min duration for reliability
+  - Long videos (>10min): Higher frame skip and adaptive max duration
+
 **October 10, 2025** (Major Overhaul):
 
 **Detection System Improvements:**
