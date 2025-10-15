@@ -230,18 +230,22 @@ class MLClassifier:
     def _calculate_confidence_scores(self, results_df):
         """Calculate and refine confidence scores based on multiple factors"""
         for idx, row in results_df.iterrows():
-            base_confidence = row['confidence']
+            base_confidence = row.get('confidence', 0.5)
             
-            # Adjust confidence based on detection count
-            if row['detection_count'] < 3:
+            # Adjust confidence based on detection count (with safe fallback)
+            detection_count = row.get('detection_count', 1)
+            if detection_count < 3:
                 base_confidence *= 0.8  # Lower confidence for few detections
-            elif row['detection_count'] > 10:
+            elif detection_count > 10:
                 base_confidence = min(base_confidence * 1.1, 0.95)  # Higher confidence for many detections
             
             # Adjust confidence based on feature quality
-            if row['linearity'] > 0.9 and row['speed_consistency'] > 0.8:
+            linearity = row.get('linearity', 0)
+            speed_consistency = row.get('speed_consistency', 0)
+            
+            if linearity > 0.9 and speed_consistency > 0.8:
                 base_confidence = min(base_confidence * 1.2, 0.95)  # High quality trajectory
-            elif row['linearity'] < 0.3 or row['speed_consistency'] < 0.3:
+            elif linearity < 0.3 or speed_consistency < 0.3:
                 base_confidence *= 0.7  # Poor quality trajectory
             
             results_df.loc[idx, 'confidence'] = round(base_confidence, 3)
