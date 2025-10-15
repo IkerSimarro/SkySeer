@@ -5,6 +5,7 @@ from collections import deque, defaultdict
 import csv
 from datetime import datetime
 from object_tracker import ObjectTracker
+import gc
 
 class VideoProcessor:
     def __init__(self, sensitivity=5, min_duration=1.0, max_duration=None, frame_skip=3):
@@ -74,10 +75,12 @@ class VideoProcessor:
         # Maximum contour area to filter out large objects (clouds, etc.)
         max_contour_area = int(frame_width * frame_height * 0.005)
         
-        # Store frames for each object with trimming buffer (1 second = fps frames)
-        buffer_frames = fps  # 1 second buffer before/after detection
+        # Store frames for each object with trimming buffer (0.5 second = fps * 0.5 frames)
+        # MEMORY OPTIMIZATION: Reduced from 1 second to 0.5 seconds to support Full HD videos
+        # Clamp to minimum of 1 frame to handle very low FPS videos (≤2 FPS)
+        buffer_frames = max(1, int(fps * 0.5))  # 0.5 second buffer before/after detection, minimum 1 frame
         object_frames = defaultdict(lambda: {'frames': deque(), 'frame_numbers': deque()})
-        all_frames_buffer = deque(maxlen=buffer_frames * 3)  # Circular buffer for pre-detection frames
+        all_frames_buffer = deque(maxlen=buffer_frames * 2)  # Circular buffer for pre-detection frames
         
         frame_count = 0
         
@@ -197,7 +200,7 @@ class VideoProcessor:
             for obj_id in active_object_ids:
                 # If this is first detection, add buffer frames before
                 if obj_id not in object_frames or len(object_frames[obj_id]['frames']) == 0:
-                    # Add frames from circular buffer (1 second before detection)
+                    # Add frames from circular buffer (0.5 second before detection)
                     for buff_frame_num, buff_frame in all_frames_buffer:
                         if buff_frame_num >= frame_count - buffer_frames:
                             object_frames[obj_id]['frames'].append(buff_frame.copy())
@@ -213,7 +216,7 @@ class VideoProcessor:
                 if obj_id not in active_object_ids:
                     if len(object_frames[obj_id]['frame_numbers']) > 0:
                         last_frame = object_frames[obj_id]['frame_numbers'][-1]
-                        # Add frames for 1 second after last detection
+                        # Add frames for 0.5 second after last detection
                         if frame_count <= last_frame + buffer_frames:
                             object_frames[obj_id]['frames'].append(frame.copy())
                             object_frames[obj_id]['frame_numbers'].append(frame_count)
@@ -253,5 +256,13 @@ class VideoProcessor:
                 
                 clip_writer.release()
                 motion_clips.append(clip_filename)
+                
+                # MEMORY OPTIMIZATION: Clear frames from memory after writing to disk
+                object_frames[obj_id]['frames'].clear()
+        
+        # MEMORY OPTIMIZATION: Force garbage collection after processing
+        object_frames.clear()
+        all_frames_buffer.clear()
+        gc.collect()
         
         return motion_clips, filtered_metadata

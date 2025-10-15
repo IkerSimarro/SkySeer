@@ -6,6 +6,7 @@ import pandas as pd
 import numpy as np
 import tempfile
 import shutil
+import gc
 
 def get_video_info(uploaded_file):
     """
@@ -394,6 +395,9 @@ def add_colored_rectangles_to_clips(clip_paths, metadata, results_df, progress_c
             os.rename(temp_path, clip_path)
         
         updated_clips.append(clip_path)
+        
+        # MEMORY OPTIMIZATION: Free memory after each clip
+        gc.collect()
         
         # Send progress update after each clip to keep connection alive
         if progress_callback:

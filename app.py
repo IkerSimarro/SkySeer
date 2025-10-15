@@ -10,6 +10,7 @@ import zipfile
 import shutil
 from datetime import datetime
 import base64
+import gc
 
 # Import custom modules
 from video_processor import VideoProcessor
@@ -287,6 +288,9 @@ def process_video(uploaded_file, sensitivity, min_duration, max_duration, frame_
         
         st.success(f"✅ Detected {len(motion_clips)} motion events with {len(set([m['clip_id'] for m in metadata]))} tracked objects")
         
+        # MEMORY OPTIMIZATION: Free memory after motion detection
+        gc.collect()
+        
         # Stage 2: Feature Extraction
         status_text.text("📊 Stage 2/4: Extracting movement features... (0/3 steps)")
         progress_bar.progress(40)
@@ -306,6 +310,9 @@ def process_video(uploaded_file, sensitivity, min_duration, max_duration, frame_
         status_text.text("📊 Stage 2/4: Extracting movement features... (3/3 steps)")
         progress_bar.progress(70)
         
+        # MEMORY OPTIMIZATION: Free memory after feature extraction
+        gc.collect()
+        
         # Stage 3: ML Classification
         status_text.text("🧠 Stage 3/4: Classifying objects with AI... (processing)")
         progress_bar.progress(75)
@@ -320,6 +327,9 @@ def process_video(uploaded_file, sensitivity, min_duration, max_duration, frame_
         
         status_text.text("🧠 Stage 3/4: Classifying objects with AI... (finalizing)")
         progress_bar.progress(90)
+        
+        # MEMORY OPTIMIZATION: Free memory after classification
+        gc.collect()
         
         # Stage 4: Add color-coded rectangles and generate results
         status_text.text("📋 Stage 4/4: Adding color-coded rectangles... (starting)")
@@ -349,6 +359,9 @@ def process_video(uploaded_file, sensitivity, min_duration, max_duration, frame_
         
         status_text.text("📋 Stage 4/4: Rectangles complete, finalizing...")
         progress_bar.progress(97)
+        
+        # MEMORY OPTIMIZATION: Free memory after rectangle drawing
+        gc.collect()
         
         status_text.text("📋 Stage 4/4: Finalizing results...")
         
