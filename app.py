@@ -288,27 +288,67 @@ def process_video(uploaded_file, sensitivity, min_duration, max_duration, frame_
         st.success(f"✅ Detected {len(motion_clips)} motion events with {len(set([m['clip_id'] for m in metadata]))} tracked objects")
         
         # Stage 2: Feature Extraction
-        status_text.text("📊 Stage 2/4: Extracting movement features...")
-        progress_bar.progress(50)
+        status_text.text("📊 Stage 2/4: Extracting movement features... (0/3 steps)")
+        progress_bar.progress(40)
         
         extractor = FeatureExtractor()
+        
+        # Keep connection alive during feature extraction
+        status_text.text("📊 Stage 2/4: Extracting movement features... (1/3 steps)")
+        progress_bar.progress(50)
+        
         features_df = extractor.extract_features(metadata)
+        
+        status_text.text("📊 Stage 2/4: Extracting movement features... (2/3 steps)")
+        progress_bar.progress(60)
+        
+        # Extra keepalive
+        status_text.text("📊 Stage 2/4: Extracting movement features... (3/3 steps)")
         progress_bar.progress(70)
         
         # Stage 3: ML Classification
-        status_text.text("🧠 Stage 3/4: Classifying objects with AI...")
+        status_text.text("🧠 Stage 3/4: Classifying objects with AI... (processing)")
+        progress_bar.progress(75)
         
         classifier = MLClassifier()
+        
+        # Keep connection alive during classification
+        status_text.text("🧠 Stage 3/4: Classifying objects with AI... (analyzing patterns)")
+        progress_bar.progress(82)
+        
         results_df = classifier.classify_objects(features_df)
+        
+        status_text.text("🧠 Stage 3/4: Classifying objects with AI... (finalizing)")
         progress_bar.progress(90)
         
         # Stage 4: Add color-coded rectangles and generate results
-        status_text.text("📋 Stage 4/4: Adding color-coded rectangles...")
+        status_text.text("📋 Stage 4/4: Adding color-coded rectangles... (starting)")
+        progress_bar.progress(92)
         
         # Add colored rectangles based on classification
         from utils import add_colored_rectangles_to_clips
-        motion_clips = add_colored_rectangles_to_clips(motion_clips, metadata, results_df)
-        progress_bar.progress(95)
+        
+        # Progress callback for rectangle drawing to prevent timeout
+        rectangle_callback_count = [0]
+        
+        def rectangle_progress_callback(current_clip, total_clips):
+            rectangle_callback_count[0] += 1
+            percent = int((current_clip / max(total_clips, 1)) * 100)
+            
+            # Update progress bar (92-97% range for this stage)
+            stage_progress = 92 + min(int(percent * 0.05), 5)
+            progress_bar.progress(stage_progress)
+            
+            # CRITICAL: Update status with unique text to prevent WebSocket timeout
+            status_text.text(f"📋 Stage 4/4: Adding rectangles... (clip {current_clip}/{total_clips}, {percent}%)")
+        
+        motion_clips = add_colored_rectangles_to_clips(
+            motion_clips, metadata, results_df, 
+            progress_callback=rectangle_progress_callback
+        )
+        
+        status_text.text("📋 Stage 4/4: Rectangles complete, finalizing...")
+        progress_bar.progress(97)
         
         status_text.text("📋 Stage 4/4: Finalizing results...")
         

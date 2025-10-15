@@ -284,7 +284,7 @@ def estimate_processing_time(file_size_mb, duration_seconds):
     
     return format_duration(total_time)
 
-def add_colored_rectangles_to_clips(clip_paths, metadata, results_df):
+def add_colored_rectangles_to_clips(clip_paths, metadata, results_df, progress_callback=None):
     """
     Add color-coded rectangles to video clips based on classification
     
@@ -292,6 +292,7 @@ def add_colored_rectangles_to_clips(clip_paths, metadata, results_df):
         clip_paths (list): List of paths to video clips
         metadata (list): Detection metadata with bbox information
         results_df (pd.DataFrame): Results with classifications
+        progress_callback (callable): Optional callback(current, total) for progress updates
         
     Returns:
         list: Updated clip paths
@@ -317,8 +318,9 @@ def add_colored_rectangles_to_clips(clip_paths, metadata, results_df):
         clip_metadata[item['clip_id']].append(item)
     
     updated_clips = []
+    total_clips = len(clip_paths)
     
-    for clip_path in clip_paths:
+    for clip_index, clip_path in enumerate(clip_paths):
         # Extract clip_id from filename
         filename = os.path.basename(clip_path)
         try:
@@ -392,6 +394,10 @@ def add_colored_rectangles_to_clips(clip_paths, metadata, results_df):
             os.rename(temp_path, clip_path)
         
         updated_clips.append(clip_path)
+        
+        # Send progress update after each clip to keep connection alive
+        if progress_callback:
+            progress_callback(clip_index + 1, total_clips)
     
     return updated_clips
 

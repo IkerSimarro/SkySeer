@@ -24,14 +24,16 @@ SkySeer is an advanced computer vision and machine learning system for detecting
 - Enhanced README.txt with improved organization and file structure explanation
 - Summary includes: classification, confidence %, duration, and average speed for each detected object
 
-**October 11, 2025:**
-
-**502 Timeout Fix for Long Videos:**
-- Fixed critical WebSocket timeout issue that occurred with videos longer than 5 minutes
-- Implemented progress callback system that fires every (30 × frame_skip) processed frames
-- Status text updates with unique content (callback count + frame number) to prevent Streamlit deduplication
-- WebSocket now receives fresh data every 3-6 seconds, preventing 60-second timeout
-- Works with all video lengths and handles unknown frame counts gracefully
+**Comprehensive 502 Timeout Fix (Updated October 15, 2025):**
+- Fixed critical WebSocket timeout issue affecting ALL processing stages
+- **Stage 1 (Motion Detection):** Progress callbacks fire every (30 × frame_skip) frames, sending updates every 3-6 seconds
+- **Stage 2 (Feature Extraction):** Added multi-step progress updates with unique status text
+- **Stage 3 (ML Classification):** Implemented intermediate progress callbacks during AI analysis
+- **Stage 4 (Rectangle Drawing):** Added per-clip progress updates to prevent timeout on large result sets
+- All status updates use unique content (callback counts, frame numbers, percentages) to prevent Streamlit deduplication
+- WebSocket now receives fresh data throughout entire pipeline, preventing 60-second timeout
+- Fixed ML classifier defensive programming: uses .get() methods with fallbacks for all field access
+- Works with all video lengths and processing scenarios
 
 **UI Improvements:**
 - Corrected Maximum Clip Duration slider range from 5-120s to 5-30s to align with typical recommendation values (~15s)
