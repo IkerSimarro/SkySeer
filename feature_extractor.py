@@ -171,7 +171,7 @@ class FeatureExtractor:
         
         # Detect periodic blinking (on/off pattern typical of plane lights)
         blinking_pattern_score = 0.0
-        if len(mean_brightness_values) >= 3:
+        if len(mean_brightness_values) >= 3 and avg_brightness > 1.0:  # Safeguard against zero brightness
             # Calculate brightness differences between consecutive frames
             brightness_diffs = [abs(mean_brightness_values[i] - mean_brightness_values[i-1]) 
                                for i in range(1, len(mean_brightness_values))]
