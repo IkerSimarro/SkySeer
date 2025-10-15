@@ -78,7 +78,9 @@ class VideoProcessor:
         # Store frames for each object with trimming buffer (1 second = fps frames)
         buffer_frames = fps  # 1 second buffer before/after detection
         object_frames = defaultdict(lambda: {'frames': deque(), 'frame_numbers': deque()})
-        all_frames_buffer = deque(maxlen=buffer_frames * 3)  # Circular buffer for pre-detection frames
+        # MEMORY FIX: Reduced from 3× to 1× to prevent memory overflow on Full HD videos
+        # We only need 1 second of pre-detection context, not 3 seconds
+        all_frames_buffer = deque(maxlen=buffer_frames)  # Circular buffer for pre-detection frames
         
         frame_count = 0
         
