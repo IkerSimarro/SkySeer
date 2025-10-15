@@ -190,13 +190,13 @@ class FeatureExtractor:
         # Satellite: consistent, linear, HIGH score for 3-15s duration (typical satellite pass)
         # Score peaks at 3-15s, gentle decline for longer durations
         if duration < 3:
-            duration_satellite_factor = 0.6
-        elif duration < 18:
-            duration_satellite_factor = 1.2  # Boost typical satellite range (extended to 18s)
-        elif duration < 25:
-            duration_satellite_factor = 0.85  # Gentle decline
+            duration_satellite_factor = 0.5
+        elif duration < 15:
+            duration_satellite_factor = 1.4  # Strong boost for typical satellite range (3-15s)
+        elif duration < 20:
+            duration_satellite_factor = 0.9  # Gentle decline
         else:
-            duration_satellite_factor = 0.65  # Penalize very long durations
+            duration_satellite_factor = 0.5  # Penalize very long durations (likely planes)
         
         # CRITICAL: Satellites must have minimum speed (typically 1-25 px/frame)
         # Penalize very slow objects (<1 px/frame) to prevent false positives
@@ -239,9 +239,23 @@ class FeatureExtractor:
         else:
             consistency_penalty = 1.0
         
-        # Strong bonus for blinking pattern (planes typically blink)
-        blinking_bonus = 1.0 + min(blinking_score * 0.8, 0.8)  # Up to 1.8x bonus for strong blinking
-        plane_score = speed_consistency * linearity * duration_plane_factor * blinking_bonus * consistency_penalty
+        # Planes need EITHER blinking OR long duration to score high
+        # Without blinking, apply the same speed requirements as satellites
+        if blinking_score < 0.15:
+            # No blinking detected - apply speed requirements
+            if avg_speed < 0.8:
+                plane_speed_penalty = 0.1
+            elif avg_speed < 1.5:
+                plane_speed_penalty = 0.5
+            else:
+                plane_speed_penalty = 1.0
+        else:
+            # Has blinking - no speed penalty needed
+            plane_speed_penalty = 1.0
+        
+        # Moderate bonus for blinking pattern (planes typically blink)
+        blinking_bonus = 1.0 + min(blinking_score * 0.5, 0.5)  # Up to 1.5x bonus (reduced from 1.8x)
+        plane_score = speed_consistency * linearity * duration_plane_factor * blinking_bonus * consistency_penalty * plane_speed_penalty
         
         # Anomaly indicators: erratic movement, inconsistent speed/size
         anomaly_indicators = (
