@@ -5,7 +5,6 @@ from collections import deque, defaultdict
 import csv
 from datetime import datetime
 from object_tracker import ObjectTracker
-import gc
 
 class VideoProcessor:
     def __init__(self, sensitivity=5, min_duration=1.0, max_duration=None, frame_skip=3):
@@ -78,9 +77,7 @@ class VideoProcessor:
         # Store frames for each object with trimming buffer (1 second = fps frames)
         buffer_frames = fps  # 1 second buffer before/after detection
         object_frames = defaultdict(lambda: {'frames': deque(), 'frame_numbers': deque()})
-        # MEMORY FIX: Reduced from 3× to 1× to prevent memory overflow on Full HD videos
-        # We only need 1 second of pre-detection context, not 3 seconds
-        all_frames_buffer = deque(maxlen=buffer_frames)  # Circular buffer for pre-detection frames
+        all_frames_buffer = deque(maxlen=buffer_frames * 3)  # Circular buffer for pre-detection frames
         
         frame_count = 0
         
@@ -256,13 +253,5 @@ class VideoProcessor:
                 
                 clip_writer.release()
                 motion_clips.append(clip_filename)
-                
-                # MEMORY OPTIMIZATION: Clear frames from memory after writing to disk
-                object_frames[obj_id]['frames'].clear()
-        
-        # MEMORY OPTIMIZATION: Force garbage collection after processing
-        object_frames.clear()
-        all_frames_buffer.clear()
-        gc.collect()
         
         return motion_clips, filtered_metadata
