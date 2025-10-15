@@ -6,6 +6,24 @@ SkySeer is an advanced computer vision and machine learning system for detecting
 
 ## Recent Changes
 
+**October 15, 2025:**
+
+**Enhanced Plane Detection:**
+- Implemented sophisticated blinking light pattern detection for improved aircraft identification
+- Added periodic blinking analysis that detects on/off brightness patterns typical of navigation lights
+- Increased blinking bonus from 0.2x to 0.8x for stronger plane vs satellite discrimination
+- New blinking_score feature combines brightness variance with periodic flash detection
+- Safeguarded against division by zero in brightness calculations
+
+**ML Classification Optimization:**
+- Added blinking_score to 11-dimensional feature space for better accuracy
+- Enhanced feature set now includes: speed, consistency, duration, linearity, direction changes, size consistency, acceleration, blinking patterns, and object-specific scores
+
+**ZIP Download Enhancements:**
+- Added SUMMARY.txt file with detection counts and detailed object listings
+- Enhanced README.txt with improved organization and file structure explanation
+- Summary includes: classification, confidence %, duration, and average speed for each detected object
+
 **October 11, 2025:**
 
 **502 Timeout Fix for Long Videos:**
@@ -47,7 +65,7 @@ A hybrid storage architecture combines file-based storage and a PostgreSQL datab
 
 ### Machine Learning Model Architecture
 
-The system utilizes an unsupervised learning approach with K-Means Clustering (3 clusters) for automatic categorization of motion patterns. It operates on a 10-dimensional feature space derived from kinematic "flight signatures" rather than visual features, which are more reliable in low-light conditions. This approach requires no labeled training data and adapts to new data patterns without retraining.
+The system utilizes an unsupervised learning approach with K-Means Clustering (3 clusters) for automatic categorization of motion patterns. It operates on an 11-dimensional feature space derived from kinematic "flight signatures" and brightness patterns rather than visual features, which are more reliable in low-light conditions. The feature space includes: average speed, speed consistency, duration, linearity, direction changes, size consistency, acceleration, blinking patterns, and object-specific scores. This approach requires no labeled training data and adapts to new data patterns without retraining.
 
 ## External Dependencies
 
