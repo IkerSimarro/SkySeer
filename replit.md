@@ -8,15 +8,6 @@ SkySeer is an advanced computer vision and machine learning system for detecting
 
 **October 15, 2025:**
 
-**Memory Optimizations for Full HD Video Processing:**
-- **Critical fix for .exe deployments:** Reduced memory usage by ~60% to support Full HD (1920×1080) videos
-- Frame buffer reduced from 1.0 second to 0.5 seconds before/after detection (50% memory savings)
-- Circular pre-detection buffer reduced from 3× to 2× frame buffer size
-- Added aggressive garbage collection after each processing stage (motion detection, feature extraction, ML classification, rectangle drawing)
-- Immediate frame cleanup after clip writing to disk
-- Buffer cleanup at end of video processing
-- **Result:** Can now process Full HD videos on systems with limited RAM without "Unable to allocate array" errors
-
 **Enhanced Plane Detection:**
 - Implemented sophisticated blinking light pattern detection for improved aircraft identification
 - Added periodic blinking analysis that detects on/off brightness patterns typical of navigation lights
@@ -45,6 +36,8 @@ SkySeer is an advanced computer vision and machine learning system for detecting
 - Works with all video lengths and processing scenarios
 
 **UI Improvements:**
+- Removed "About Me" section for cleaner, more professional interface
+- "How It Works" section now displays in full width
 - Corrected Maximum Clip Duration slider range from 5-120s to 5-30s to align with typical recommendation values (~15s)
 
 ## User Preferences
