@@ -198,8 +198,19 @@ class FeatureExtractor:
         else:
             duration_satellite_factor = 0.65  # Penalize very long durations
         
+        # CRITICAL: Satellites must have minimum speed (typically 1-25 px/frame)
+        # Penalize very slow objects (<1 px/frame) to prevent false positives
+        if avg_speed < 0.8:
+            speed_penalty = 0.1  # Drastically reduce score for very slow objects
+        elif avg_speed < 1.5:
+            speed_penalty = 0.5  # Moderate penalty for slow objects
+        elif avg_speed > 35:
+            speed_penalty = 0.6  # Penalize very fast objects (likely meteors)
+        else:
+            speed_penalty = 1.0  # Normal satellite speed range (1.5-35 px/frame)
+        
         satellite_consistency = size_consistency * brightness_consistency
-        satellite_score = speed_consistency * linearity * satellite_consistency * duration_satellite_factor
+        satellite_score = speed_consistency * linearity * satellite_consistency * duration_satellite_factor * speed_penalty
         
         # Meteor: high speed, very linear, brief duration, often bright/flashing
         # Meteors are fast-moving (high speed), very straight (high linearity), 

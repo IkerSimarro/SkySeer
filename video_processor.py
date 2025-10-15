@@ -24,8 +24,8 @@ class VideoProcessor:
         
         # Convert sensitivity to contour area threshold
         # Higher sensitivity = lower threshold (detects smaller objects)
-        # Adjusted to better detect small satellites that don't cross entire screen
-        self.min_contour_area = max(5, 70 - (sensitivity * 6))
+        # Lowered threshold to detect small, distant satellites
+        self.min_contour_area = max(8, 50 - (sensitivity * 7))
         
     def process_video(self, video_path, progress_callback=None):
         """
@@ -49,10 +49,10 @@ class VideoProcessor:
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) or 0
         
         # Setup MOG2 background subtractor for better motion detection
-        # Balanced varThreshold to detect small satellites while minimizing false positives
+        # Lower varThreshold to detect small, dim satellites
         backSub = cv2.createBackgroundSubtractorMOG2(
             history=500,
-            varThreshold=60,  # Balanced threshold - detects smaller satellites
+            varThreshold=45,  # Lower threshold - better detection of small satellites
             detectShadows=False
         )
         
