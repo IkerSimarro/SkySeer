@@ -195,6 +195,13 @@ class MLClassifier:
         for idx, row in results_df.iterrows():
             cluster_id = row['cluster']
             classification, confidence = cluster_interpretations[cluster_id]
+            
+            # CRITICAL OVERRIDE: Force very slow objects to Junk (prevents false positives)
+            avg_speed = row.get('avg_speed', 0)
+            if avg_speed < 0.8:
+                classification = 'Junk'
+                confidence = 0.6  # Low confidence for filtered objects
+            
             results_df.loc[idx, 'classification'] = classification
             results_df.loc[idx, 'confidence'] = confidence
         
@@ -202,6 +209,11 @@ class MLClassifier:
     
     def _rule_based_classification(self, row):
         """Rule-based classification for edge cases - trust the feature scores"""
+        # CRITICAL OVERRIDE: Force very slow objects to Junk (prevents false positives)
+        avg_speed = row.get('avg_speed', 0)
+        if avg_speed < 0.8:
+            return 'Junk', 0.6  # Low confidence for filtered objects
+        
         # Use the pre-computed scores from feature_extractor
         satellite_score = row.get('satellite_score', 0)
         meteor_score = row.get('meteor_score', 0)
@@ -216,9 +228,9 @@ class MLClassifier:
         }
         
         # Apply minimal adjustments for extreme cases
-        if row['avg_speed'] > 30 and row['linearity'] > 0.85 and row['duration'] < 1.5:
+        if avg_speed > 30 and row.get('linearity', 0) > 0.85 and row.get('duration', 0) < 1.5:
             scores['Meteor'] *= 1.8
-        elif row['speed_consistency'] < 0.3 or row['linearity'] < 0.3:
+        elif row.get('speed_consistency', 0) < 0.3 or row.get('linearity', 0) < 0.3:
             scores['Junk'] *= 1.5
         
         # Select best classification

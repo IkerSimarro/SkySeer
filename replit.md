@@ -16,7 +16,12 @@ SkySeer is an advanced computer vision and machine learning system for detecting
   - Objects moving 0.8-1.5 px/frame receive 50% penalty
   - Optimal satellite speed range: 1.5-35 px/frame
   - Very fast objects (>35 px/frame) penalized to favor meteor classification
-- **Result:** Significantly reduced false positives from stationary/very slow objects while improving detection of genuine small satellites
+- **Balanced Satellite vs Plane Scoring:**
+  - Satellites peak at 3-15s duration (1.4x boost), remain strong for longer passes (1.0x up to 25s)
+  - Planes require EITHER blinking lights OR long duration (15+s) to score high
+  - Planes without blinking now get same speed penalties as satellites
+  - Reduced plane blinking bonus from 1.8x to 1.5x for better balance
+- **Result:** Significantly reduced false positives from stationary/very slow objects while improving detection of genuine small satellites and proper satellite/plane discrimination
 
 **October 15, 2025:**
 
