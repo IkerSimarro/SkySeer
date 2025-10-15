@@ -297,6 +297,7 @@ class FeatureExtractor:
                 'max_brightness': 0,
                 'brightness_consistency': 0,
                 'brightness_variation_coeff': 0,
+                'blinking_score': 0,  # No blinking for insufficient data
                 'satellite_score': 0,
                 'meteor_score': 0,
                 'plane_score': 0,
@@ -329,6 +330,7 @@ class FeatureExtractor:
             'max_brightness': detection.get('max_brightness', 0),
             'brightness_consistency': 1,
             'brightness_variation_coeff': 0,
+            'blinking_score': 0,  # No blinking for single detection
             'satellite_score': 0,
             'meteor_score': 0,
             'plane_score': 0,
