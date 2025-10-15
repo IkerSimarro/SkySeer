@@ -6,6 +6,18 @@ SkySeer is an advanced computer vision and machine learning system for detecting
 
 ## Recent Changes
 
+**October 15, 2025 - Latest:**
+
+**Critical Accuracy Improvements:**
+- **Enhanced Small Satellite Detection:** Lowered minimum object size threshold from 40 to ~15 pixels to capture distant satellites
+- **Improved Background Subtraction:** Reduced varThreshold from 60 to 45 for better detection of dim, small objects
+- **Speed-Based Classification Filter:** Added critical speed validation to satellite scoring
+  - Objects moving <0.8 px/frame receive 90% score penalty (eliminates false positives from slow-moving noise)
+  - Objects moving 0.8-1.5 px/frame receive 50% penalty
+  - Optimal satellite speed range: 1.5-35 px/frame
+  - Very fast objects (>35 px/frame) penalized to favor meteor classification
+- **Result:** Significantly reduced false positives from stationary/very slow objects while improving detection of genuine small satellites
+
 **October 15, 2025:**
 
 **Enhanced Plane Detection:**
