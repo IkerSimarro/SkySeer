@@ -1,3 +1,4 @@
 /processed_clips/clip_0001.mp4 filter=lfs diff=lfs merge=lfs -text
 /temp_uploads/Adobe[[:space:]]Express[[:space:]]-[[:space:]]140[[:space:]]mins[[:space:]]unedited.mp4 filter=lfs diff=lfs merge=lfs -text
 /temp_uploads/140[[:space:]]mins[[:space:]]unedited.mp4 filter=lfs diff=lfs merge=lfs -text
+/temp_uploads/My[[:space:]]Video.mp4 filter=lfs diff=lfs merge=lfs -text
