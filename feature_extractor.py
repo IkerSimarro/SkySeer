@@ -166,8 +166,23 @@ class FeatureExtractor:
         # Brightness consistency (low variance = constant like satellite, high variance = blinking like plane)
         brightness_consistency = 1.0 / (1.0 + brightness_std / max(avg_brightness, 1))
         
-        # Detect blinking pattern (coefficient of variation)
+        # Enhanced blinking pattern detection for planes
         brightness_variation_coeff = (brightness_std / max(avg_brightness, 1)) if avg_brightness > 0 else 0
+        
+        # Detect periodic blinking (on/off pattern typical of plane lights)
+        blinking_pattern_score = 0.0
+        if len(mean_brightness_values) >= 3:
+            # Calculate brightness differences between consecutive frames
+            brightness_diffs = [abs(mean_brightness_values[i] - mean_brightness_values[i-1]) 
+                               for i in range(1, len(mean_brightness_values))]
+            
+            # High differences indicate blinking
+            avg_diff = np.mean(brightness_diffs) if brightness_diffs else 0
+            if avg_diff > avg_brightness * 0.15:  # 15% change threshold
+                blinking_pattern_score = min(avg_diff / avg_brightness, 1.0)
+        
+        # Combine blinking indicators
+        blinking_score = max(brightness_variation_coeff, blinking_pattern_score)
         
         # Movement pattern classification hints  
         # Use duration as PRIMARY discriminator between satellites and planes
@@ -202,17 +217,19 @@ class FeatureExtractor:
         elif duration < 15:
             duration_plane_factor = 0.8
         else:
-            duration_plane_factor = 1.1  # Boost long durations (reduced from 1.3)
+            duration_plane_factor = 1.1  # Boost long durations
         
+        # Enhanced plane detection with blinking pattern recognition
+        # Planes often have blinking lights (especially red ones)
         # Penalize planes that have satellite-like consistency (unless they're blinking)
-        # If BOTH size and brightness are consistent, it's probably a satellite
         satellite_like_consistency = size_consistency * brightness_consistency
-        if satellite_like_consistency > 0.6 and brightness_variation_coeff < 0.15:
+        if satellite_like_consistency > 0.6 and blinking_score < 0.15:
             consistency_penalty = 0.65  # Penalize satellite-like characteristics
         else:
             consistency_penalty = 1.0
         
-        blinking_bonus = 1.0 + min(brightness_variation_coeff * 0.2, 0.2)  # Small bonus for blinking
+        # Strong bonus for blinking pattern (planes typically blink)
+        blinking_bonus = 1.0 + min(blinking_score * 0.8, 0.8)  # Up to 1.8x bonus for strong blinking
         plane_score = speed_consistency * linearity * duration_plane_factor * blinking_bonus * consistency_penalty
         
         # Anomaly indicators: erratic movement, inconsistent speed/size
@@ -246,6 +263,7 @@ class FeatureExtractor:
             'max_brightness': max_brightness,
             'brightness_consistency': brightness_consistency,
             'brightness_variation_coeff': brightness_variation_coeff,
+            'blinking_score': blinking_score,  # Enhanced blinking detection
             'satellite_score': satellite_score,
             'meteor_score': meteor_score,
             'plane_score': plane_score,

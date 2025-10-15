@@ -146,22 +146,62 @@ def create_download_zip(clip_paths, results_df, classification_filter=None):
         csv_buffer.seek(0)
         zip_file.writestr("analysis_report.csv", csv_buffer.getvalue())
         
+        # Generate detection summary
+        summary_lines = ["SkySeer AI - Detection Summary", "=" * 50, ""]
+        
+        # Count detections by classification
+        classification_counts = results_df['classification'].value_counts().to_dict()
+        summary_lines.append("DETECTION COUNTS:")
+        for classification, count in sorted(classification_counts.items()):
+            summary_lines.append(f"  {classification}: {count}")
+        
+        summary_lines.append("")
+        summary_lines.append("DETAILED DETECTIONS:")
+        summary_lines.append("-" * 50)
+        
+        # Add details for each detection
+        for idx, row in results_df.iterrows():
+            clip_id = row['clip_id']
+            classification = row['classification']
+            confidence = row['confidence']
+            duration = row.get('duration', 0)
+            avg_speed = row.get('avg_speed', 0)
+            
+            summary_lines.append(f"\nObject ID: {clip_id}")
+            summary_lines.append(f"  Classification: {classification}")
+            summary_lines.append(f"  Confidence: {confidence:.1%}")
+            summary_lines.append(f"  Duration: {duration:.2f}s")
+            summary_lines.append(f"  Average Speed: {avg_speed:.1f} px/frame")
+        
+        summary_lines.append("")
+        summary_lines.append("=" * 50)
+        summary_lines.append("Analysis complete. See analysis_report.csv for full details.")
+        
+        summary_content = "\n".join(summary_lines)
+        zip_file.writestr("SUMMARY.txt", summary_content)
+        
         # Add README file
         readme_content = """SkySeer AI Pipeline - Analysis Results
 =====================================
 
 This ZIP file contains the results of your sky object detection analysis.
 
+Files:
+- SUMMARY.txt: Quick overview of all detections
+- analysis_report.csv: Detailed analysis data with confidence scores
+- Video clips are organized by classification in separate folders
+
 Folder Structure:
 - Satellite/: Clips classified as satellites
 - Meteor/: Clips classified as meteors  
 - Plane/: Clips classified as aircraft
 - Junk/: Clips classified as noise/artifacts
-- Star/: Clips classified as stars (if detected)
 
-Files:
-- analysis_report.csv: Detailed analysis data with confidence scores
-- Video clips are named with format: clipXXXX_Classification_confX.XX.mp4
+Video Clip Naming:
+- Format: object_ID_Classification_confX.XX.mp4
+- ID: Unique object identifier
+- Classification: Detected object type
+- conf: Confidence score (0.0-1.0)
 
 Confidence Scores:
 - 0.9+ : High confidence
@@ -243,6 +283,117 @@ def estimate_processing_time(file_size_mb, duration_seconds):
     total_time = base_processing_time + ml_processing_time
     
     return format_duration(total_time)
+
+def add_colored_rectangles_to_clips(clip_paths, metadata, results_df):
+    """
+    Add color-coded rectangles to video clips based on classification
+    
+    Args:
+        clip_paths (list): List of paths to video clips
+        metadata (list): Detection metadata with bbox information
+        results_df (pd.DataFrame): Results with classifications
+        
+    Returns:
+        list: Updated clip paths
+    """
+    # Color mapping for classifications
+    color_map = {
+        'Satellite': (0, 255, 0),      # Green
+        'Meteor': (0, 0, 255),          # Red
+        'Plane': (255, 0, 255),         # Magenta
+        'Star': (0, 255, 255),          # Yellow
+        'Junk': (128, 128, 128)         # Gray
+    }
+    
+    # Create classification lookup by clip_id
+    classification_lookup = {}
+    for idx, row in results_df.iterrows():
+        classification_lookup[row['clip_id']] = row['classification']
+    
+    # Group metadata by clip_id
+    from collections import defaultdict
+    clip_metadata = defaultdict(list)
+    for item in metadata:
+        clip_metadata[item['clip_id']].append(item)
+    
+    updated_clips = []
+    
+    for clip_path in clip_paths:
+        # Extract clip_id from filename
+        filename = os.path.basename(clip_path)
+        try:
+            clip_id = int(filename.split('_')[1].split('.')[0])
+        except:
+            updated_clips.append(clip_path)
+            continue
+        
+        # Get classification for this clip
+        classification = classification_lookup.get(clip_id, 'Junk')
+        color = color_map.get(classification, (128, 128, 128))
+        
+        # Open original clip
+        cap = cv2.VideoCapture(clip_path)
+        if not cap.isOpened():
+            updated_clips.append(clip_path)
+            continue
+        
+        fps = int(cap.get(cv2.CAP_PROP_FPS)) or 30
+        frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        
+        # Create temporary output file
+        temp_path = clip_path.replace('.mp4', '_colored.mp4')
+        writer = cv2.VideoWriter(
+            temp_path,
+            cv2.VideoWriter_fourcc(*'mp4v'),
+            fps,
+            (frame_width, frame_height)
+        )
+        
+        # Get bbox data for this clip
+        bbox_data = clip_metadata.get(clip_id, [])
+        bbox_by_frame = {item['frame_number']: item for item in bbox_data}
+        
+        frame_num = 0
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                break
+            
+            frame_num += 1
+            
+            # Draw colored rectangle if bbox data exists for this frame
+            if frame_num in bbox_by_frame:
+                item = bbox_by_frame[frame_num]
+                x = item['bbox_x']
+                y = item['bbox_y']
+                w = item['bbox_width']
+                h = item['bbox_height']
+                
+                pad = 8
+                cv2.rectangle(frame,
+                            (max(0, x-pad), max(0, y-pad)),
+                            (min(frame_width-1, x+w+pad), min(frame_height-1, y+h+pad)),
+                            color, 2)
+                
+                # Add classification label
+                label = f"{classification}:{clip_id}"
+                cv2.putText(frame, label, (x, y-10),
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+            
+            writer.write(frame)
+        
+        cap.release()
+        writer.release()
+        
+        # Replace original with colored version
+        if os.path.exists(temp_path):
+            os.remove(clip_path)
+            os.rename(temp_path, clip_path)
+        
+        updated_clips.append(clip_path)
+    
+    return updated_clips
 
 def analyze_video_content(uploaded_file, video_info):
     """

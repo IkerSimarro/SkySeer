@@ -24,8 +24,8 @@ class VideoProcessor:
         
         # Convert sensitivity to contour area threshold
         # Higher sensitivity = lower threshold (detects smaller objects)
-        # Adjusted to better detect small satellites that don't cross entire screen
-        self.min_contour_area = max(5, 70 - (sensitivity * 6))
+        # Further optimized for small satellites and faint meteors
+        self.min_contour_area = max(3, 60 - (sensitivity * 7))
         
     def process_video(self, video_path, progress_callback=None):
         """
@@ -49,10 +49,10 @@ class VideoProcessor:
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) or 0
         
         # Setup MOG2 background subtractor for better motion detection
-        # Balanced varThreshold to detect small satellites while minimizing false positives
+        # Lower varThreshold to detect small/faint satellites and meteors
         backSub = cv2.createBackgroundSubtractorMOG2(
             history=500,
-            varThreshold=60,  # Balanced threshold - detects smaller satellites
+            varThreshold=45,  # Lower threshold - detects smaller/fainter objects
             detectShadows=False
         )
         
@@ -74,20 +74,22 @@ class VideoProcessor:
         # Maximum contour area to filter out large objects (clouds, etc.)
         max_contour_area = int(frame_width * frame_height * 0.005)
         
+        # Store frames for each object with trimming buffer (1 second = fps frames)
+        buffer_frames = fps  # 1 second buffer before/after detection
+        object_frames = defaultdict(lambda: {'frames': deque(), 'frame_numbers': deque()})
+        all_frames_buffer = deque(maxlen=buffer_frames * 3)  # Circular buffer for pre-detection frames
+        
         frame_count = 0
-        motion_active = False
-        clip_writer = None
-        clip_filename = None
         
         while True:
             ret, frame = cap.read()
             if not ret:
-                # Close video writer if active
-                if clip_writer is not None:
-                    clip_writer.release()
                 break
             
             frame_count += 1
+            
+            # Store frame in circular buffer (for pre-detection context)
+            all_frames_buffer.append((frame_count, frame.copy()))
             
             # Frame skipping for performance
             if frame_count % self.frame_skip != 0:
@@ -168,7 +170,8 @@ class VideoProcessor:
             # Update tracker with detected centroids
             tracked_objects = tracker.update(current_frame_centroids)
             
-            # Assign object_id (as clip_id) to each detection
+            # Assign object_id (as clip_id) to each detection and collect frames
+            active_object_ids = set()
             if len(tracked_objects) > 0 and len(current_frame_objects) > 0:
                 # Match detections to tracked objects by centroid
                 for i, (centroid_x, centroid_y) in enumerate(current_frame_centroids):
@@ -186,32 +189,34 @@ class VideoProcessor:
                         # Add clip_id and store metadata
                         current_frame_objects[i]['clip_id'] = assigned_id
                         object_metadata[assigned_id].append(current_frame_objects[i])
+                        active_object_ids.add(assigned_id)
                         
-                        # Draw bounding rectangle with object ID
-                        obj = current_frame_objects[i]
-                        x, y, w, h = obj['bbox_x'], obj['bbox_y'], obj['bbox_width'], obj['bbox_height']
-                        pad = 8
-                        cv2.rectangle(frame, 
-                                    (max(0, x-pad), max(0, y-pad)),
-                                    (min(frame_width-1, x+w+pad), min(frame_height-1, y+h+pad)),
-                                    (0, 0, 255), 2)
-                        cv2.putText(frame, f"ID:{assigned_id}", (x, y-10),
-                                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+                        # Note: Rectangles will be added later with color-coding based on classification
             
-            # Start video writer if we have detections
-            if len(tracked_objects) > 0 and not motion_active:
-                motion_active = True
-                clip_filename = os.path.join(clips_folder, "clip_0001.mp4")
-                clip_writer = cv2.VideoWriter(
-                    clip_filename,
-                    cv2.VideoWriter_fourcc(*'mp4v'),
-                    fps,
-                    (frame_width, frame_height)
-                )
+            # Store frames for active objects
+            for obj_id in active_object_ids:
+                # If this is first detection, add buffer frames before
+                if obj_id not in object_frames or len(object_frames[obj_id]['frames']) == 0:
+                    # Add frames from circular buffer (1 second before detection)
+                    for buff_frame_num, buff_frame in all_frames_buffer:
+                        if buff_frame_num >= frame_count - buffer_frames:
+                            object_frames[obj_id]['frames'].append(buff_frame.copy())
+                            object_frames[obj_id]['frame_numbers'].append(buff_frame_num)
+                
+                # Add current frame
+                object_frames[obj_id]['frames'].append(frame.copy())
+                object_frames[obj_id]['frame_numbers'].append(frame_count)
             
-            # Write frame if writer is active
-            if clip_writer is not None:
-                clip_writer.write(frame)
+            # For objects that were active but are no longer detected, add post-buffer frames
+            # Keep adding frames for buffer_frames after last detection
+            for obj_id in list(object_frames.keys()):
+                if obj_id not in active_object_ids:
+                    if len(object_frames[obj_id]['frame_numbers']) > 0:
+                        last_frame = object_frames[obj_id]['frame_numbers'][-1]
+                        # Add frames for 1 second after last detection
+                        if frame_count <= last_frame + buffer_frames:
+                            object_frames[obj_id]['frames'].append(frame.copy())
+                            object_frames[obj_id]['frame_numbers'].append(frame_count)
         
         cap.release()
         
@@ -220,13 +225,33 @@ class VideoProcessor:
         min_detections = int((fps / self.frame_skip) * self.min_duration)
         max_detections = int((fps / self.frame_skip) * self.max_duration) if self.max_duration else float('inf')
         filtered_metadata = []
+        valid_object_ids = set()
         
         for obj_id, detections in object_metadata.items():
             num_detections = len(detections)
             if min_detections <= num_detections <= max_detections:
                 filtered_metadata.extend(detections)
+                valid_object_ids.add(obj_id)
         
-        # Prepare motion clips list
-        motion_clips = [clip_filename] if clip_filename and os.path.exists(clip_filename) else []
+        # Create individual trimmed clips for each valid object
+        motion_clips = []
+        for obj_id in valid_object_ids:
+            if obj_id in object_frames and len(object_frames[obj_id]['frames']) > 0:
+                clip_filename = os.path.join(clips_folder, f"clip_{obj_id:04d}.mp4")
+                
+                # Create video writer for this object's clip
+                clip_writer = cv2.VideoWriter(
+                    clip_filename,
+                    cv2.VideoWriter_fourcc(*'mp4v'),
+                    fps,
+                    (frame_width, frame_height)
+                )
+                
+                # Write all frames for this object (already trimmed to 1 sec before/after)
+                for frame in object_frames[obj_id]['frames']:
+                    clip_writer.write(frame)
+                
+                clip_writer.release()
+                motion_clips.append(clip_filename)
         
         return motion_clips, filtered_metadata

@@ -302,8 +302,15 @@ def process_video(uploaded_file, sensitivity, min_duration, max_duration, frame_
         results_df = classifier.classify_objects(features_df)
         progress_bar.progress(90)
         
-        # Stage 4: Generate Results
-        status_text.text("📋 Stage 4/4: Generating results...")
+        # Stage 4: Add color-coded rectangles and generate results
+        status_text.text("📋 Stage 4/4: Adding color-coded rectangles...")
+        
+        # Add colored rectangles based on classification
+        from utils import add_colored_rectangles_to_clips
+        motion_clips = add_colored_rectangles_to_clips(motion_clips, metadata, results_df)
+        progress_bar.progress(95)
+        
+        status_text.text("📋 Stage 4/4: Finalizing results...")
         
         # Store results in session state
         st.session_state.results_data = results_df
@@ -514,19 +521,20 @@ def display_results():
     # Classification-specific clip downloads
     st.markdown("**Download Video Clips by Category:**")
     
-    # Get unique classifications with counts
+    # Get unique classifications with counts (exclude Stars from UI)
     classification_counts = results_df['classification'].value_counts()
+    # Filter out Star classification from download options
+    classification_counts = classification_counts[classification_counts.index != 'Star']
     
-    # Create emoji mapping
+    # Create emoji mapping (no star emoji needed in UI)
     emoji_map = {
         'Satellite': '🛰️',
         'Meteor': '☄️',
         'Plane': '✈️',
-        'Star': '⭐',
         'Junk': '🗑️'
     }
     
-    # Create download buttons for each classification
+    # Create download buttons for each classification (Stars excluded)
     cols = st.columns(min(len(classification_counts), 5))
     
     for idx, (classification, count) in enumerate(classification_counts.items()):

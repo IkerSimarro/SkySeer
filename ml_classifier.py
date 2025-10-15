@@ -24,10 +24,11 @@ class MLClassifier:
         self.scaler = StandardScaler()
         self.kmeans = KMeans(n_clusters=n_clusters, random_state=random_state, n_init=10)
         
-        # Feature columns for ML processing
+        # Feature columns for ML processing (optimized for better accuracy)
         self.feature_columns = [
             'avg_speed', 'speed_consistency', 'duration', 'linearity',
             'direction_changes', 'size_consistency', 'avg_acceleration',
+            'blinking_score',  # Added for better plane detection
             'satellite_score', 'meteor_score', 'plane_score'
         ]
     

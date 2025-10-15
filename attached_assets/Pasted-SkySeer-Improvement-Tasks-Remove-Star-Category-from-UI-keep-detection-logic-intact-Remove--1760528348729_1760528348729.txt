@@ -1,0 +1,60 @@
+SkySeer Improvement Tasks:
+
+Remove Star Category from UI (keep detection logic intact):
+
+Remove "Stars" download button from results section
+Remove star count metric from summary dashboard
+Stars should still be detected internally to maintain accuracy for other objects
+Do NOT remove star classification from the backend
+Implement Smart Clip Trimming:
+
+Trim each video clip to 1 second before object appears + 1 second after it disappears
+Export only these trimmed clips (not the full sped-up video)
+This should significantly reduce ZIP file size
+Enhance Small Object Detection:
+
+Improve detection sensitivity for small satellites that don't cross the entire screen
+Better capture faint/small meteorites
+Adjust contour detection and variance thresholds as needed
+Add Color-Coded Detection Rectangles:
+
+Green rectangles for satellites
+Red rectangles for meteors
+Keep existing colors for planes and other objects
+Apply to saved video clips
+Improve Plane Detection Algorithm:
+
+Planes have blinking lights (usually red)
+Detect the obvious on/off pattern in brightness
+Use this flashing pattern as a key identifier for plane classification
+Overall Accuracy Improvements:
+
+Review and optimize classification thresholds
+Reduce false positives while maintaining detection rate
+Fine-tune ML clustering parameters if needed
+Performance Optimization for Long Videos (1+ hour):
+
+Optimize processing speed for videos longer than 1 hour
+Reduce exported ZIP file size through better compression or clip trimming
+Ensure timeout fixes work well with extended processing times
+Confidence Threshold Filter in UI:
+
+Add a slider in the results section to filter by minimum confidence level
+Example: "Only show detections above 70% confidence"
+Helps users quickly filter out uncertain detections
+Detection Summary in ZIP File:
+
+Include a text file (summary.txt) inside each ZIP download
+List: what was detected, when, and confidence scores
+Provides quick reference without opening the CSV
+Export Preset Configurations:
+
+Add ability to save/load detection settings for different scenarios
+Include presets like: "Backyard Telescope", "Wide Angle", "High Altitude", "Meteor Shower"
+Saves time for users with similar setups
+Visual Detection Preview (optional):
+Show thumbnail preview of detections with color-coded rectangles
+Helps users quickly identify interesting clips before downloading
+Duplicate Detection Prevention (optional):
+If same object detected multiple times in close succession, merge into one clip
+Reduces redundant clips in export
