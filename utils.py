@@ -294,8 +294,9 @@ def _create_filtered_video(source_video, output_path, results_df, metadata, clas
     """
     # Color mapping
     color_map = {
-        'Satellite': (0, 255, 0),      # Green
-        'Meteor': (0, 0, 255),          # Red
+        'Satellite': (0, 0, 255),       # Red (BGR format)
+        'Meteor': (0, 255, 255),        # Yellow (BGR format)
+        'Plane': (255, 0, 0),           # Blue
         'Junk': (128, 128, 128)         # Gray
     }
     
@@ -485,7 +486,7 @@ Files Included:
 
 Video Format:
 - Filtered video at 10x speed showing ONLY {classification_filter} detections
-- Color-coded bounding boxes: Green=Satellites, Red=Meteors, Gray=Junk
+- Color-coded bounding boxes: Red=Satellites, Yellow=Meteors
 - Labels show object ID and classification (e.g., "ID:3 {classification_filter}")
 - Video duration = 1/10th of your original upload duration
 - Other classifications are NOT shown in this category-specific video
@@ -615,8 +616,9 @@ def add_colored_rectangles_to_clips(clip_paths, metadata, results_df, progress_c
     """
     # Color mapping for classifications
     color_map = {
-        'Satellite': (0, 255, 0),      # Green
-        'Meteor': (0, 0, 255),          # Red
+        'Satellite': (0, 0, 255),       # Red (BGR format)
+        'Meteor': (0, 255, 255),        # Yellow (BGR format)
+        'Plane': (255, 0, 0),           # Blue
         'Junk': (128, 128, 128)         # Gray
     }
     

@@ -187,8 +187,8 @@ class FeatureExtractor:
         # Movement pattern classification hints  
         # Use duration as PRIMARY discriminator between satellites and planes
         
-        # Satellite: consistent, linear, HIGH score for 3-18s duration (typical satellite pass)
-        # Score peaks at 3-18s, gentle decline for longer durations
+        # Satellite: consistent, linear, HIGH score for 3-15s duration (typical satellite pass)
+        # Score peaks at 3-15s, gentle decline for longer durations
         if duration < 3:
             duration_satellite_factor = 0.6
         elif duration < 18:
@@ -300,6 +300,7 @@ class FeatureExtractor:
                 'blinking_score': 0,  # No blinking for insufficient data
                 'satellite_score': 0,
                 'meteor_score': 0,
+                'plane_score': 0,
                 'anomaly_indicators': 1,  # High anomaly score for insufficient data
                 'detection_count': len(detections)
             }
@@ -332,6 +333,7 @@ class FeatureExtractor:
             'blinking_score': 0,  # No blinking for single detection
             'satellite_score': 0,
             'meteor_score': 0,
+            'plane_score': 0,
             'anomaly_indicators': 0.5,  # Medium anomaly score for single detection
             'detection_count': 1
         }

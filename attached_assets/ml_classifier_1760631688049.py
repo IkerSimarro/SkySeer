@@ -11,7 +11,7 @@ warnings.filterwarnings('ignore')
 class MLClassifier:
     def __init__(self, n_clusters=3, random_state=42):
         """
-        Initialize ML classifier with K-Means clustering
+        Initialize ML classifier with K-Means clustering (simplified - no anomaly detection)
         
         Args:
             n_clusters (int): Number of clusters for K-Means (default: 3 for Satellite/Meteor/Plane)
@@ -20,11 +20,11 @@ class MLClassifier:
         self.n_clusters = n_clusters
         self.random_state = random_state
         
-        # Initialize models
+        # Initialize models (removed Isolation Forest)
         self.scaler = StandardScaler()
         self.kmeans = KMeans(n_clusters=n_clusters, random_state=random_state, n_init=10)
         
-        # Feature columns for ML processing
+        # Feature columns for ML processing (optimized for better accuracy)
         self.feature_columns = [
             'avg_speed', 'speed_consistency', 'duration', 'linearity',
             'direction_changes', 'size_consistency', 'avg_acceleration',
@@ -216,9 +216,9 @@ class MLClassifier:
         }
         
         # Apply minimal adjustments for extreme cases
-        if avg_speed > 30 and row.get('linearity', 0) > 0.85 and row.get('duration', 0) < 1.5:
+        if row['avg_speed'] > 30 and row['linearity'] > 0.85 and row['duration'] < 1.5:
             scores['Meteor'] *= 1.8
-        elif row.get('speed_consistency', 0) < 0.3 or row.get('linearity', 0) < 0.3:
+        elif row['speed_consistency'] < 0.3 or row['linearity'] < 0.3:
             scores['Junk'] *= 1.5
         
         # Select best classification

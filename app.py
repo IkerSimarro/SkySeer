@@ -550,20 +550,19 @@ def display_results():
     # Classification-specific clip downloads
     st.markdown("**Download Video Clips by Category:**")
     
-    # Get unique classifications with counts (exclude Stars from UI)
+    # Get unique classifications with counts (only show Satellite and Meteor)
     classification_counts = results_df['classification'].value_counts()
-    # Filter out Star classification from download options
-    classification_counts = classification_counts[classification_counts.index != 'Star']
+    # Filter to only show Satellite and Meteor in downloads
+    classification_counts = classification_counts[classification_counts.index.isin(['Satellite', 'Meteor'])]
     
-    # Create emoji mapping (no star emoji needed in UI)
+    # Create emoji mapping (only Satellite and Meteor)
     emoji_map = {
         'Satellite': '🛰️',
-        'Meteor': '☄️',
-        'Junk': '🗑️'
+        'Meteor': '☄️'
     }
     
-    # Create download buttons for each classification (Stars excluded)
-    cols = st.columns(min(len(classification_counts), 5))
+    # Create download buttons for Satellite and Meteor only
+    cols = st.columns(min(len(classification_counts), 2)) if len(classification_counts) > 0 else st.columns(1)
     
     for idx, (classification, count) in enumerate(classification_counts.items()):
         with cols[idx % len(cols)]:

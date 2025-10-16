@@ -8,18 +8,18 @@ SkySeer is an advanced computer vision and machine learning system for detecting
 
 **October 16, 2025 - Latest:**
 
-**Category Download Filtering & Classification Fixes:**
-- **Category-Specific Video Filtering:** Fixed downloads to show ONLY objects of that classification
-  - Satellite downloads now show only satellites (green boxes)
-  - Meteor downloads now show only meteors (red boxes)
-  - Junk downloads now show only junk (gray boxes)
+**Category Download Filtering & Restored Satellite Detection:**
+- **Category-Specific Video Filtering:** Downloads show ONLY Satellite or Meteor objects
+  - Satellite downloads: only satellites with RED boxes
+  - Meteor downloads: only meteors with YELLOW boxes
+  - Only Satellite and Meteor available for download (Junk/Plane hidden)
   - Each category ZIP includes: filtered video + filtered CSV + filtered summary
   - Clean video preserved before annotation for proper filtering
-- **Improved Satellite Detection:** Reduced misclassification of slow-moving satellites as Junk
-  - Lowered forced-to-Junk threshold from 0.3 to 0.15 px/frame (allows distant satellites)
-  - Reduced speed penalties: < 0.15 px/frame gets 30% penalty (was 20% at < 0.3)
-  - Widened normal satellite range from 0.6-35 to 0.4-35 px/frame
-  - More permissive classification reduces false Junk assignments
+- **Restored Satellite Detection:** Removed speed-based filtering that was blocking satellites
+  - Removed forced-to-Junk speed thresholds (all speeds now allowed)
+  - Removed speed penalties from satellite scoring (matches working version)
+  - Restored 3-cluster classification (Satellite/Meteor/Plane) for better accuracy
+  - Satellite detection now matches previous working behavior
 
 **Critical Video Processing Fixes:**
 - **Precise 10x Speed Control:** Fixed output video duration to be exactly 1/10th of input duration
@@ -32,11 +32,11 @@ SkySeer is an advanced computer vision and machine learning system for detecting
   - Output frame numbers are 0-based to match video frame indices exactly
   - Video overlay now uses synchronized frame numbering
   - IDs in video now precisely match IDs in Available Objects table and Clip Extractor
-- **Video Display Optimization:** Color-coded rectangles for all objects
-  - GREEN boxes for Satellites with "ID:{number} Satellite" labels
-  - RED boxes for Meteors with "ID:{number} Meteor" labels
-  - GRAY boxes for Junk with "ID:{number} Junk" labels
-  - All objects visible so users can identify which IDs to download
+- **Video Display Optimization:** Color-coded rectangles for classification
+  - RED boxes for Satellites with "ID:{number} Satellite" labels
+  - YELLOW boxes for Meteors with "ID:{number} Meteor" labels
+  - BLUE boxes for Planes, GRAY boxes for Junk (if detected)
+  - All objects visible in main video so users can see detections
   - IDs match Available Objects table and Clip Extractor
 
 **Improved Meteor Detection & Simplified Classification:**
