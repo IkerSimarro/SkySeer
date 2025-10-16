@@ -564,31 +564,30 @@ def add_colored_rectangles_to_clips(clip_paths, metadata, results_df, progress_c
             
             frame_num += 1  # Now 0-based (first frame is 0)
             
-            # Draw rectangles ONLY for Meteor detections (red boxes)
+            # Draw rectangles for ALL detections with color-coded boxes
             if frame_num in frame_detections:
                 for detection in frame_detections[frame_num]:
                     clip_id = detection['clip_id']
                     classification = detection['classification']
                     
-                    # Only draw if it's a Meteor
-                    if classification == 'Meteor':
-                        color = (0, 0, 255)  # Red
-                        
-                        x = detection['bbox_x']
-                        y = detection['bbox_y']
-                        w = detection['bbox_width']
-                        h = detection['bbox_height']
-                        
-                        pad = 8
-                        cv2.rectangle(frame,
-                                    (max(0, x-pad), max(0, y-pad)),
-                                    (min(frame_width-1, x+w+pad), min(frame_height-1, y+h+pad)),
-                                    color, 2)
-                        
-                        # Add classification label with object ID
-                        label = f"ID:{clip_id} {classification}"
-                        cv2.putText(frame, label, (x, y-10),
-                                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+                    # Get color based on classification
+                    color = color_map.get(classification, (255, 255, 255))  # White fallback
+                    
+                    x = detection['bbox_x']
+                    y = detection['bbox_y']
+                    w = detection['bbox_width']
+                    h = detection['bbox_height']
+                    
+                    pad = 8
+                    cv2.rectangle(frame,
+                                (max(0, x-pad), max(0, y-pad)),
+                                (min(frame_width-1, x+w+pad), min(frame_height-1, y+h+pad)),
+                                color, 2)
+                    
+                    # Add classification label with object ID
+                    label = f"ID:{clip_id} {classification}"
+                    cv2.putText(frame, label, (x, y-10),
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
             
             writer.write(frame)
         

@@ -19,11 +19,12 @@ SkySeer is an advanced computer vision and machine learning system for detecting
   - Output frame numbers are 0-based to match video frame indices exactly
   - Video overlay now uses synchronized frame numbering
   - IDs in video now precisely match IDs in Available Objects table and Clip Extractor
-- **Video Display Optimization:** Simplified video overlays for clarity
-  - Only METEOR detections shown with RED bounding boxes and ID labels
-  - Satellites and Junk classifications removed from video (still in CSV/table)
-  - Reduces visual clutter while focusing on fast-moving objects of interest
-  - Label format: "ID:{clip_id} Meteor"
+- **Video Display Optimization:** Color-coded rectangles for all objects
+  - GREEN boxes for Satellites with "ID:{number} Satellite" labels
+  - RED boxes for Meteors with "ID:{number} Meteor" labels
+  - GRAY boxes for Junk with "ID:{number} Junk" labels
+  - All objects visible so users can identify which IDs to download
+  - IDs match Available Objects table and Clip Extractor
 
 **Improved Meteor Detection & Simplified Classification:**
 - **Enhanced Meteor Scoring:** Optimized meteor detection with realistic thresholds
