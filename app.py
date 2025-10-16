@@ -138,7 +138,7 @@ def main():
         st.markdown("**Classification Categories:**")
         st.markdown("🛰️ **Satellite** - Steady orbital motion")
         st.markdown("☄️ **Meteor** - Fast, straight trajectory")
-        st.markdown("🗑️ **Junk** - Noise/artifacts")
+        st.markdown("🗑️ **Junk** - Noise/Drones/Birds/Planes/Stars")
 
     # Main content area
     col1, col2 = st.columns([2, 1])
