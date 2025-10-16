@@ -590,6 +590,114 @@ def display_results():
                         use_container_width=True,
                         key=f"download_btn_{classification}"
                     )
+    
+    # Object Clip Extractor Section
+    st.markdown("---")
+    st.subheader("🎬 Object Clip Extractor")
+    st.markdown("Extract normal-speed clips of specific detected objects from the original video.")
+    
+    # Check if we have the uploaded video available
+    if st.session_state.uploaded_video_path and os.path.exists(st.session_state.uploaded_video_path):
+        # Quick reference table
+        st.markdown("**Available Objects:**")
+        
+        # Create reference table with key info
+        ref_data = []
+        for _, row in results_df.iterrows():
+            ref_data.append({
+                'ID': int(row['clip_id']),
+                'Classification': row['classification'],
+                'Confidence': f"{row['confidence']*100:.0f}%",
+                'Duration': f"{row['duration']:.1f}s",
+                'Avg Speed': f"{row['avg_speed']:.1f} px/f"
+            })
+        
+        ref_df = pd.DataFrame(ref_data)
+        st.dataframe(ref_df, use_container_width=True, hide_index=True)
+        
+        # Input field for object IDs
+        st.markdown("**Enter Object ID(s):**")
+        col_input, col_button = st.columns([3, 1])
+        
+        with col_input:
+            object_input = st.text_input(
+                "Enter single ID (e.g., '3') or multiple IDs separated by commas (e.g., '3, 7, 12')",
+                key="object_id_input",
+                label_visibility="collapsed"
+            )
+        
+        with col_button:
+            extract_button = st.button("Extract Clip", use_container_width=True, type="primary")
+        
+        # Process extraction when button is clicked
+        if extract_button and object_input:
+            try:
+                # Parse input IDs
+                object_ids = [int(x.strip()) for x in object_input.split(',')]
+                
+                # Validate IDs
+                valid_ids = results_df['clip_id'].unique().tolist()
+                invalid_ids = [oid for oid in object_ids if oid not in valid_ids]
+                
+                if invalid_ids:
+                    st.error(f"❌ Invalid Object ID(s): {', '.join(map(str, invalid_ids))}. Valid range: {min(valid_ids)}-{max(valid_ids)}")
+                else:
+                    with st.spinner(f"Extracting clip for Object(s): {', '.join(map(str, object_ids))}..."):
+                        # Extract the clip
+                        clip_path = extract_object_clip(
+                            object_ids,
+                            st.session_state.uploaded_video_path,
+                            st.session_state.metadata,
+                            results_df
+                        )
+                        
+                        if clip_path and os.path.exists(clip_path):
+                            # Read the clip file
+                            with open(clip_path, 'rb') as f:
+                                clip_data = f.read()
+                            
+                            # Generate filename
+                            if len(object_ids) == 1:
+                                filename = f"Object_{object_ids[0]}_clip.mp4"
+                            else:
+                                filename = f"Objects_{'_'.join(map(str, object_ids))}_clip.mp4"
+                            
+                            # Display success message
+                            st.success(f"✅ Clip extracted successfully for {len(object_ids)} object(s)!")
+                            
+                            # Show object details
+                            for obj_id in object_ids:
+                                obj_row = results_df[results_df['clip_id'] == obj_id].iloc[0]
+                                st.info(
+                                    f"**Object {obj_id}:** {obj_row['classification']} | "
+                                    f"Confidence: {obj_row['confidence']*100:.0f}% | "
+                                    f"Duration: {obj_row['duration']:.1f}s | "
+                                    f"Speed: {obj_row['avg_speed']:.1f} px/frame"
+                                )
+                            
+                            # Download button
+                            st.download_button(
+                                label=f"📥 Download {filename}",
+                                data=clip_data,
+                                file_name=filename,
+                                mime="video/mp4",
+                                use_container_width=True
+                            )
+                            
+                            # Clean up temp file
+                            try:
+                                os.remove(clip_path)
+                            except:
+                                pass
+                        else:
+                            st.error("❌ Failed to extract clip. Please try again.")
+                            
+            except ValueError:
+                st.error("❌ Invalid input format. Please enter numeric IDs separated by commas (e.g., '3, 7, 12')")
+            except Exception as e:
+                st.error(f"❌ Error extracting clip: {str(e)}")
+    else:
+        st.warning("⚠️ Original video file not available. Please process a new video to use this feature.")
 
 def extract_object_clip(object_ids, video_path, metadata, results_df):
     """
