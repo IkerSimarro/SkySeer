@@ -212,51 +212,31 @@ class FeatureExtractor:
         satellite_consistency = size_consistency * brightness_consistency
         satellite_score = speed_consistency * linearity * satellite_consistency * duration_satellite_factor * speed_penalty
         
-        # Meteor: high speed, very linear, brief duration, often bright/flashing
-        # Meteors are fast-moving (high speed), very straight (high linearity), 
-        # short duration (<3s), and often have brightness spikes
-        speed_factor = min(avg_speed / 30.0, 3.0)  # Cap at 3x for very fast objects
-        duration_factor = (1.0 / max(duration, 0.1)) if duration < 3 else 0.3  # Heavily penalize >3s
-        brightness_factor = 1.0 + min(max_brightness / 255.0, 0.5)  # Bonus for bright objects (up to 1.5x)
-        
-        meteor_score = speed_factor * linearity * duration_factor * brightness_factor
-        
-        # Plane: Requires EITHER blinking OR very long duration (15+s) to score well
-        # Planes are discriminated by blinking lights OR extended visibility
-        if duration < 15:
-            duration_plane_factor = 0.4  # Low score unless blinking
-        elif duration < 25:
-            duration_plane_factor = 0.9  # Moderate boost for longer durations
+        # Meteor: VERY high speed, extremely linear, brief duration, bright streaks
+        # Meteors are very fast streaks (>15 px/frame), ultra-linear, brief (<5s)
+        # They travel small patches of sky and often leave bright trails
+        if avg_speed > 15:
+            speed_factor = min(avg_speed / 10.0, 5.0)  # Strong boost for fast objects, cap at 5x
+        elif avg_speed > 8:
+            speed_factor = avg_speed / 15.0  # Moderate score for medium-fast
         else:
-            duration_plane_factor = 1.1  # Strong boost for very long tracks
+            speed_factor = 0.2  # Low score for slow objects
         
-        # ALL planes must pass minimum speed check to prevent slow/stationary false positives
-        # (Even blinking objects like tower lights must be filtered)
-        if avg_speed < 0.3:
-            plane_speed_penalty = 0.2  # Heavy penalty for extremely slow
-        elif avg_speed < 0.6:
-            plane_speed_penalty = 0.6  # Moderate penalty for very slow
+        # Meteors are brief - favor <5s duration, heavily penalize longer
+        if duration < 2:
+            duration_factor = 2.0  # Strong boost for very brief
+        elif duration < 5:
+            duration_factor = 1.0  # Normal for brief
         else:
-            plane_speed_penalty = 1.0  # Normal speed range
+            duration_factor = 0.2  # Heavy penalty for long duration
         
-        # Blinking provides bonus score for planes, BUT not for slow objects
-        if blinking_score >= 0.15:
-            # Has blinking - but cap the bonus for slow objects to prevent false positives
-            if avg_speed < 0.3:
-                blinking_bonus = 1.0  # No bonus for extremely slow objects (even if blinking)
-            elif avg_speed < 0.6:
-                blinking_bonus = 1.0 + min(blinking_score * 0.25, 0.25)  # Reduced bonus for slow objects
-            else:
-                blinking_bonus = 1.0 + min(blinking_score * 0.5, 0.5)  # Full bonus for normal speed
-        else:
-            # No blinking - must rely on duration
-            blinking_bonus = 1.0
-            
-            # Without blinking, penalize satellite-like characteristics heavily
-            if size_consistency > 0.7 and brightness_consistency > 0.7:
-                plane_speed_penalty *= 0.4  # Strong penalty for satellite-like objects without blinking
+        # Brightness bonus for bright streaks
+        brightness_factor = 1.0 + min(max_brightness / 200.0, 1.0)  # Up to 2x for bright objects
         
-        plane_score = speed_consistency * linearity * duration_plane_factor * blinking_bonus * plane_speed_penalty
+        # Linearity is critical for meteors (straight streaks)
+        linearity_factor = linearity ** 2  # Square to heavily favor linear paths
+        
+        meteor_score = speed_factor * linearity_factor * duration_factor * brightness_factor
         
         # Anomaly indicators: erratic movement, inconsistent speed/size
         anomaly_indicators = (
@@ -292,7 +272,6 @@ class FeatureExtractor:
             'blinking_score': blinking_score,  # Enhanced blinking detection
             'satellite_score': satellite_score,
             'meteor_score': meteor_score,
-            'plane_score': plane_score,
             'anomaly_indicators': anomaly_indicators,
             'detection_count': len(detections)
         }
@@ -326,7 +305,6 @@ class FeatureExtractor:
                 'blinking_score': 0,  # No blinking for insufficient data
                 'satellite_score': 0,
                 'meteor_score': 0,
-                'plane_score': 0,
                 'anomaly_indicators': 1,  # High anomaly score for insufficient data
                 'detection_count': len(detections)
             }
@@ -359,7 +337,6 @@ class FeatureExtractor:
             'blinking_score': 0,  # No blinking for single detection
             'satellite_score': 0,
             'meteor_score': 0,
-            'plane_score': 0,
             'anomaly_indicators': 0.5,  # Medium anomaly score for single detection
             'detection_count': 1
         }

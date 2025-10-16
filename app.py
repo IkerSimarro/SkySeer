@@ -60,7 +60,7 @@ def main():
        trajectory, brightness, and consistency, creating a unique "flight signature."
     
     3. **Smart Classification** - Machine learning algorithms categorize objects as 
-       satellites, meteors, planes, or noise based on their flight patterns.
+       satellites, meteors, or noise based on their flight patterns.
     
     The system is designed to only catch **very obvious movement**, minimizing false 
     positives and giving you clean, reliable results!
@@ -138,7 +138,6 @@ def main():
         st.markdown("**Classification Categories:**")
         st.markdown("🛰️ **Satellite** - Steady orbital motion")
         st.markdown("☄️ **Meteor** - Fast, straight trajectory")
-        st.markdown("✈️ **Plane** - Predictable flight path")
         st.markdown("🗑️ **Junk** - Noise/artifacts")
 
     # Main content area
@@ -382,8 +381,8 @@ def display_results():
     
     results_df = st.session_state.results_data
     
-    # Summary metrics (without stars - users won't download those anyway)
-    col1, col2, col3, col4 = st.columns(4)
+    # Summary metrics
+    col1, col2, col3 = st.columns(3)
     
     with col1:
         total_detections = len(results_df)
@@ -396,10 +395,6 @@ def display_results():
     with col3:
         meteors = len(results_df[results_df['classification'] == 'Meteor'])
         st.metric("☄️ Meteors", meteors)
-    
-    with col4:
-        planes = len(results_df[results_df['classification'] == 'Plane'])
-        st.metric("✈️ Planes", planes)
     
     # Classification distribution chart
     st.subheader("📊 Classification Distribution")
@@ -414,7 +409,6 @@ def display_results():
             'Star': '#ffd700',
             'Satellite': '#1f77b4',
             'Meteor': '#ff7f0e', 
-            'Plane': '#2ca02c',
             'Junk': '#d62728'
         }
     )
@@ -563,7 +557,6 @@ def display_results():
     emoji_map = {
         'Satellite': '🛰️',
         'Meteor': '☄️',
-        'Plane': '✈️',
         'Junk': '🗑️'
     }
     

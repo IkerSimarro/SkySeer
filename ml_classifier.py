@@ -9,27 +9,27 @@ import warnings
 warnings.filterwarnings('ignore')
 
 class MLClassifier:
-    def __init__(self, n_clusters=3, random_state=42):
+    def __init__(self, n_clusters=2, random_state=42):
         """
-        Initialize ML classifier with K-Means clustering (simplified - no anomaly detection)
+        Initialize ML classifier with K-Means clustering
         
         Args:
-            n_clusters (int): Number of clusters for K-Means (default: 3 for Satellite/Meteor/Plane)
+            n_clusters (int): Number of clusters for K-Means (default: 2 for Satellite/Meteor)
             random_state (int): Random seed for reproducibility
         """
         self.n_clusters = n_clusters
         self.random_state = random_state
         
-        # Initialize models (removed Isolation Forest)
+        # Initialize models
         self.scaler = StandardScaler()
         self.kmeans = KMeans(n_clusters=n_clusters, random_state=random_state, n_init=10)
         
-        # Feature columns for ML processing (optimized for better accuracy)
+        # Feature columns for ML processing (removed plane_score)
         self.feature_columns = [
             'avg_speed', 'speed_consistency', 'duration', 'linearity',
             'direction_changes', 'size_consistency', 'avg_acceleration',
-            'blinking_score',  # Added for better plane detection
-            'satellite_score', 'meteor_score', 'plane_score'
+            'blinking_score',  # Brightness variation indicator
+            'satellite_score', 'meteor_score'
         ]
     
     def classify_objects(self, features_df):
@@ -163,13 +163,11 @@ class MLClassifier:
             avg_duration = cluster_data['duration'].mean()
             avg_satellite_score = cluster_data['satellite_score'].mean()
             avg_meteor_score = cluster_data['meteor_score'].mean()
-            avg_plane_score = cluster_data['plane_score'].mean()
             
-            # Determine most likely classification for this cluster
+            # Determine most likely classification for this cluster (Satellite, Meteor, or Junk)
             scores = {
                 'Satellite': avg_satellite_score,
                 'Meteor': avg_meteor_score,
-                'Plane': avg_plane_score,
                 'Junk': 0.1  # Base score for junk category
             }
             
@@ -219,13 +217,11 @@ class MLClassifier:
         # Use the pre-computed scores from feature_extractor
         satellite_score = row.get('satellite_score', 0)
         meteor_score = row.get('meteor_score', 0)
-        plane_score = row.get('plane_score', 0)
         
-        # Determine best classification based on scores
+        # Determine best classification based on scores (Satellite, Meteor, or Junk)
         scores = {
             'Satellite': satellite_score,
             'Meteor': meteor_score,
-            'Plane': plane_score,
             'Junk': 0.1
         }
         

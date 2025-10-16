@@ -2,15 +2,27 @@
 
 ## Overview
 
-SkySeer is an advanced computer vision and machine learning system for detecting and classifying sky objects in night sky video footage. It focuses on identifying very obvious movements like satellite passes and meteor events, minimizing false positives. The system processes raw video into structured data through motion detection, numerical "flight signature" extraction, and K-Means clustering for categorization (satellites, meteors, planes). It aggressively filters results to achieve less than 10 detections per typical video, prioritizing precision over recall. This project is ideal for amateur astronomy and low-light camera setups.
+SkySeer is an advanced computer vision and machine learning system for detecting and classifying sky objects in night sky video footage. It focuses on identifying very obvious movements like satellite passes and meteor events, minimizing false positives. The system processes raw video into structured data through motion detection, numerical "flight signature" extraction, and K-Means clustering for categorization (satellites, meteors). It aggressively filters results to achieve less than 10 detections per typical video, prioritizing precision over recall. This project is ideal for amateur astronomy and low-light camera setups.
 
 ## Recent Changes
 
 **October 16, 2025 - Latest:**
 
+**Improved Meteor Detection & Simplified Classification:**
+- **Enhanced Meteor Scoring:** Completely redesigned meteor detection to favor very fast streaks (>15 px/frame)
+  - Strong boost for brief durations (<2s gets 2x multiplier, <5s gets 1x)
+  - Linearity is squared to heavily favor straight paths
+  - Brightness factor provides up to 2x bonus for bright streaks
+  - Designed to capture fast meteors that travel small patches of sky
+- **Removed Plane Classification:** Simplified system to focus on satellites and meteors only
+  - Plane detection was unreliable and rarely used
+  - Updated ML classifier from 3 clusters to 2 clusters (Satellite/Meteor)
+  - Removed all plane-related scoring and UI elements
+  - Cleaner, more focused classification system
+
 **Category-Specific Download Enhancement:**
 - Fixed download functionality to properly filter by classification
-- Each category download (Satellite, Meteor, Plane, Junk) now contains only that specific classification
+- Each category download (Satellite, Meteor, Junk) now contains only that specific classification
 - Single continuous video per category showing all detections of that type (e.g., "Satellite_detections.mp4")
 - Extracts only frames where the selected classification was detected from the combined video
 - ZIP includes: classification-specific video, filtered CSV report, and category-specific SUMMARY.txt
