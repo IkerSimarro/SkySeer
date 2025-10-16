@@ -202,10 +202,13 @@ class VideoProcessor:
             if len(tracked_objects) > 0 and not motion_active:
                 motion_active = True
                 clip_filename = os.path.join(clips_folder, "clip_0001.mp4")
+                # Calculate output FPS to achieve exactly 10x speedup
+                # Output duration = input duration / 10
+                output_fps = 10.0 * fps / self.frame_skip
                 clip_writer = cv2.VideoWriter(
                     clip_filename,
                     cv2.VideoWriter_fourcc(*'mp4v'),
-                    fps,
+                    output_fps,
                     (frame_width, frame_height)
                 )
             

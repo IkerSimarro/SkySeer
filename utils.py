@@ -520,7 +520,8 @@ def estimate_processing_time(file_size_mb, duration_seconds):
 
 def add_colored_rectangles_to_clips(clip_paths, metadata, results_df, progress_callback=None):
     """
-    Add color-coded rectangles to video clips based on classification
+    Add color-coded rectangles to video clips based on classification.
+    Handles combined clips containing multiple objects with different IDs.
     
     Args:
         clip_paths (list): List of paths to video clips
@@ -535,8 +536,6 @@ def add_colored_rectangles_to_clips(clip_paths, metadata, results_df, progress_c
     color_map = {
         'Satellite': (0, 255, 0),      # Green
         'Meteor': (0, 0, 255),          # Red
-        'Plane': (255, 0, 255),         # Magenta
-        'Star': (0, 255, 255),          # Yellow
         'Junk': (128, 128, 128)         # Gray
     }
     
@@ -545,28 +544,28 @@ def add_colored_rectangles_to_clips(clip_paths, metadata, results_df, progress_c
     for idx, row in results_df.iterrows():
         classification_lookup[row['clip_id']] = row['classification']
     
-    # Group metadata by clip_id
+    # Group metadata by frame_number, then by clip_id
+    # This allows us to draw multiple objects per frame
     from collections import defaultdict
-    clip_metadata = defaultdict(list)
+    frame_detections = defaultdict(list)
     for item in metadata:
-        clip_metadata[item['clip_id']].append(item)
+        frame_num = item['frame_number']
+        clip_id = item['clip_id']
+        # Only include objects that made it through filtering
+        if clip_id in classification_lookup:
+            frame_detections[frame_num].append({
+                'clip_id': clip_id,
+                'bbox_x': item['bbox_x'],
+                'bbox_y': item['bbox_y'],
+                'bbox_width': item['bbox_width'],
+                'bbox_height': item['bbox_height'],
+                'classification': classification_lookup[clip_id]
+            })
     
     updated_clips = []
     total_clips = len(clip_paths)
     
     for clip_index, clip_path in enumerate(clip_paths):
-        # Extract clip_id from filename
-        filename = os.path.basename(clip_path)
-        try:
-            clip_id = int(filename.split('_')[1].split('.')[0])
-        except:
-            updated_clips.append(clip_path)
-            continue
-        
-        # Get classification for this clip
-        classification = classification_lookup.get(clip_id, 'Junk')
-        color = color_map.get(classification, (128, 128, 128))
-        
         # Open original clip
         cap = cv2.VideoCapture(clip_path)
         if not cap.isOpened():
@@ -586,10 +585,6 @@ def add_colored_rectangles_to_clips(clip_paths, metadata, results_df, progress_c
             (frame_width, frame_height)
         )
         
-        # Get bbox data for this clip
-        bbox_data = clip_metadata.get(clip_id, [])
-        bbox_by_frame = {item['frame_number']: item for item in bbox_data}
-        
         frame_num = 0
         while True:
             ret, frame = cap.read()
@@ -598,24 +593,28 @@ def add_colored_rectangles_to_clips(clip_paths, metadata, results_df, progress_c
             
             frame_num += 1
             
-            # Draw colored rectangle if bbox data exists for this frame
-            if frame_num in bbox_by_frame:
-                item = bbox_by_frame[frame_num]
-                x = item['bbox_x']
-                y = item['bbox_y']
-                w = item['bbox_width']
-                h = item['bbox_height']
-                
-                pad = 8
-                cv2.rectangle(frame,
-                            (max(0, x-pad), max(0, y-pad)),
-                            (min(frame_width-1, x+w+pad), min(frame_height-1, y+h+pad)),
-                            color, 2)
-                
-                # Add classification label
-                label = f"{classification}:{clip_id}"
-                cv2.putText(frame, label, (x, y-10),
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+            # Draw rectangles for ALL objects detected in this frame
+            if frame_num in frame_detections:
+                for detection in frame_detections[frame_num]:
+                    clip_id = detection['clip_id']
+                    classification = detection['classification']
+                    color = color_map.get(classification, (128, 128, 128))
+                    
+                    x = detection['bbox_x']
+                    y = detection['bbox_y']
+                    w = detection['bbox_width']
+                    h = detection['bbox_height']
+                    
+                    pad = 8
+                    cv2.rectangle(frame,
+                                (max(0, x-pad), max(0, y-pad)),
+                                (min(frame_width-1, x+w+pad), min(frame_height-1, y+h+pad)),
+                                color, 2)
+                    
+                    # Add classification label with object ID
+                    label = f"ID:{clip_id} {classification}"
+                    cv2.putText(frame, label, (x, y-10),
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
             
             writer.write(frame)
         
