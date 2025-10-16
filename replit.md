@@ -8,16 +8,6 @@ SkySeer is an advanced computer vision and machine learning system for detecting
 
 **October 16, 2025 - Latest:**
 
-**Increased Sensitivity Recommendations:**
-- **Higher Default Sensitivity:** Updated recommended settings for better detection
-  - Base sensitivity increased from 4 to 5
-  - Very dark clean videos: 6 (was 5)
-  - Dark/twilight videos: 5 (was 4)
-  - Bright videos: 4 (was 3)
-  - High resolution: 4 (was 3)
-  - Noisy videos: 4 (was 3)
-  - Optimized for night sky object detection with minimal false positives
-
 **Category Download Filtering & Restored Satellite Detection:**
 - **Category-Specific Video Filtering:** Downloads show ONLY Satellite or Meteor objects
   - Satellite downloads: only satellites with RED boxes

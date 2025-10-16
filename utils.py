@@ -802,7 +802,7 @@ def recommend_settings(video_info, uploaded_file=None):
         dict: Recommended settings with explanations
     """
     recommendations = {
-        'sensitivity': 5,
+        'sensitivity': 4,
         'min_duration': 1.5,
         'max_duration': 15.0,
         'max_duration_enabled': True,  # Always enabled now
@@ -860,35 +860,35 @@ def recommend_settings(video_info, uploaded_file=None):
         # Very dark video (night sky)
         if brightness < 30:
             if noise > 100:
-                recommendations['sensitivity'] = 4
+                recommendations['sensitivity'] = 3
                 recommendations['explanations'].append(
-                    "🌑 Very dark & noisy video - using moderate sensitivity (4) to balance detection and noise"
+                    "🌑 Very dark & noisy video - using low sensitivity (3) to reduce false positives"
                 )
             else:
-                recommendations['sensitivity'] = 6
+                recommendations['sensitivity'] = 5
                 recommendations['explanations'].append(
-                    "🌑 Very dark but clean video - using high sensitivity (6) for optimal detection"
+                    "🌑 Very dark but clean video - using moderate sensitivity (5)"
                 )
         # Dark video (twilight/dusk)
         elif brightness < 80:
-            recommendations['sensitivity'] = 5
+            recommendations['sensitivity'] = 4
             recommendations['explanations'].append(
-                "🌆 Dark video detected - using sensitivity=5 for twilight conditions"
+                "🌆 Dark video detected - using sensitivity=4 for twilight conditions"
             )
         # Brighter video
         else:
-            recommendations['sensitivity'] = 4
+            recommendations['sensitivity'] = 3
             recommendations['explanations'].append(
-                "☀️ Relatively bright video - using moderate sensitivity (4)"
+                "☀️ Relatively bright video - lowering sensitivity to avoid false detections"
             )
     elif total_pixels > 2073600:  # Fallback to resolution-based
-        recommendations['sensitivity'] = 4
+        recommendations['sensitivity'] = 3
         recommendations['explanations'].append(
-            "🎯 High resolution video (>1080p) - using moderate sensitivity (4)"
+            "🎯 High resolution video (>1080p) - using lower sensitivity to reduce noise"
         )
     else:
         recommendations['explanations'].append(
-            "🎯 Standard video - using moderate sensitivity (5)"
+            "🎯 Standard video - using moderate sensitivity (4)"
         )
     
     # Recommendation 3: Duration settings based on FPS and content
