@@ -194,10 +194,10 @@ class MLClassifier:
             cluster_id = row['cluster']
             classification, confidence = cluster_interpretations[cluster_id]
             
-            # CRITICAL OVERRIDE: Only force VERY slow objects to Junk (prevents false positives)
-            # Lowered threshold to avoid filtering real satellites
+            # CRITICAL OVERRIDE: Only force EXTREMELY slow objects to Junk (prevents false positives)
+            # Very permissive threshold to allow distant slow satellites
             avg_speed = row.get('avg_speed', 0)
-            if avg_speed < 0.3:
+            if avg_speed < 0.15:  # Lowered from 0.3 to allow slower satellites
                 classification = 'Junk'
                 confidence = 0.6  # Low confidence for filtered objects
             
@@ -208,10 +208,10 @@ class MLClassifier:
     
     def _rule_based_classification(self, row):
         """Rule-based classification for edge cases - trust the feature scores"""
-        # CRITICAL OVERRIDE: Only force VERY slow objects to Junk (prevents false positives)
-        # Lowered threshold to avoid filtering real satellites
+        # CRITICAL OVERRIDE: Only force EXTREMELY slow objects to Junk (prevents false positives)
+        # Very permissive threshold to allow distant slow satellites
         avg_speed = row.get('avg_speed', 0)
-        if avg_speed < 0.3:
+        if avg_speed < 0.15:  # Lowered from 0.3 to allow slower satellites
             return 'Junk', 0.6  # Low confidence for filtered objects
         
         # Use the pre-computed scores from feature_extractor

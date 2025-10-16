@@ -198,16 +198,16 @@ class FeatureExtractor:
         else:
             duration_satellite_factor = 0.8  # Gentle decline for very long tracks
         
-        # CRITICAL: Satellites must have minimum speed (typically 1-25 px/frame)
-        # Use gentle penalties to filter slow objects without blocking real satellites
-        if avg_speed < 0.3:
-            speed_penalty = 0.2  # Heavy penalty for extremely slow objects
-        elif avg_speed < 0.6:
-            speed_penalty = 0.6  # Moderate penalty for very slow objects
+        # CRITICAL: Satellites can be slow for distant objects (0.15-35 px/frame typical)
+        # Use gentle penalties - be permissive to avoid filtering real distant satellites
+        if avg_speed < 0.15:
+            speed_penalty = 0.3  # Moderate penalty for extremely slow (lowered from 0.2)
+        elif avg_speed < 0.4:
+            speed_penalty = 0.7  # Light penalty for slow (lowered from 0.6 at 0.6 threshold)
         elif avg_speed > 35:
             speed_penalty = 0.6  # Penalize very fast objects (likely meteors)
         else:
-            speed_penalty = 1.0  # Normal satellite speed range (0.6-35 px/frame)
+            speed_penalty = 1.0  # Normal satellite speed range (0.4-35 px/frame, widened from 0.6)
         
         satellite_consistency = size_consistency * brightness_consistency
         satellite_score = speed_consistency * linearity * satellite_consistency * duration_satellite_factor * speed_penalty

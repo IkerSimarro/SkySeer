@@ -281,6 +281,95 @@ def create_classification_video(source_video, metadata, results_df, classificati
         print(f"Error creating classification video: {e}")
         return False
 
+def _create_filtered_video(source_video, output_path, results_df, metadata, classification_filter):
+    """
+    Create a video showing ONLY rectangles for a specific classification
+    
+    Args:
+        source_video (str): Path to source video (without any rectangles)
+        output_path (str): Path for output video
+        results_df (pd.DataFrame): Filtered results for this classification only
+        metadata (list): All detection metadata
+        classification_filter (str): Classification to show (e.g., 'Satellite')
+    """
+    # Color mapping
+    color_map = {
+        'Satellite': (0, 255, 0),      # Green
+        'Meteor': (0, 0, 255),          # Red
+        'Junk': (128, 128, 128)         # Gray
+    }
+    
+    # Get the color for this classification
+    color = color_map.get(classification_filter, (255, 255, 255))
+    
+    # Create lookup of clip_ids for this classification
+    filtered_clip_ids = set(results_df['clip_id'].tolist())
+    
+    # Group metadata by output_frame_number, but ONLY for filtered clip_ids
+    from collections import defaultdict
+    frame_detections = defaultdict(list)
+    for item in metadata:
+        clip_id = item['clip_id']
+        if clip_id in filtered_clip_ids:
+            frame_num = item.get('output_frame_number', item['frame_number'])
+            frame_detections[frame_num].append({
+                'clip_id': clip_id,
+                'bbox_x': item['bbox_x'],
+                'bbox_y': item['bbox_y'],
+                'bbox_width': item['bbox_width'],
+                'bbox_height': item['bbox_height']
+            })
+    
+    # Open source video (this is the ORIGINAL without any rectangles drawn yet)
+    cap = cv2.VideoCapture(source_video)
+    if not cap.isOpened():
+        return
+    
+    fps = int(cap.get(cv2.CAP_PROP_FPS)) or 30
+    frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    
+    # Create writer
+    writer = cv2.VideoWriter(
+        output_path,
+        cv2.VideoWriter_fourcc(*'mp4v'),
+        fps,
+        (frame_width, frame_height)
+    )
+    
+    frame_num = -1
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+        
+        frame_num += 1  # 0-based frame numbering
+        
+        # Draw rectangles ONLY for this classification's objects
+        if frame_num in frame_detections:
+            for detection in frame_detections[frame_num]:
+                clip_id = detection['clip_id']
+                x = detection['bbox_x']
+                y = detection['bbox_y']
+                w = detection['bbox_width']
+                h = detection['bbox_height']
+                
+                pad = 8
+                cv2.rectangle(frame,
+                            (max(0, x-pad), max(0, y-pad)),
+                            (min(frame_width-1, x+w+pad), min(frame_height-1, y+h+pad)),
+                            color, 2)
+                
+                # Add label with object ID and classification
+                label = f"ID:{clip_id} {classification_filter}"
+                cv2.putText(frame, label, (x, y-10),
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+        
+        writer.write(frame)
+    
+    cap.release()
+    writer.release()
+
 def create_download_zip(clip_paths, results_df, classification_filter=None, metadata=None):
     """
     Create a ZIP file containing classified clips
@@ -300,23 +389,45 @@ def create_download_zip(clip_paths, results_df, classification_filter=None, meta
     
     # Filter results if classification specified
     if classification_filter:
-        results_df = results_df[results_df['classification'] == classification_filter]
+        filtered_results = results_df[results_df['classification'] == classification_filter]
+    else:
+        filtered_results = results_df
     
     # Check if we have the combined video and metadata for creating classification video
     has_combined_video = clip_paths and len(clip_paths) == 1 and os.path.exists(clip_paths[0])
     
     with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-        # Always include the full combined video (already has correct speed and all annotations)
-        # The filtering is applied to CSV and summary only
-        if has_combined_video:
-            source_video = clip_paths[0]
+        # Create classification-specific video showing ONLY that category's objects
+        if has_combined_video and metadata:
+            annotated_video = clip_paths[0]
+            # Use clean version (saved before rectangles were added)
+            clean_video = annotated_video.replace('.mp4', '_clean.mp4')
+            
+            # Fallback to annotated if clean doesn't exist (shouldn't happen)
+            source_video = clean_video if os.path.exists(clean_video) else annotated_video
+            
             safe_classification = classification_filter.replace('/', '_') if classification_filter else "all"
             video_filename = f"{safe_classification}_detections.mp4"
-            zip_file.write(source_video, video_filename)
+            
+            # Create temporary filtered video
+            temp_video = tempfile.NamedTemporaryFile(delete=False, suffix='.mp4')
+            temp_video.close()
+            
+            # Generate video with ONLY the filtered classification's rectangles
+            _create_filtered_video(source_video, temp_video.name, filtered_results, metadata, classification_filter)
+            
+            # Add filtered video to zip
+            zip_file.write(temp_video.name, video_filename)
+            
+            # Clean up temp file
+            try:
+                os.remove(temp_video.name)
+            except:
+                pass
         
-        # Add CSV report
+        # Add CSV report (use filtered results)
         csv_buffer = BytesIO()
-        results_df.to_csv(csv_buffer, index=False)
+        filtered_results.to_csv(csv_buffer, index=False)
         csv_buffer.seek(0)
         zip_file.writestr("analysis_report.csv", csv_buffer.getvalue())
         
@@ -329,8 +440,8 @@ def create_download_zip(clip_paths, results_df, classification_filter=None, meta
         
         summary_lines.append("")
         
-        # Count detections by classification
-        classification_counts = results_df['classification'].value_counts().to_dict()
+        # Count detections by classification (use filtered results)
+        classification_counts = filtered_results['classification'].value_counts().to_dict()
         summary_lines.append("DETECTION COUNTS:")
         for classification, count in sorted(classification_counts.items()):
             summary_lines.append(f"  {classification}: {count}")
@@ -339,8 +450,8 @@ def create_download_zip(clip_paths, results_df, classification_filter=None, meta
         summary_lines.append("DETAILED DETECTIONS:")
         summary_lines.append("-" * 50)
         
-        # Add details for each detection
-        for idx, row in results_df.iterrows():
+        # Add details for each detection (use filtered results)
+        for idx, row in filtered_results.iterrows():
             clip_id = row['clip_id']
             classification = row['classification']
             confidence = row['confidence']
@@ -368,16 +479,16 @@ def create_download_zip(clip_paths, results_df, classification_filter=None, meta
 This ZIP file focuses on {classification_filter} detections from your analysis.
 
 Files Included:
-- {classification_filter}_detections.mp4: Full sped-up video (10x speed) with all detections marked
+- {classification_filter}_detections.mp4: Sped-up video (10x speed) showing ONLY {classification_filter} objects
 - analysis_report.csv: Detailed data for {classification_filter} objects only
 - SUMMARY.txt: Quick overview of {classification_filter} detections
 
 Video Format:
-- Complete video at 10x speed showing the full analysis period
-- Only Meteor detections are shown with RED bounding boxes and labels
-- Labels show object ID and classification (e.g., "ID:3 Meteor")
+- Filtered video at 10x speed showing ONLY {classification_filter} detections
+- Color-coded bounding boxes: Green=Satellites, Red=Meteors, Gray=Junk
+- Labels show object ID and classification (e.g., "ID:3 {classification_filter}")
 - Video duration = 1/10th of your original upload duration
-- Other detections (Satellites, Junk) are in the CSV but not shown in video
+- Other classifications are NOT shown in this category-specific video
 
 CSV Report:
 Contains detailed metrics for {classification_filter} objects only:
@@ -596,7 +707,9 @@ def add_colored_rectangles_to_clips(clip_paths, metadata, results_df, progress_c
         
         # Replace original with colored version
         if os.path.exists(temp_path):
-            os.remove(clip_path)
+            # Save clean version for category-specific downloads
+            clean_path = clip_path.replace('.mp4', '_clean.mp4')
+            os.rename(clip_path, clean_path)
             os.rename(temp_path, clip_path)
         
         updated_clips.append(clip_path)
