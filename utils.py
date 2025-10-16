@@ -514,12 +514,13 @@ def add_colored_rectangles_to_clips(clip_paths, metadata, results_df, progress_c
     for idx, row in results_df.iterrows():
         classification_lookup[row['clip_id']] = row['classification']
     
-    # Group metadata by frame_number, then by clip_id
+    # Group metadata by output_frame_number (for video overlay alignment)
     # This allows us to draw multiple objects per frame
     from collections import defaultdict
     frame_detections = defaultdict(list)
     for item in metadata:
-        frame_num = item['frame_number']
+        # Use output_frame_number for video overlay (matches processed video frames)
+        frame_num = item.get('output_frame_number', item['frame_number'])
         clip_id = item['clip_id']
         # Only include objects that made it through filtering
         if clip_id in classification_lookup:
