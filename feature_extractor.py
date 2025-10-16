@@ -199,15 +199,15 @@ class FeatureExtractor:
             duration_satellite_factor = 0.8  # Gentle decline for very long tracks
         
         # CRITICAL: Satellites must have minimum speed (typically 1-25 px/frame)
-        # Penalize very slow objects (<1 px/frame) to prevent false positives
-        if avg_speed < 0.8:
-            speed_penalty = 0.1  # Drastically reduce score for very slow objects
-        elif avg_speed < 1.5:
-            speed_penalty = 0.5  # Moderate penalty for slow objects
+        # Use gentle penalties to filter slow objects without blocking real satellites
+        if avg_speed < 0.3:
+            speed_penalty = 0.2  # Heavy penalty for extremely slow objects
+        elif avg_speed < 0.6:
+            speed_penalty = 0.6  # Moderate penalty for very slow objects
         elif avg_speed > 35:
             speed_penalty = 0.6  # Penalize very fast objects (likely meteors)
         else:
-            speed_penalty = 1.0  # Normal satellite speed range (1.5-35 px/frame)
+            speed_penalty = 1.0  # Normal satellite speed range (0.6-35 px/frame)
         
         satellite_consistency = size_consistency * brightness_consistency
         satellite_score = speed_consistency * linearity * satellite_consistency * duration_satellite_factor * speed_penalty
@@ -232,19 +232,19 @@ class FeatureExtractor:
         
         # ALL planes must pass minimum speed check to prevent slow/stationary false positives
         # (Even blinking objects like tower lights must be filtered)
-        if avg_speed < 0.8:
-            plane_speed_penalty = 0.1  # Drastically reduce for very slow
-        elif avg_speed < 1.5:
-            plane_speed_penalty = 0.5  # Moderate penalty for slow
+        if avg_speed < 0.3:
+            plane_speed_penalty = 0.2  # Heavy penalty for extremely slow
+        elif avg_speed < 0.6:
+            plane_speed_penalty = 0.6  # Moderate penalty for very slow
         else:
             plane_speed_penalty = 1.0  # Normal speed range
         
         # Blinking provides bonus score for planes, BUT not for slow objects
         if blinking_score >= 0.15:
             # Has blinking - but cap the bonus for slow objects to prevent false positives
-            if avg_speed < 0.8:
-                blinking_bonus = 1.0  # No bonus for very slow objects (even if blinking)
-            elif avg_speed < 1.5:
+            if avg_speed < 0.3:
+                blinking_bonus = 1.0  # No bonus for extremely slow objects (even if blinking)
+            elif avg_speed < 0.6:
                 blinking_bonus = 1.0 + min(blinking_score * 0.25, 0.25)  # Reduced bonus for slow objects
             else:
                 blinking_bonus = 1.0 + min(blinking_score * 0.5, 0.5)  # Full bonus for normal speed
