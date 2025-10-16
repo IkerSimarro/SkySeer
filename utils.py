@@ -238,17 +238,19 @@ def create_classification_video(source_video, metadata, results_df, classificati
             return False
         
         # Get video properties
-        fps = cap.get(cv2.CAP_PROP_FPS)
+        source_fps = cap.get(cv2.CAP_PROP_FPS)
         width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         
-        if fps <= 0 or width <= 0 or height <= 0:
+        if source_fps <= 0 or width <= 0 or height <= 0:
             cap.release()
             return False
         
         # Create video writer
+        # Use source FPS to preserve timing - source is already at 10x speed
+        # Extracting frames maintains the same playback rate per frame
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-        out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
+        out = cv2.VideoWriter(output_path, fourcc, source_fps, (width, height))
         
         if not out.isOpened():
             cap.release()
@@ -304,47 +306,13 @@ def create_download_zip(clip_paths, results_df, classification_filter=None, meta
     has_combined_video = clip_paths and len(clip_paths) == 1 and os.path.exists(clip_paths[0])
     
     with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-        if has_combined_video and metadata and classification_filter:
-            # Create a single video with only this classification
+        # Always include the full combined video (already has correct speed and all annotations)
+        # The filtering is applied to CSV and summary only
+        if has_combined_video:
             source_video = clip_paths[0]
-            
-            with tempfile.TemporaryDirectory() as temp_dir:
-                classification_video = os.path.join(temp_dir, f"{classification_filter.lower()}_detections.mp4")
-                
-                if create_classification_video(source_video, metadata, results_df, classification_filter, classification_video):
-                    # Add the single classification video to ZIP
-                    safe_classification = classification_filter.replace('/', '_')
-                    zip_file.write(classification_video, f"{safe_classification}_detections.mp4")
-                else:
-                    # Add a note if video creation failed
-                    error_msg = f"Unable to create video for {classification_filter} classification.\nThis may occur if no valid frames were detected."
-                    zip_file.writestr("ERROR_VIDEO_CREATION.txt", error_msg)
-        else:
-            # Fallback: use old method if metadata not available
-            added_clips = set()
-            for idx, row in results_df.iterrows():
-                clip_id = row['clip_id']
-                classification = row['classification']
-                confidence = row['confidence']
-                
-                # Find corresponding clip file
-                clip_filename = f"clip_{clip_id:04d}.mp4"
-                clip_path = None
-                
-                for path in clip_paths:
-                    if clip_filename in path:
-                        clip_path = path
-                        break
-                
-                if not clip_path and clip_paths:
-                    clip_path = clip_paths[0]
-                
-                if clip_path and os.path.exists(clip_path):
-                    if clip_path not in added_clips:
-                        safe_classification = classification.replace('/', '_')
-                        new_filename = f"{safe_classification}_detections.mp4"
-                        zip_file.write(clip_path, new_filename)
-                        added_clips.add(clip_path)
+            safe_classification = classification_filter.replace('/', '_') if classification_filter else "all"
+            video_filename = f"{safe_classification}_detections.mp4"
+            zip_file.write(source_video, video_filename)
         
         # Add CSV report
         csv_buffer = BytesIO()
@@ -397,21 +365,25 @@ def create_download_zip(clip_paths, results_df, classification_filter=None, meta
             readme_content = f"""SkySeer AI - {classification_filter} Detection Results
 =====================================
 
-This ZIP file contains only {classification_filter} detections from your analysis.
+This ZIP file focuses on {classification_filter} detections from your analysis.
 
 Files Included:
-- {classification_filter}_detections.mp4: Single continuous video showing all {classification_filter} detections
+- {classification_filter}_detections.mp4: Full sped-up video (10x speed) with all detections marked
 - analysis_report.csv: Detailed data for {classification_filter} objects only
 - SUMMARY.txt: Quick overview of {classification_filter} detections
 
 Video Format:
-- One continuous video containing all frames where {classification_filter} objects were detected
-- Maintains original video quality and frame rate
-- Shows detections in chronological order as they appeared in your source video
+- Complete video at 10x speed showing the full analysis period
+- All detected objects are visible with colored bounding boxes:
+  * Green boxes = Satellites
+  * Red boxes = Meteors  
+  * Gray boxes = Junk (Noise/Drones/Birds/Planes/Stars)
+- Labels show "ID:{number} {classification}" for each object
+- Video duration = 1/10th of your original upload duration
 
 CSV Report:
-Contains detailed metrics for each detected object:
-- clip_id: Unique object identifier
+Contains detailed metrics for {classification_filter} objects only:
+- clip_id: Unique object identifier (matches ID shown in video)
 - classification: Object type ({classification_filter})
 - confidence: AI confidence score (0.0-1.0)
 - duration: How long the object was visible
