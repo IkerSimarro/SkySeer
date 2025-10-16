@@ -8,6 +8,19 @@ SkySeer is an advanced computer vision and machine learning system for detecting
 
 **October 16, 2025 - Latest:**
 
+**Category Download Filtering & Classification Fixes:**
+- **Category-Specific Video Filtering:** Fixed downloads to show ONLY objects of that classification
+  - Satellite downloads now show only satellites (green boxes)
+  - Meteor downloads now show only meteors (red boxes)
+  - Junk downloads now show only junk (gray boxes)
+  - Each category ZIP includes: filtered video + filtered CSV + filtered summary
+  - Clean video preserved before annotation for proper filtering
+- **Improved Satellite Detection:** Reduced misclassification of slow-moving satellites as Junk
+  - Lowered forced-to-Junk threshold from 0.3 to 0.15 px/frame (allows distant satellites)
+  - Reduced speed penalties: < 0.15 px/frame gets 30% penalty (was 20% at < 0.3)
+  - Widened normal satellite range from 0.6-35 to 0.4-35 px/frame
+  - More permissive classification reduces false Junk assignments
+
 **Critical Video Processing Fixes:**
 - **Precise 10x Speed Control:** Fixed output video duration to be exactly 1/10th of input duration
   - Formula: output_fps = 10 * fps / frame_skip ensures consistent speedup
