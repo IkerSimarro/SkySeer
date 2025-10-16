@@ -378,7 +378,7 @@ Video Format:
   * Green boxes = Satellites
   * Red boxes = Meteors  
   * Gray boxes = Junk (Noise/Drones/Birds/Planes/Stars)
-- Labels show "ID:{number} {classification}" for each object
+- Labels show "ID:# Classification" for each object (e.g., "ID:3 Satellite")
 - Video duration = 1/10th of your original upload duration
 
 CSV Report:

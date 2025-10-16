@@ -32,11 +32,13 @@ SkySeer is an advanced computer vision and machine learning system for detecting
   - Cleaner, more focused classification system
 
 **Category-Specific Download Enhancement:**
-- Fixed download functionality to properly filter by classification
-- Each category download (Satellite, Meteor, Junk) now contains only that specific classification
-- Single continuous video per category showing all detections of that type (e.g., "Satellite_detections.mp4")
-- Extracts only frames where the selected classification was detected from the combined video
-- ZIP includes: classification-specific video, filtered CSV report, and category-specific SUMMARY.txt
+- Fixed download functionality - now includes full sped-up video (10x speed) in all category downloads
+- Each category download (Satellite, Meteor, Junk) contains:
+  * Complete 1-minute video (for 10-minute input) showing ALL detections with color-coded boxes
+  * CSV report filtered to show only that classification's objects
+  * Category-specific SUMMARY.txt with filtered statistics
+- Video shows all objects (user can see context): Green=Satellites, Red=Meteors, Gray=Junk
+- Labels format: "ID:{number} {classification}" matching Available Objects table
 - Improved recommended settings panel with clean metric cards and collapsible explanations
 
 **October 15, 2025:**
