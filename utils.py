@@ -122,15 +122,16 @@ def get_object_time_ranges(metadata):
     
     return time_ranges
 
-def extract_video_segment(source_video_path, start_frame, end_frame, output_path):
+def extract_video_segment(source_video_path, start_frame, end_frame, output_path, padding_frames=60):
     """
-    Extract a segment from a video file
+    Extract a segment from a video file with padding
     
     Args:
         source_video_path (str): Path to source video
         start_frame (int): Starting frame number
         end_frame (int): Ending frame number
         output_path (str): Path for output video
+        padding_frames (int): Number of frames to add before/after (default 60 = ~2 seconds at 30fps)
         
     Returns:
         bool: True if successful, False otherwise
@@ -141,32 +142,55 @@ def extract_video_segment(source_video_path, start_frame, end_frame, output_path
         # Open source video
         cap = cv2.VideoCapture(source_video_path)
         if not cap.isOpened():
+            print(f"Warning: Could not open video file: {source_video_path}")
             return False
         
         # Get video properties
         fps = cap.get(cv2.CAP_PROP_FPS)
         width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        
+        # Guard against invalid video properties
+        if fps <= 0 or width <= 0 or height <= 0 or total_frames <= 0:
+            print(f"Warning: Invalid video properties - fps:{fps}, size:{width}x{height}, frames:{total_frames}")
+            cap.release()
+            return False
+        
+        # Add padding while staying within video bounds
+        padded_start = max(0, start_frame - padding_frames)
+        padded_end = min(total_frames - 1, end_frame + padding_frames)
         
         # Create video writer
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
         out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
         
-        # Set to start frame
-        cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
+        if not out.isOpened():
+            print(f"Warning: Could not create video writer for: {output_path}")
+            cap.release()
+            return False
+        
+        # Set to padded start frame
+        cap.set(cv2.CAP_PROP_POS_FRAMES, padded_start)
         
         # Extract frames
-        current_frame = start_frame
-        while current_frame <= end_frame:
+        current_frame = padded_start
+        frames_written = 0
+        while current_frame <= padded_end:
             ret, frame = cap.read()
             if not ret:
                 break
             out.write(frame)
+            frames_written += 1
             current_frame += 1
         
         # Clean up
         cap.release()
         out.release()
+        
+        if frames_written == 0:
+            print(f"Warning: No frames extracted for segment {start_frame}-{end_frame}")
+            return False
         
         return True
         
@@ -261,7 +285,13 @@ def create_download_zip(clip_paths, results_df, classification_filter=None, meta
         zip_file.writestr("analysis_report.csv", csv_buffer.getvalue())
         
         # Generate detection summary
-        summary_lines = ["SkySeer AI - Detection Summary", "=" * 50, ""]
+        if classification_filter:
+            summary_lines = [f"SkySeer AI - {classification_filter} Detection Summary", "=" * 50, ""]
+            summary_lines.append(f"This archive contains only {classification_filter} detections.")
+        else:
+            summary_lines = ["SkySeer AI - Detection Summary", "=" * 50, ""]
+        
+        summary_lines.append("")
         
         # Count detections by classification
         classification_counts = results_df['classification'].value_counts().to_dict()
