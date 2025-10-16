@@ -42,6 +42,8 @@ if 'video_info' not in st.session_state:
     st.session_state.video_info = {}
 if 'recommendations' not in st.session_state:
     st.session_state.recommendations = None
+if 'uploaded_video_path' not in st.session_state:
+    st.session_state.uploaded_video_path = None
 
 def main():
     st.title("🌌 SkySeer AI")
@@ -364,8 +366,8 @@ def process_video(uploaded_file, sensitivity, min_duration, max_duration, frame_
         progress_bar.progress(100)
         status_text.text("✅ Analysis Complete!")
         
-        # Clean up temp file
-        os.remove(temp_path)
+        # Store video path for clip extraction (will be cleaned up on reset)
+        st.session_state.uploaded_video_path = temp_path
         
         st.rerun()
         
@@ -589,6 +591,124 @@ def display_results():
                         key=f"download_btn_{classification}"
                     )
 
+def extract_object_clip(object_ids, video_path, metadata, results_df):
+    """
+    Extract clips for specified object IDs with overlays and bounding boxes.
+    
+    Args:
+        object_ids: List of object IDs to extract
+        video_path: Path to the original video file
+        metadata: List of detection metadata
+        results_df: DataFrame with classification results
+    
+    Returns:
+        Path to the extracted clip video file
+    """
+    import tempfile
+    
+    # Get video properties
+    cap = cv2.VideoCapture(video_path)
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    
+    # Calculate buffer frames
+    buffer_before = int(2 * fps)  # 2 seconds before
+    buffer_after = int(1 * fps)   # 1 second after
+    
+    # Collect all frame ranges for requested objects
+    frame_segments = []
+    object_info = {}
+    
+    for obj_id in object_ids:
+        # Get metadata for this object
+        obj_detections = [m for m in metadata if m.get('clip_id') == obj_id]
+        if not obj_detections:
+            continue
+        
+        # Get frame range
+        frame_numbers = [d['frame_number'] for d in obj_detections]
+        start_frame = min(frame_numbers)
+        end_frame = max(frame_numbers)
+        
+        # Add buffers (respect video boundaries)
+        buffered_start = max(0, start_frame - buffer_before)
+        buffered_end = min(total_frames - 1, end_frame + buffer_after)
+        
+        frame_segments.append((buffered_start, buffered_end, obj_id))
+        
+        # Store object info for overlay
+        obj_row = results_df[results_df['clip_id'] == obj_id].iloc[0]
+        object_info[obj_id] = {
+            'classification': obj_row['classification'],
+            'confidence': obj_row['confidence'],
+            'avg_speed': obj_row['avg_speed'],
+            'detections': obj_detections
+        }
+    
+    if not frame_segments:
+        return None
+    
+    # Sort segments by start frame
+    frame_segments.sort(key=lambda x: x[0])
+    
+    # Create temporary output file
+    output_path = tempfile.NamedTemporaryFile(delete=False, suffix='.mp4').name
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
+    
+    # Process each segment
+    for start_frame, end_frame, obj_id in frame_segments:
+        obj = object_info[obj_id]
+        
+        # Set video to start frame
+        cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
+        
+        for frame_idx in range(start_frame, end_frame + 1):
+            ret, frame = cap.read()
+            if not ret:
+                break
+            
+            # Find if there's a detection at this frame for this object
+            detection_at_frame = None
+            for det in obj['detections']:
+                if det['frame_number'] == frame_idx:
+                    detection_at_frame = det
+                    break
+            
+            # Draw bounding box if detection exists at this frame
+            if detection_at_frame:
+                x = detection_at_frame['bbox_x']
+                y = detection_at_frame['bbox_y']
+                w = detection_at_frame['bbox_width']
+                h = detection_at_frame['bbox_height']
+                
+                # Draw rectangle with padding
+                pad = 8
+                cv2.rectangle(frame,
+                            (max(0, x - pad), max(0, y - pad)),
+                            (min(width - 1, x + w + pad), min(height - 1, y + h + pad)),
+                            (0, 255, 0), 2)
+            
+            # Add text overlay in corner
+            overlay_text = f"Object {obj_id} | {obj['classification']} | {obj['confidence']*100:.0f}% | {obj['avg_speed']:.1f} px/frame"
+            
+            # Create background for text
+            text_size = cv2.getTextSize(overlay_text, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)[0]
+            cv2.rectangle(frame, (10, 10), (20 + text_size[0], 40 + text_size[1]), (0, 0, 0), -1)
+            
+            # Draw text
+            cv2.putText(frame, overlay_text, (15, 35),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+            
+            out.write(frame)
+    
+    cap.release()
+    out.release()
+    
+    return output_path
+
 def reset_session():
     """Reset session state for new analysis"""
     st.session_state.processing_complete = False
@@ -597,6 +717,7 @@ def reset_session():
     st.session_state.metadata = []
     st.session_state.video_info = {}
     st.session_state.recommendations = None
+    st.session_state.uploaded_video_path = None
     
     # Clean up directories
     for directory in ['temp_uploads', 'processed_clips', 'results']:
