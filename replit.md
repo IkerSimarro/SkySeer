@@ -6,7 +6,17 @@ SkySeer is an advanced computer vision and machine learning system for detecting
 
 ## Recent Changes
 
-**October 15, 2025 - Latest:**
+**October 16, 2025 - Latest:**
+
+**Category-Specific Download Enhancement:**
+- Fixed download functionality to properly filter by classification
+- Each category download (Satellite, Meteor, Plane, Junk) now contains only that specific classification
+- Single continuous video per category showing all detections of that type (e.g., "Satellite_detections.mp4")
+- Extracts only frames where the selected classification was detected from the combined video
+- ZIP includes: classification-specific video, filtered CSV report, and category-specific SUMMARY.txt
+- Improved recommended settings panel with clean metric cards and collapsible explanations
+
+**October 15, 2025:**
 
 **Critical Accuracy Improvements:**
 - **Enhanced Small Satellite Detection:** Lowered minimum object size threshold from 40 to ~15 pixels to capture distant satellites

@@ -198,6 +198,87 @@ def extract_video_segment(source_video_path, start_frame, end_frame, output_path
         print(f"Error extracting segment: {e}")
         return False
 
+def create_classification_video(source_video, metadata, results_df, classification_filter, output_path):
+    """
+    Create a single video containing only frames with detections of a specific classification
+    
+    Args:
+        source_video (str): Path to source combined video
+        metadata (list): Detection metadata
+        results_df (pd.DataFrame): Results dataframe
+        classification_filter (str): Classification to extract
+        output_path (str): Output video path
+        
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    import cv2
+    
+    try:
+        # Filter results and metadata to only include the specified classification
+        filtered_df = results_df[results_df['classification'] == classification_filter]
+        if filtered_df.empty:
+            return False
+        
+        # Get clip IDs for this classification
+        target_clip_ids = set(filtered_df['clip_id'].values)
+        
+        # Get all frame numbers where these objects appear
+        frames_with_detections = set()
+        for detection in metadata:
+            if detection['clip_id'] in target_clip_ids:
+                frames_with_detections.add(detection['frame_number'])
+        
+        if not frames_with_detections:
+            return False
+        
+        # Open source video
+        cap = cv2.VideoCapture(source_video)
+        if not cap.isOpened():
+            return False
+        
+        # Get video properties
+        fps = cap.get(cv2.CAP_PROP_FPS)
+        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        
+        if fps <= 0 or width <= 0 or height <= 0:
+            cap.release()
+            return False
+        
+        # Create video writer
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
+        
+        if not out.isOpened():
+            cap.release()
+            return False
+        
+        # Extract frames with detections
+        sorted_frames = sorted(frames_with_detections)
+        current_pos = 0
+        frames_written = 0
+        
+        for frame_num in sorted_frames:
+            # Seek to frame if needed
+            if frame_num != current_pos:
+                cap.set(cv2.CAP_PROP_POS_FRAMES, frame_num)
+            
+            ret, frame = cap.read()
+            if ret:
+                out.write(frame)
+                frames_written += 1
+            current_pos = frame_num + 1
+        
+        cap.release()
+        out.release()
+        
+        return frames_written > 0
+        
+    except Exception as e:
+        print(f"Error creating classification video: {e}")
+        return False
+
 def create_download_zip(clip_paths, results_df, classification_filter=None, metadata=None):
     """
     Create a ZIP file containing classified clips
@@ -219,38 +300,25 @@ def create_download_zip(clip_paths, results_df, classification_filter=None, meta
     if classification_filter:
         results_df = results_df[results_df['classification'] == classification_filter]
     
-    # Check if we have the combined video and metadata for segment extraction
+    # Check if we have the combined video and metadata for creating classification video
     has_combined_video = clip_paths and len(clip_paths) == 1 and os.path.exists(clip_paths[0])
     
     with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-        if has_combined_video and metadata:
-            # Extract time ranges for each object
-            time_ranges = get_object_time_ranges(metadata)
+        if has_combined_video and metadata and classification_filter:
+            # Create a single video with only this classification
             source_video = clip_paths[0]
             
-            # Create temp directory for extracted segments
             with tempfile.TemporaryDirectory() as temp_dir:
-                # Extract and add segments for each object
-                for idx, row in results_df.iterrows():
-                    clip_id = row['clip_id']
-                    classification = row['classification']
-                    confidence = row['confidence']
-                    
-                    # Get time range for this object
-                    if clip_id in time_ranges:
-                        time_range = time_ranges[clip_id]
-                        start_frame = time_range['start_frame']
-                        end_frame = time_range['end_frame']
-                        
-                        # Create temp output path
-                        temp_output = os.path.join(temp_dir, f"segment_{clip_id}.mp4")
-                        
-                        # Extract segment
-                        if extract_video_segment(source_video, start_frame, end_frame, temp_output):
-                            # Add to ZIP with descriptive name
-                            safe_classification = classification.replace('/', '_')
-                            new_filename = f"{safe_classification}/object_{clip_id}_{safe_classification}_conf{confidence:.2f}.mp4"
-                            zip_file.write(temp_output, new_filename)
+                classification_video = os.path.join(temp_dir, f"{classification_filter.lower()}_detections.mp4")
+                
+                if create_classification_video(source_video, metadata, results_df, classification_filter, classification_video):
+                    # Add the single classification video to ZIP
+                    safe_classification = classification_filter.replace('/', '_')
+                    zip_file.write(classification_video, f"{safe_classification}_detections.mp4")
+                else:
+                    # Add a note if video creation failed
+                    error_msg = f"Unable to create video for {classification_filter} classification.\nThis may occur if no valid frames were detected."
+                    zip_file.writestr("ERROR_VIDEO_CREATION.txt", error_msg)
         else:
             # Fallback: use old method if metadata not available
             added_clips = set()
@@ -274,7 +342,7 @@ def create_download_zip(clip_paths, results_df, classification_filter=None, meta
                 if clip_path and os.path.exists(clip_path):
                     if clip_path not in added_clips:
                         safe_classification = classification.replace('/', '_')
-                        new_filename = f"{safe_classification}/object_{clip_id}_{safe_classification}_conf{confidence:.2f}.mp4"
+                        new_filename = f"{safe_classification}_detections.mp4"
                         zip_file.write(clip_path, new_filename)
                         added_clips.add(clip_path)
         
@@ -325,7 +393,41 @@ def create_download_zip(clip_paths, results_df, classification_filter=None, meta
         zip_file.writestr("SUMMARY.txt", summary_content)
         
         # Add README file
-        readme_content = """SkySeer AI Pipeline - Analysis Results
+        if classification_filter:
+            readme_content = f"""SkySeer AI - {classification_filter} Detection Results
+=====================================
+
+This ZIP file contains only {classification_filter} detections from your analysis.
+
+Files Included:
+- {classification_filter}_detections.mp4: Single continuous video showing all {classification_filter} detections
+- analysis_report.csv: Detailed data for {classification_filter} objects only
+- SUMMARY.txt: Quick overview of {classification_filter} detections
+
+Video Format:
+- One continuous video containing all frames where {classification_filter} objects were detected
+- Maintains original video quality and frame rate
+- Shows detections in chronological order as they appeared in your source video
+
+CSV Report:
+Contains detailed metrics for each detected object:
+- clip_id: Unique object identifier
+- classification: Object type ({classification_filter})
+- confidence: AI confidence score (0.0-1.0)
+- duration: How long the object was visible
+- avg_speed: Average movement speed in pixels/frame
+- And more detailed tracking data
+
+Confidence Scores:
+- 0.9+ : High confidence
+- 0.7-0.9 : Medium-high confidence  
+- 0.5-0.7 : Medium confidence
+- <0.5 : Low confidence
+
+For questions about this analysis, please refer to the SkySeer documentation.
+"""
+        else:
+            readme_content = """SkySeer AI Pipeline - Analysis Results
 =====================================
 
 This ZIP file contains the results of your sky object detection analysis.
@@ -333,19 +435,7 @@ This ZIP file contains the results of your sky object detection analysis.
 Files:
 - SUMMARY.txt: Quick overview of all detections
 - analysis_report.csv: Detailed analysis data with confidence scores
-- Video clips are organized by classification in separate folders
-
-Folder Structure:
-- Satellite/: Clips classified as satellites
-- Meteor/: Clips classified as meteors  
-- Plane/: Clips classified as aircraft
-- Junk/: Clips classified as noise/artifacts
-
-Video Clip Naming:
-- Format: object_ID_Classification_confX.XX.mp4
-- ID: Unique object identifier
-- Classification: Detected object type
-- conf: Confidence score (0.0-1.0)
+- Detection videos showing identified objects
 
 Confidence Scores:
 - 0.9+ : High confidence
