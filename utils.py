@@ -87,58 +87,172 @@ def format_file_size(bytes_size):
         bytes_size /= 1024.0
     return f"{bytes_size:.1f} TB"
 
-def create_download_zip(clip_paths, results_df, classification_filter=None):
+def get_object_time_ranges(metadata):
+    """
+    Extract time ranges (start/end frames) for each object from metadata
+    
+    Args:
+        metadata (list): List of detection dictionaries with frame_number and clip_id
+        
+    Returns:
+        dict: {clip_id: {'start_frame': int, 'end_frame': int, 'fps': float}}
+    """
+    from collections import defaultdict
+    
+    object_frames = defaultdict(list)
+    object_fps = {}
+    
+    # Group frame numbers by clip_id
+    for detection in metadata:
+        clip_id = detection['clip_id']
+        frame_num = detection['frame_number']
+        fps = detection.get('fps', 30)
+        
+        object_frames[clip_id].append(frame_num)
+        object_fps[clip_id] = fps
+    
+    # Calculate start/end frames for each object
+    time_ranges = {}
+    for clip_id, frames in object_frames.items():
+        time_ranges[clip_id] = {
+            'start_frame': min(frames),
+            'end_frame': max(frames),
+            'fps': object_fps[clip_id]
+        }
+    
+    return time_ranges
+
+def extract_video_segment(source_video_path, start_frame, end_frame, output_path):
+    """
+    Extract a segment from a video file
+    
+    Args:
+        source_video_path (str): Path to source video
+        start_frame (int): Starting frame number
+        end_frame (int): Ending frame number
+        output_path (str): Path for output video
+        
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    import cv2
+    
+    try:
+        # Open source video
+        cap = cv2.VideoCapture(source_video_path)
+        if not cap.isOpened():
+            return False
+        
+        # Get video properties
+        fps = cap.get(cv2.CAP_PROP_FPS)
+        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        
+        # Create video writer
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
+        
+        # Set to start frame
+        cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
+        
+        # Extract frames
+        current_frame = start_frame
+        while current_frame <= end_frame:
+            ret, frame = cap.read()
+            if not ret:
+                break
+            out.write(frame)
+            current_frame += 1
+        
+        # Clean up
+        cap.release()
+        out.release()
+        
+        return True
+        
+    except Exception as e:
+        print(f"Error extracting segment: {e}")
+        return False
+
+def create_download_zip(clip_paths, results_df, classification_filter=None, metadata=None):
     """
     Create a ZIP file containing classified clips
     
     Args:
-        clip_paths (list): List of paths to video clips
+        clip_paths (list): List of paths to video clips (should be single combined video)
         results_df (pd.DataFrame): Results dataframe with classifications
         classification_filter (str, optional): Only include clips of this classification
+        metadata (list, optional): Detection metadata for extracting time ranges
         
     Returns:
         BytesIO: ZIP file buffer
     """
+    import tempfile
+    
     zip_buffer = BytesIO()
     
     # Filter results if classification specified
     if classification_filter:
         results_df = results_df[results_df['classification'] == classification_filter]
     
+    # Check if we have the combined video and metadata for segment extraction
+    has_combined_video = clip_paths and len(clip_paths) == 1 and os.path.exists(clip_paths[0])
+    
     with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-        # Track which clip files we've already added to avoid duplicates
-        added_clips = set()
-        
-        # Add clips organized by classification
-        for idx, row in results_df.iterrows():
-            clip_id = row['clip_id']
-            classification = row['classification']
-            confidence = row['confidence']
+        if has_combined_video and metadata:
+            # Extract time ranges for each object
+            time_ranges = get_object_time_ranges(metadata)
+            source_video = clip_paths[0]
             
-            # Find corresponding clip file
-            clip_filename = f"clip_{clip_id:04d}.mp4"
-            clip_path = None
-            
-            for path in clip_paths:
-                if clip_filename in path:
-                    clip_path = path
-                    break
-            
-            # If specific clip not found, use the first available clip
-            # (with object tracking, all objects are in one video)
-            if not clip_path and clip_paths:
-                clip_path = clip_paths[0]
-            
-            if clip_path and os.path.exists(clip_path):
-                # Only add each unique clip file once
-                if clip_path not in added_clips:
-                    # Create descriptive filename with object ID
-                    safe_classification = classification.replace('/', '_')
-                    new_filename = f"{safe_classification}/object_{clip_id}_{safe_classification}_conf{confidence:.2f}.mp4"
+            # Create temp directory for extracted segments
+            with tempfile.TemporaryDirectory() as temp_dir:
+                # Extract and add segments for each object
+                for idx, row in results_df.iterrows():
+                    clip_id = row['clip_id']
+                    classification = row['classification']
+                    confidence = row['confidence']
                     
-                    # Add the clip
-                    zip_file.write(clip_path, new_filename)
-                    added_clips.add(clip_path)
+                    # Get time range for this object
+                    if clip_id in time_ranges:
+                        time_range = time_ranges[clip_id]
+                        start_frame = time_range['start_frame']
+                        end_frame = time_range['end_frame']
+                        
+                        # Create temp output path
+                        temp_output = os.path.join(temp_dir, f"segment_{clip_id}.mp4")
+                        
+                        # Extract segment
+                        if extract_video_segment(source_video, start_frame, end_frame, temp_output):
+                            # Add to ZIP with descriptive name
+                            safe_classification = classification.replace('/', '_')
+                            new_filename = f"{safe_classification}/object_{clip_id}_{safe_classification}_conf{confidence:.2f}.mp4"
+                            zip_file.write(temp_output, new_filename)
+        else:
+            # Fallback: use old method if metadata not available
+            added_clips = set()
+            for idx, row in results_df.iterrows():
+                clip_id = row['clip_id']
+                classification = row['classification']
+                confidence = row['confidence']
+                
+                # Find corresponding clip file
+                clip_filename = f"clip_{clip_id:04d}.mp4"
+                clip_path = None
+                
+                for path in clip_paths:
+                    if clip_filename in path:
+                        clip_path = path
+                        break
+                
+                if not clip_path and clip_paths:
+                    clip_path = clip_paths[0]
+                
+                if clip_path and os.path.exists(clip_path):
+                    if clip_path not in added_clips:
+                        safe_classification = classification.replace('/', '_')
+                        new_filename = f"{safe_classification}/object_{clip_id}_{safe_classification}_conf{confidence:.2f}.mp4"
+                        zip_file.write(clip_path, new_filename)
+                        added_clips.add(clip_path)
         
         # Add CSV report
         csv_buffer = BytesIO()

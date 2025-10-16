@@ -583,7 +583,8 @@ def display_results():
                     zip_buffer = create_download_zip(
                         st.session_state.processed_clips, 
                         results_df,
-                        classification_filter=classification
+                        classification_filter=classification,
+                        metadata=st.session_state.metadata
                     )
                     
                     st.download_button(
