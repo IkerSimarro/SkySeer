@@ -556,13 +556,13 @@ def add_colored_rectangles_to_clips(clip_paths, metadata, results_df, progress_c
             (frame_width, frame_height)
         )
         
-        frame_num = 0
+        frame_num = -1
         while True:
             ret, frame = cap.read()
             if not ret:
                 break
             
-            frame_num += 1
+            frame_num += 1  # Now 0-based (first frame is 0)
             
             # Draw rectangles ONLY for Meteor detections (red boxes)
             if frame_num in frame_detections:

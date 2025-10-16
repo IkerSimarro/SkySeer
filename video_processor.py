@@ -151,7 +151,7 @@ class VideoProcessor:
                     # Store object data (without clip_id yet)
                     object_data = {
                         'frame_number': frame_count,  # INPUT frame for speed calculations
-                        'output_frame_number': processed_frame_count + 1,  # OUTPUT frame for video overlay
+                        'output_frame_number': processed_frame_count,  # OUTPUT frame index (0-based, will match video)
                         'area': area,
                         'centroid_x': centroid_x,
                         'centroid_y': centroid_y,
@@ -188,17 +188,6 @@ class VideoProcessor:
                         # Add clip_id and store metadata
                         current_frame_objects[i]['clip_id'] = assigned_id
                         object_metadata[assigned_id].append(current_frame_objects[i])
-                        
-                        # Draw bounding rectangle with object ID
-                        obj = current_frame_objects[i]
-                        x, y, w, h = obj['bbox_x'], obj['bbox_y'], obj['bbox_width'], obj['bbox_height']
-                        pad = 8
-                        cv2.rectangle(frame, 
-                                    (max(0, x-pad), max(0, y-pad)),
-                                    (min(frame_width-1, x+w+pad), min(frame_height-1, y+h+pad)),
-                                    (0, 0, 255), 2)
-                        cv2.putText(frame, f"ID:{assigned_id}", (x, y-10),
-                                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
             
             # Start video writer if we have detections
             if len(tracked_objects) > 0 and not motion_active:

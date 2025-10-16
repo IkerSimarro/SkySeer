@@ -14,8 +14,10 @@ SkySeer is an advanced computer vision and machine learning system for detecting
   - 10-minute input now correctly produces 1-minute output
   - Works correctly regardless of frame_skip setting
 - **Object ID Synchronization:** Fixed ID mismatch between video annotations and results table
-  - Metadata now stores BOTH input frame numbers (for speed calculations) and output frame numbers (for video overlay)
-  - Video overlay uses output_frame_number to correctly map detections to processed video frames
+  - Removed duplicate rectangle drawing during initial processing (was causing frame misalignment)
+  - Metadata stores BOTH input frame numbers (for speed calculations) and output frame numbers (for video overlay)
+  - Output frame numbers are 0-based to match video frame indices exactly
+  - Video overlay now uses synchronized frame numbering
   - IDs in video now precisely match IDs in Available Objects table and Clip Extractor
 - **Video Display Optimization:** Simplified video overlays for clarity
   - Only METEOR detections shown with RED bounding boxes and ID labels
