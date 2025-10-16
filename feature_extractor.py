@@ -212,26 +212,28 @@ class FeatureExtractor:
         satellite_consistency = size_consistency * brightness_consistency
         satellite_score = speed_consistency * linearity * satellite_consistency * duration_satellite_factor * speed_penalty
         
-        # Meteor: VERY high speed, extremely linear, brief duration, bright streaks
-        # Meteors are very fast streaks (>15 px/frame), ultra-linear, brief (<5s)
-        # They travel small patches of sky and often leave bright trails
-        if avg_speed > 15:
-            speed_factor = min(avg_speed / 10.0, 5.0)  # Strong boost for fast objects, cap at 5x
-        elif avg_speed > 8:
-            speed_factor = avg_speed / 15.0  # Moderate score for medium-fast
+        # Meteor: Fast speed (primary indicator), linear path, brief duration (up to 4s)
+        # Speed is the main discriminator - meteors are significantly faster than satellites
+        # Lowered threshold to catch more realistic meteors (>10 px/frame)
+        if avg_speed > 10:
+            speed_factor = min(avg_speed / 8.0, 5.0)  # Strong boost for fast objects (lowered from 15), cap at 5x
+        elif avg_speed > 6:
+            speed_factor = avg_speed / 12.0  # Moderate score for medium-fast
         else:
             speed_factor = 0.2  # Low score for slow objects
         
-        # Meteors are brief - favor <5s duration, heavily penalize longer
-        if duration < 2:
-            duration_factor = 2.0  # Strong boost for very brief
-        elif duration < 5:
-            duration_factor = 1.0  # Normal for brief
+        # Meteors can last up to 4 seconds - more realistic duration range
+        if duration < 1:
+            duration_factor = 1.5  # Boost for very brief
+        elif duration <= 4:
+            duration_factor = 1.0  # Normal for typical meteor duration (1-4s)
+        elif duration <= 6:
+            duration_factor = 0.5  # Moderate penalty for slightly longer
         else:
             duration_factor = 0.2  # Heavy penalty for long duration
         
-        # Brightness bonus for bright streaks
-        brightness_factor = 1.0 + min(max_brightness / 200.0, 1.0)  # Up to 2x for bright objects
+        # Reduced brightness importance - meteors can be faint like satellites
+        brightness_factor = 1.0 + min(max_brightness / 400.0, 0.5)  # Up to 1.5x (reduced from 2x)
         
         # Linearity is critical for meteors (straight streaks)
         linearity_factor = linearity ** 2  # Square to heavily favor linear paths

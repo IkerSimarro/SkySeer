@@ -24,11 +24,12 @@ SkySeer is an advanced computer vision and machine learning system for detecting
   - Label format: "ID:{clip_id} Meteor"
 
 **Improved Meteor Detection & Simplified Classification:**
-- **Enhanced Meteor Scoring:** Completely redesigned meteor detection to favor very fast streaks (>15 px/frame)
-  - Strong boost for brief durations (<2s gets 2x multiplier, <5s gets 1x)
-  - Linearity is squared to heavily favor straight paths
-  - Brightness factor provides up to 2x bonus for bright streaks
-  - Designed to capture fast meteors that travel small patches of sky
+- **Enhanced Meteor Scoring:** Optimized meteor detection with realistic thresholds
+  - Speed-focused: >10 px/frame for meteor classification (lowered from 15 for better detection)
+  - Extended duration: 1-4 seconds considered typical meteor range (up to 4s)
+  - Reduced brightness bias: Meteors can be faint like satellites (max 1.5x bonus instead of 2x)
+  - Linearity squared to heavily favor straight paths
+  - Speed is the primary discriminator between satellites and meteors
 - **Removed Plane Classification:** Simplified system to focus on satellites and meteors only
   - Plane detection was unreliable and rarely used
   - Updated ML classifier from 3 clusters to 2 clusters (Satellite/Meteor)
