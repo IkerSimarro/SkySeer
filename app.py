@@ -114,15 +114,25 @@ def main():
         
         # Settings recommendations (shown after video upload)
         if st.session_state.recommendations:
-            st.info("💡 **Recommended Settings for Your Video:**")
             rec = st.session_state.recommendations
-            for explanation in rec['explanations']:
-                st.markdown(f"• {explanation}")
             
-            # Display recommended values
-            st.markdown(f"**Suggested values:** Sensitivity={rec['sensitivity']}, " +
-                       f"Min Duration={rec['min_duration']}s, " +
-                       f"Max Duration={rec['max_duration']}s, Frame Skip={rec['frame_skip']}")
+            st.markdown("### 💡 Recommended Settings")
+            
+            # Create a clean grid layout for recommended values
+            rec_col1, rec_col2 = st.columns(2)
+            
+            with rec_col1:
+                st.metric(label="Sensitivity", value=rec['sensitivity'])
+                st.metric(label="Min Duration", value=f"{rec['min_duration']}s")
+            
+            with rec_col2:
+                st.metric(label="Max Duration", value=f"{rec['max_duration']}s")
+                st.metric(label="Frame Skip", value=rec['frame_skip'])
+            
+            # Show explanations in an expander for a cleaner look
+            with st.expander("ℹ️ Why these settings?"):
+                for explanation in rec['explanations']:
+                    st.markdown(f"• {explanation}")
         
         st.markdown("---")
         st.markdown("**Classification Categories:**")
