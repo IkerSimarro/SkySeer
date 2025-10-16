@@ -374,12 +374,10 @@ Files Included:
 
 Video Format:
 - Complete video at 10x speed showing the full analysis period
-- All detected objects are visible with colored bounding boxes:
-  * Green boxes = Satellites
-  * Red boxes = Meteors  
-  * Gray boxes = Junk (Noise/Drones/Birds/Planes/Stars)
-- Labels show object ID and classification (e.g., "ID:3 Satellite")
+- Only Meteor detections are shown with RED bounding boxes and labels
+- Labels show object ID and classification (e.g., "ID:3 Meteor")
 - Video duration = 1/10th of your original upload duration
+- Other detections (Satellites, Junk) are in the CSV but not shown in video
 
 CSV Report:
 Contains detailed metrics for {classification_filter} objects only:
@@ -565,28 +563,31 @@ def add_colored_rectangles_to_clips(clip_paths, metadata, results_df, progress_c
             
             frame_num += 1
             
-            # Draw rectangles for ALL objects detected in this frame
+            # Draw rectangles ONLY for Meteor detections (red boxes)
             if frame_num in frame_detections:
                 for detection in frame_detections[frame_num]:
                     clip_id = detection['clip_id']
                     classification = detection['classification']
-                    color = color_map.get(classification, (128, 128, 128))
                     
-                    x = detection['bbox_x']
-                    y = detection['bbox_y']
-                    w = detection['bbox_width']
-                    h = detection['bbox_height']
-                    
-                    pad = 8
-                    cv2.rectangle(frame,
-                                (max(0, x-pad), max(0, y-pad)),
-                                (min(frame_width-1, x+w+pad), min(frame_height-1, y+h+pad)),
-                                color, 2)
-                    
-                    # Add classification label with object ID
-                    label = f"ID:{clip_id} {classification}"
-                    cv2.putText(frame, label, (x, y-10),
-                               cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+                    # Only draw if it's a Meteor
+                    if classification == 'Meteor':
+                        color = (0, 0, 255)  # Red
+                        
+                        x = detection['bbox_x']
+                        y = detection['bbox_y']
+                        w = detection['bbox_width']
+                        h = detection['bbox_height']
+                        
+                        pad = 8
+                        cv2.rectangle(frame,
+                                    (max(0, x-pad), max(0, y-pad)),
+                                    (min(frame_width-1, x+w+pad), min(frame_height-1, y+h+pad)),
+                                    color, 2)
+                        
+                        # Add classification label with object ID
+                        label = f"ID:{clip_id} {classification}"
+                        cv2.putText(frame, label, (x, y-10),
+                                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
             
             writer.write(frame)
         

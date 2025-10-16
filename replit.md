@@ -11,13 +11,17 @@ SkySeer is an advanced computer vision and machine learning system for detecting
 **Critical Video Processing Fixes:**
 - **Precise 10x Speed Control:** Fixed output video duration to be exactly 1/10th of input duration
   - Formula: output_fps = 10 * fps / frame_skip ensures consistent speedup
-  - 10-minute input now correctly produces 1-minute output (not ~7 seconds)
+  - 10-minute input now correctly produces 1-minute output
   - Works correctly regardless of frame_skip setting
 - **Object ID Synchronization:** Fixed ID mismatch between video annotations and results table
-  - Rewrote rectangle overlay logic to handle multiple objects per frame
-  - Only objects that pass filtering appear in final video
-  - IDs in video now precisely match IDs in Available Objects table
-  - Label format: "ID:{clip_id} {classification}"
+  - Changed metadata to store OUTPUT frame numbers instead of INPUT frame numbers
+  - This ensures video overlay frame numbers match the actual processed video
+  - IDs in video now precisely match IDs in Available Objects table and Clip Extractor
+- **Video Display Optimization:** Simplified video overlays for clarity
+  - Only METEOR detections shown with RED bounding boxes and ID labels
+  - Satellites and Junk classifications removed from video (still in CSV/table)
+  - Reduces visual clutter while focusing on fast-moving objects of interest
+  - Label format: "ID:{clip_id} Meteor"
 
 **Improved Meteor Detection & Simplified Classification:**
 - **Enhanced Meteor Scoring:** Completely redesigned meteor detection to favor very fast streaks (>15 px/frame)

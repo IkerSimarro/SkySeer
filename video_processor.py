@@ -75,6 +75,7 @@ class VideoProcessor:
         max_contour_area = int(frame_width * frame_height * 0.005)
         
         frame_count = 0
+        processed_frame_count = 0  # Track output video frame number
         motion_active = False
         clip_writer = None
         clip_filename = None
@@ -148,8 +149,9 @@ class VideoProcessor:
                     max_brightness = np.max(roi) if roi.size > 0 else 0
                     
                     # Store object data (without clip_id yet)
+                    # Use processed_frame_count for output video frame alignment
                     object_data = {
-                        'frame_number': frame_count,
+                        'frame_number': processed_frame_count + 1,  # +1 because we'll increment after writing
                         'area': area,
                         'centroid_x': centroid_x,
                         'centroid_y': centroid_y,
@@ -215,6 +217,7 @@ class VideoProcessor:
             # Write frame if writer is active
             if clip_writer is not None:
                 clip_writer.write(frame)
+                processed_frame_count += 1  # Track output video frame number
         
         cap.release()
         
