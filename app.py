@@ -117,6 +117,42 @@ def main():
     
     st.markdown("---")
     
+    # FAQ / Troubleshooting Section - Always visible
+    st.info("**❓ Quick Troubleshooting Tips**")
+    
+    col_faq1, col_faq2 = st.columns(2)
+    
+    with col_faq1:
+        with st.expander("🔍 Too many false detections?"):
+            st.markdown("""
+            - Lower sensitivity to 2-4
+            - Increase minimum duration to 2-3s
+            - Check footage quality
+            """)
+        
+        with st.expander("⏱️ Processing too slow?"):
+            st.markdown("""
+            - Increase frame skip to 5-6
+            - Trim video to <10 minutes
+            - Use recommended settings
+            """)
+    
+    with col_faq2:
+        with st.expander("😕 Missing objects?"):
+            st.markdown("""
+            - Increase sensitivity to 6-7
+            - Decrease minimum duration to 1.0s
+            - Lower frame skip to 2-3
+            """)
+        
+        with st.expander("🎨 Color codes?"):
+            st.markdown("""
+            - 🔴 **RED** = Satellites
+            - 🟡 **YELLOW** = Meteors
+            """)
+    
+    st.markdown("---")
+    
     # Sidebar configuration
     with st.sidebar:
         st.header("⚙️ Configuration")
@@ -754,41 +790,6 @@ def display_results():
                 st.error(f"❌ Error extracting clip: {str(e)}")
     else:
         st.warning("⚠️ Original video file not available. Please process a new video to use this feature.")
-    
-    # Small FAQ / Troubleshooting Section
-    st.markdown("---")
-    st.subheader("❓ Troubleshooting")
-    
-    col_faq1, col_faq2 = st.columns(2)
-    
-    with col_faq1:
-        with st.expander("🔍 Too many false detections?"):
-            st.markdown("""
-            - Lower sensitivity to 2-4
-            - Increase minimum duration to 2-3s
-            - Check footage quality
-            """)
-        
-        with st.expander("⏱️ Processing too slow?"):
-            st.markdown("""
-            - Increase frame skip to 5-6
-            - Trim video to <10 minutes
-            - Use recommended settings
-            """)
-    
-    with col_faq2:
-        with st.expander("😕 Missing objects?"):
-            st.markdown("""
-            - Increase sensitivity to 6-7
-            - Decrease minimum duration to 1.0s
-            - Lower frame skip to 2-3
-            """)
-        
-        with st.expander("🎨 Color codes?"):
-            st.markdown("""
-            - 🔴 **RED** = Satellites
-            - 🟡 **YELLOW** = Meteors
-            """)
 
 def extract_object_clip(object_ids, video_path, metadata, results_df):
     """
