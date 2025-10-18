@@ -115,55 +115,6 @@ def main():
     positives and giving you clean, reliable results!
     """)
     
-    # Detailed How to Use Guide
-    with st.expander("📚 How to Use SkySeer - Step by Step", expanded=False):
-        st.markdown("""
-        ### 1️⃣ Upload Your Video
-        - Click "Browse files" or drag and drop your night sky video
-        - **Supported formats:** MP4, AVI, MOV, MKV
-        - **Best results:** Tripod-mounted, dark sky footage
-        
-        ### 2️⃣ Configure Settings (Optional)
-        The sidebar shows **auto-recommended settings** based on your video, but you can adjust:
-        
-        **Motion Detection Sensitivity (1-10)**
-        - **Low (2-3):** Fewer detections, reduces noise
-        - **Medium (4-6):** Balanced - recommended for most videos
-        - **High (7-8):** More sensitive, may increase false positives
-        
-        **Minimum Clip Duration**
-        - Default: 1.5 seconds
-        - Increase to filter out quick flashes and noise
-        
-        **Maximum Clip Duration**
-        - Default: 15 seconds
-        - Increase (up to 30s) for slow-moving satellites
-        
-        **Frame Skip Rate**
-        - Higher = faster processing (recommended for long videos)
-        - Use 5-6 for videos over 5 minutes
-        
-        ### 3️⃣ Process Your Video
-        - Click **"🚀 Start Analysis"**
-        - Watch real-time progress updates
-        - Processing time: ~1-5 minutes per 10-minute video
-        
-        ### 4️⃣ Review Results
-        - **Main Video:** 10x speed with color-coded detections
-        - **Results Table:** Detailed metrics for each object
-        - **Downloads:** Category-specific packages (Satellite/Meteor only)
-        
-        ### 5️⃣ Download Your Data
-        Choose category-specific downloads:
-        - **🛰️ Satellite Package** - Shows only satellites (RED boxes)
-        - **☄️ Meteor Package** - Shows only meteors (YELLOW boxes)
-        
-        Each ZIP includes:
-        - Filtered video at 10x speed
-        - CSV report with detailed metrics
-        - Summary text file
-        """)
-    
     st.markdown("---")
     
     # Sidebar configuration
@@ -210,50 +161,38 @@ def main():
         
         st.markdown("---")
         
-        # Settings recommendations (shown after video upload)
+        # Settings recommendations (always visible, updates after video upload)
+        st.markdown("### 💡 Recommended Settings")
+        
+        # Use stored recommendations or defaults
         if st.session_state.recommendations:
             rec = st.session_state.recommendations
-            
-            st.markdown("### 💡 Recommended Settings")
-            
-            # Create a clean grid layout for recommended values
-            rec_col1, rec_col2 = st.columns(2)
-            
-            with rec_col1:
-                st.metric(label="Sensitivity", value=rec['sensitivity'])
-                st.metric(label="Min Duration", value=f"{rec['min_duration']}s")
-            
-            with rec_col2:
-                st.metric(label="Max Duration", value=f"{rec['max_duration']}s")
-                st.metric(label="Frame Skip", value=rec['frame_skip'])
-            
-            # Show explanations in an expander for a cleaner look
+        else:
+            # Default recommendations before video upload
+            rec = {
+                'sensitivity': 5,
+                'min_duration': 1.5,
+                'max_duration': 15,
+                'frame_skip': 3,
+                'explanations': ['Upload a video to see customized recommendations']
+            }
+        
+        # Create a clean grid layout for recommended values
+        rec_col1, rec_col2 = st.columns(2)
+        
+        with rec_col1:
+            st.metric(label="Sensitivity", value=rec['sensitivity'])
+            st.metric(label="Min Duration", value=f"{rec['min_duration']}s")
+        
+        with rec_col2:
+            st.metric(label="Max Duration", value=f"{rec['max_duration']}s")
+            st.metric(label="Frame Skip", value=rec['frame_skip'])
+        
+        # Show explanations in an expander for a cleaner look
+        if rec['explanations']:
             with st.expander("ℹ️ Why these settings?"):
                 for explanation in rec['explanations']:
                     st.markdown(f"• {explanation}")
-        
-        st.markdown("---")
-        
-        # Quick Guide Section
-        with st.expander("📖 Quick Guide", expanded=False):
-            st.markdown("**🎨 Color Codes:**")
-            st.markdown("🔴 **RED Boxes** = Satellites (slow, steady)")
-            st.markdown("🟡 **YELLOW Boxes** = Meteors (fast, brief)")
-            
-            st.markdown("")
-            st.markdown("**✨ Best Practices:**")
-            st.markdown("✅ Use tripod-mounted camera")
-            st.markdown("✅ Record in dark conditions")
-            st.markdown("✅ Avoid cloudy footage")
-            st.markdown("✅ Higher sensitivity (5-6) for clean videos")
-            st.markdown("✅ Lower sensitivity (2-4) for noisy videos")
-            
-            st.markdown("")
-            st.markdown("**📦 Your Downloads Include:**")
-            st.markdown("• Sped-up video (10x speed)")
-            st.markdown("• Filtered by category")
-            st.markdown("• CSV with detailed metrics")
-            st.markdown("• Summary report")
 
     # Main content area
     col1, col2 = st.columns([2, 1])
@@ -811,92 +750,40 @@ def display_results():
     else:
         st.warning("⚠️ Original video file not available. Please process a new video to use this feature.")
     
-    # FAQ / Troubleshooting Section
+    # Small FAQ / Troubleshooting Section
     st.markdown("---")
-    st.subheader("❓ FAQ & Troubleshooting")
+    st.subheader("❓ Troubleshooting")
     
-    with st.expander("🔍 Too many false detections / junk objects?", expanded=False):
-        st.markdown("""
-        **Solutions:**
-        - **Lower the sensitivity** to 2-4 (reduces detection of faint noise)
-        - **Increase minimum duration** to 2-3 seconds (filters quick flashes)
-        - **Check your footage** - cloudy or shaky videos create motion artifacts
-        - **Expected behavior:** System targets <10 high-quality detections per video
-        """)
+    col_faq1, col_faq2 = st.columns(2)
     
-    with st.expander("😕 Missing obvious satellites or meteors?", expanded=False):
-        st.markdown("""
-        **Solutions:**
-        - **Increase sensitivity** to 6-7 (detects fainter objects)
-        - **Decrease minimum duration** to 1.0 second (catches brief meteors)
-        - **Increase maximum duration** to 25-30 seconds (slow-moving satellites)
-        - **Check frame skip** - lower it to 2-3 for better temporal resolution
-        - **Verify footage quality** - very faint objects may not be visible even to the system
-        """)
+    with col_faq1:
+        with st.expander("🔍 Too many false detections?"):
+            st.markdown("""
+            - Lower sensitivity to 2-4
+            - Increase minimum duration to 2-3s
+            - Check footage quality
+            """)
+        
+        with st.expander("⏱️ Processing too slow?"):
+            st.markdown("""
+            - Increase frame skip to 5-6
+            - Trim video to <10 minutes
+            - Use recommended settings
+            """)
     
-    with st.expander("📊 Understanding the CSV data", expanded=False):
-        st.markdown("""
-        **Key Metrics Explained:**
-        - **clip_id:** Unique object number (matches video labels)
-        - **classification:** Satellite, Meteor, or Junk
-        - **confidence:** How certain the AI is (0-1, higher = more confident)
-        - **avg_speed:** Object speed in pixels per frame
-        - **speed_consistency:** Movement stability (1.0 = perfectly steady)
-        - **duration:** How long the object was visible (seconds)
-        - **linearity:** Path straightness (1.0 = perfectly straight line)
-        - **direction_changes:** Number of trajectory shifts (lower = smoother)
+    with col_faq2:
+        with st.expander("😕 Missing objects?"):
+            st.markdown("""
+            - Increase sensitivity to 6-7
+            - Decrease minimum duration to 1.0s
+            - Lower frame skip to 2-3
+            """)
         
-        **Good detections typically have:**
-        - High confidence (>0.6)
-        - High linearity (>0.8)
-        - Low direction changes (<3)
-        """)
-    
-    with st.expander("🎨 What do the colors mean?", expanded=False):
-        st.markdown("""
-        **Video Color Codes:**
-        - 🔴 **RED boxes** = **Satellites** (slow, steady orbital motion, 5-20 second duration)
-        - 🟡 **YELLOW boxes** = **Meteors** (fast streaks, <4 second duration)
-        
-        **Note:** Only Satellite and Meteor downloads are available. Junk/noise detections are automatically filtered out from downloads.
-        """)
-    
-    with st.expander("⏱️ Processing is too slow / timing out", expanded=False):
-        st.markdown("""
-        **Solutions:**
-        - **Increase frame skip** to 5-6 (processes fewer frames)
-        - **Use shorter video clips** - trim your video to <10 minutes
-        - **Lower sensitivity** slightly to reduce processing overhead
-        
-        **For long videos (>10 minutes):**
-        - Always use frame skip 5-6
-        - Consider splitting into multiple shorter clips
-        - Expected processing: ~1-5 minutes per 10-minute video
-        """)
-    
-    with st.expander("📦 What's in my download packages?", expanded=False):
-        st.markdown("""
-        **Each category ZIP contains:**
-        
-        1. **Filtered Video** (`{category}_detections.mp4`)
-           - 10x speed (10-minute input → 1-minute output)
-           - Shows ONLY that classification's objects
-           - Color-coded boxes: RED for satellites, YELLOW for meteors
-           - Labels show: "ID:{number} {Classification}"
-        
-        2. **CSV Report** (`analysis_report.csv`)
-           - Detailed metrics for that category only
-           - Import into Excel or Google Sheets for analysis
-        
-        3. **Summary File** (`SUMMARY.txt`)
-           - Quick overview of detection counts
-           - Object listings with key metrics
-        
-        **Download Options:**
-        - 🛰️ **Satellite** - Only satellite detections
-        - ☄️ **Meteor** - Only meteor detections
-        - (Junk/noise is automatically excluded)
-        """)
+        with st.expander("🎨 Color codes?"):
+            st.markdown("""
+            - 🔴 **RED** = Satellites
+            - 🟡 **YELLOW** = Meteors
+            """)
 
 def extract_object_clip(object_ids, video_path, metadata, results_df):
     """
