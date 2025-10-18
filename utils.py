@@ -827,10 +827,15 @@ def recommend_settings(video_info, uploaded_file=None):
         content_analysis = analyze_video_content(uploaded_file, video_info)
     
     # Recommendation 1: Frame skip based on duration and FPS
-    if duration_seconds > 600:  # > 10 minutes
+    if duration_seconds > 3600:  # > 1 hour
         recommendations['frame_skip'] = 6
         recommendations['explanations'].append(
-            "📹 Very long video (>10min) - using frame skip=6 for faster processing"
+            "📹 Very long video (>1hr) - using frame skip=6 for faster processing"
+        )
+    elif duration_seconds > 600:  # > 10 minutes
+        recommendations['frame_skip'] = 6
+        recommendations['explanations'].append(
+            "📹 Long video (>10min) - using frame skip=6 for faster processing"
         )
     elif duration_seconds > 300:  # > 5 minutes
         recommendations['frame_skip'] = 5
@@ -913,7 +918,7 @@ def recommend_settings(video_info, uploaded_file=None):
     if duration_seconds > 600:  # Long videos might have slower satellites
         recommendations['max_duration'] = 25.0
         recommendations['explanations'].append(
-            "⭐ Long video - max duration 25s (allows slower-moving satellites)"
+            "⭐ Long video (>10min) - max duration 25s (allows slower-moving satellites)"
         )
     else:
         recommendations['max_duration'] = 15.0
