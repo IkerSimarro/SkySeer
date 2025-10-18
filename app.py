@@ -133,7 +133,6 @@ def main():
         with st.expander("⏱️ Processing too slow?"):
             st.markdown("""
             - Increase frame skip to 5-6
-            - Trim video to <10 minutes
             - Use recommended settings
             """)
     
