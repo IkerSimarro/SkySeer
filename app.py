@@ -27,6 +27,53 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# Custom CSS for clean loading spinner
+st.markdown("""
+<style>
+    /* Smooth rotation animation */
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+    
+    /* Hide only the default Streamlit spinner SVG */
+    div[data-testid="stSpinner"] svg {
+        display: none !important;
+    }
+    
+    /* Custom spinner container */
+    div[data-testid="stSpinner"] {
+        display: flex !important;
+        flex-direction: column !important;
+        justify-content: center !important;
+        align-items: center !important;
+        padding: 2rem !important;
+        position: relative !important;
+    }
+    
+    /* Create custom spinner using pseudo-element */
+    div[data-testid="stSpinner"]::before {
+        content: "" !important;
+        display: block !important;
+        width: 50px !important;
+        height: 50px !important;
+        border: 4px solid rgba(31, 119, 180, 0.15) !important;
+        border-top: 4px solid #1f77b4 !important;
+        border-radius: 50% !important;
+        animation: spin 0.8s linear infinite !important;
+        margin-bottom: 1rem !important;
+    }
+    
+    /* Style spinner text - target div and span elements */
+    div[data-testid="stSpinner"] div,
+    div[data-testid="stSpinner"] span {
+        color: #1f77b4 !important;
+        font-weight: 500 !important;
+        text-align: center !important;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 # Initialize session state
 if 'processing_complete' not in st.session_state:
     st.session_state.processing_complete = False
