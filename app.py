@@ -27,61 +27,6 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS for clean loading spinner
-st.markdown("""
-<style>
-    /* Smooth rotation animation */
-    @keyframes spin {
-        0% { transform: rotate(0deg); }
-        100% { transform: rotate(360deg); }
-    }
-    
-    /* Hide only the default Streamlit spinner SVG */
-    div[data-testid="stSpinner"] svg {
-        display: none !important;
-    }
-    
-    /* Custom spinner container - full width and centered */
-    div[data-testid="stSpinner"] {
-        display: flex !important;
-        flex-direction: column !important;
-        justify-content: center !important;
-        align-items: center !important;
-        padding: 3rem !important;
-        position: fixed !important;
-        top: 50% !important;
-        left: 50% !important;
-        transform: translate(-50%, -50%) !important;
-        z-index: 9999 !important;
-        background: rgba(255, 255, 255, 0.95) !important;
-        border-radius: 12px !important;
-        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2) !important;
-        min-width: 300px !important;
-    }
-    
-    /* Create custom spinner using pseudo-element */
-    div[data-testid="stSpinner"]::before {
-        content: "" !important;
-        display: block !important;
-        width: 60px !important;
-        height: 60px !important;
-        border: 5px solid rgba(31, 119, 180, 0.15) !important;
-        border-top: 5px solid #1f77b4 !important;
-        border-radius: 50% !important;
-        animation: spin 0.8s linear infinite !important;
-        margin-bottom: 1.5rem !important;
-    }
-    
-    /* Style spinner text - target div and span elements */
-    div[data-testid="stSpinner"] div,
-    div[data-testid="stSpinner"] span {
-        color: #1f77b4 !important;
-        font-weight: 600 !important;
-        text-align: center !important;
-        font-size: 16px !important;
-    }
-</style>
-""", unsafe_allow_html=True)
 
 # Initialize session state
 if 'processing_complete' not in st.session_state:
@@ -667,11 +612,9 @@ def display_results():
         'Meteor': '☄️'
     }
     
-    # Initialize session state for download preparation
-    if 'preparing_download' not in st.session_state:
-        st.session_state.preparing_download = None
-    if 'prepared_zip' not in st.session_state:
-        st.session_state.prepared_zip = None
+    # Initialize session state for prepared downloads
+    if 'prepared_zips' not in st.session_state:
+        st.session_state.prepared_zips = {}
     
     # Create download buttons for Satellite and Meteor only
     cols = st.columns(min(len(classification_counts), 2)) if len(classification_counts) > 0 else st.columns(1)
@@ -680,50 +623,34 @@ def display_results():
         with cols[idx % len(cols)]:
             emoji = emoji_map.get(classification, '📦')
             
-            if st.button(
-                f"{emoji} {classification} ({count})",
-                key=f"download_{classification}",
-                use_container_width=True
-            ):
-                st.session_state.preparing_download = classification
-                st.session_state.prepared_zip = None
-                st.rerun()
-    
-    # Show spinner and prepare download if requested
-    if st.session_state.preparing_download:
-        classification = st.session_state.preparing_download
-        with st.spinner(f"Preparing {classification} clips..."):
-            zip_buffer = create_download_zip(
-                st.session_state.processed_clips, 
-                results_df,
-                classification_filter=classification,
-                metadata=st.session_state.metadata
-            )
-            st.session_state.prepared_zip = {
-                'data': zip_buffer,
-                'classification': classification
-            }
-            st.session_state.preparing_download = None
-            st.rerun()
-    
-    # Show download button if ZIP is prepared
-    if st.session_state.prepared_zip:
-        classification = st.session_state.prepared_zip['classification']
-        emoji = emoji_map.get(classification, '📦')
-        
-        st.download_button(
-            label=f"📦 Download {classification} ZIP",
-            data=st.session_state.prepared_zip['data'],
-            file_name=f"skyseer_{classification.lower()}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip",
-            mime="application/zip",
-            use_container_width=True,
-            key=f"download_btn_{classification}"
-        )
-        
-        # Clear the prepared zip after download button is shown
-        if st.button("Prepare Another Category", use_container_width=True):
-            st.session_state.prepared_zip = None
-            st.rerun()
+            # Check if this classification's ZIP is already prepared
+            if classification in st.session_state.prepared_zips:
+                # Show download button
+                st.download_button(
+                    label=f"📦 Download {classification} ZIP",
+                    data=st.session_state.prepared_zips[classification],
+                    file_name=f"skyseer_{classification.lower()}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip",
+                    mime="application/zip",
+                    use_container_width=True,
+                    key=f"download_btn_{classification}"
+                )
+            else:
+                # Show prepare button
+                if st.button(
+                    f"{emoji} {classification} ({count})",
+                    key=f"prepare_{classification}",
+                    use_container_width=True
+                ):
+                    # Prepare the ZIP with simple loading
+                    with st.spinner(""):
+                        zip_buffer = create_download_zip(
+                            st.session_state.processed_clips, 
+                            results_df,
+                            classification_filter=classification,
+                            metadata=st.session_state.metadata
+                        )
+                        st.session_state.prepared_zips[classification] = zip_buffer
+                        st.rerun()
     
     # Object Clip Extractor Section
     st.markdown("---")
@@ -960,6 +887,7 @@ def reset_session():
     st.session_state.video_info = {}
     st.session_state.recommendations = None
     st.session_state.uploaded_video_path = None
+    st.session_state.prepared_zips = {}
     
     # Clean up directories
     for directory in ['temp_uploads', 'processed_clips', 'results']:
