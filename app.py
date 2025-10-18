@@ -41,35 +41,44 @@ st.markdown("""
         display: none !important;
     }
     
-    /* Custom spinner container */
+    /* Custom spinner container - full width and centered */
     div[data-testid="stSpinner"] {
         display: flex !important;
         flex-direction: column !important;
         justify-content: center !important;
         align-items: center !important;
-        padding: 2rem !important;
-        position: relative !important;
+        padding: 3rem !important;
+        position: fixed !important;
+        top: 50% !important;
+        left: 50% !important;
+        transform: translate(-50%, -50%) !important;
+        z-index: 9999 !important;
+        background: rgba(255, 255, 255, 0.95) !important;
+        border-radius: 12px !important;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2) !important;
+        min-width: 300px !important;
     }
     
     /* Create custom spinner using pseudo-element */
     div[data-testid="stSpinner"]::before {
         content: "" !important;
         display: block !important;
-        width: 50px !important;
-        height: 50px !important;
-        border: 4px solid rgba(31, 119, 180, 0.15) !important;
-        border-top: 4px solid #1f77b4 !important;
+        width: 60px !important;
+        height: 60px !important;
+        border: 5px solid rgba(31, 119, 180, 0.15) !important;
+        border-top: 5px solid #1f77b4 !important;
         border-radius: 50% !important;
         animation: spin 0.8s linear infinite !important;
-        margin-bottom: 1rem !important;
+        margin-bottom: 1.5rem !important;
     }
     
     /* Style spinner text - target div and span elements */
     div[data-testid="stSpinner"] div,
     div[data-testid="stSpinner"] span {
         color: #1f77b4 !important;
-        font-weight: 500 !important;
+        font-weight: 600 !important;
         text-align: center !important;
+        font-size: 16px !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -658,6 +667,12 @@ def display_results():
         'Meteor': '☄️'
     }
     
+    # Initialize session state for download preparation
+    if 'preparing_download' not in st.session_state:
+        st.session_state.preparing_download = None
+    if 'prepared_zip' not in st.session_state:
+        st.session_state.prepared_zip = None
+    
     # Create download buttons for Satellite and Meteor only
     cols = st.columns(min(len(classification_counts), 2)) if len(classification_counts) > 0 else st.columns(1)
     
@@ -670,22 +685,45 @@ def display_results():
                 key=f"download_{classification}",
                 use_container_width=True
             ):
-                with st.spinner(f"Preparing {classification} clips..."):
-                    zip_buffer = create_download_zip(
-                        st.session_state.processed_clips, 
-                        results_df,
-                        classification_filter=classification,
-                        metadata=st.session_state.metadata
-                    )
-                    
-                    st.download_button(
-                        label=f"📦 Download {classification} ZIP",
-                        data=zip_buffer,
-                        file_name=f"skyseer_{classification.lower()}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip",
-                        mime="application/zip",
-                        use_container_width=True,
-                        key=f"download_btn_{classification}"
-                    )
+                st.session_state.preparing_download = classification
+                st.session_state.prepared_zip = None
+                st.rerun()
+    
+    # Show spinner and prepare download if requested
+    if st.session_state.preparing_download:
+        classification = st.session_state.preparing_download
+        with st.spinner(f"Preparing {classification} clips..."):
+            zip_buffer = create_download_zip(
+                st.session_state.processed_clips, 
+                results_df,
+                classification_filter=classification,
+                metadata=st.session_state.metadata
+            )
+            st.session_state.prepared_zip = {
+                'data': zip_buffer,
+                'classification': classification
+            }
+            st.session_state.preparing_download = None
+            st.rerun()
+    
+    # Show download button if ZIP is prepared
+    if st.session_state.prepared_zip:
+        classification = st.session_state.prepared_zip['classification']
+        emoji = emoji_map.get(classification, '📦')
+        
+        st.download_button(
+            label=f"📦 Download {classification} ZIP",
+            data=st.session_state.prepared_zip['data'],
+            file_name=f"skyseer_{classification.lower()}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip",
+            mime="application/zip",
+            use_container_width=True,
+            key=f"download_btn_{classification}"
+        )
+        
+        # Clear the prepared zip after download button is shown
+        if st.button("Prepare Another Category", use_container_width=True):
+            st.session_state.prepared_zip = None
+            st.rerun()
     
     # Object Clip Extractor Section
     st.markdown("---")
