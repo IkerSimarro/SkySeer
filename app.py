@@ -256,7 +256,13 @@ def main():
                 
                 # Generate recommendations based on video properties and content analysis
                 if 'error' not in video_info:
+                    # Check if recommendations need to be generated
+                    previous_recommendations = st.session_state.recommendations
                     st.session_state.recommendations = recommend_settings(video_info, uploaded_file)
+                    
+                    # Trigger rerun if recommendations just changed from None to actual values
+                    if previous_recommendations is None and st.session_state.recommendations is not None:
+                        st.rerun()
                 
                 col_a, col_b, col_c = st.columns(3)
                 
