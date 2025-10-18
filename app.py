@@ -167,26 +167,31 @@ def main():
         # Use stored recommendations or defaults
         if st.session_state.recommendations:
             rec = st.session_state.recommendations
+            # Format values for display
+            sensitivity_val = rec['sensitivity']
+            min_dur_val = f"{rec['min_duration']}s"
+            max_dur_val = f"{rec['max_duration']}s"
+            frame_skip_val = rec['frame_skip']
         else:
-            # Default recommendations before video upload
+            # Default recommendations before video upload - show dashes
             rec = {
-                'sensitivity': 5,
-                'min_duration': 1.5,
-                'max_duration': 15,
-                'frame_skip': 3,
                 'explanations': ['Upload a video to see customized recommendations']
             }
+            sensitivity_val = "-"
+            min_dur_val = "-"
+            max_dur_val = "-"
+            frame_skip_val = "-"
         
         # Create a clean grid layout for recommended values
         rec_col1, rec_col2 = st.columns(2)
         
         with rec_col1:
-            st.metric(label="Sensitivity", value=rec['sensitivity'])
-            st.metric(label="Min Duration", value=f"{rec['min_duration']}s")
+            st.metric(label="Sensitivity", value=sensitivity_val)
+            st.metric(label="Min Duration", value=min_dur_val)
         
         with rec_col2:
-            st.metric(label="Max Duration", value=f"{rec['max_duration']}s")
-            st.metric(label="Frame Skip", value=rec['frame_skip'])
+            st.metric(label="Max Duration", value=max_dur_val)
+            st.metric(label="Frame Skip", value=frame_skip_val)
         
         # Show explanations in an expander for a cleaner look
         if rec['explanations']:
