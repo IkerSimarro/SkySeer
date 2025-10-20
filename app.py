@@ -785,75 +785,79 @@ def display_results():
     trajectory_results = None
     
     with st.expander("📊 View Trajectory Predictions", expanded=False):
-        # Prepare detection data for trajectory analysis
-        detections_list = []
-        for meta in st.session_state.metadata:
-            detections_list.append({
-                'object_id': meta['clip_id'],
-                'frame_number': meta['frame_number'],
-                'center_x': meta['centroid_x'],
-                'center_y': meta['centroid_y']
-            })
+        st.info("Click 'Analyze Trajectories' below to run predictive modeling analysis. This may take a moment for videos with many detections.")
         
-        if detections_list:
-            detections_df = pd.DataFrame(detections_list)
+        if st.button("🚀 Analyze Trajectories", use_container_width=True):
+            with st.spinner("Analyzing trajectories..."):
+                # Prepare detection data for trajectory analysis
+                detections_list = []
+                for meta in st.session_state.metadata:
+                    detections_list.append({
+                        'object_id': meta['clip_id'],
+                        'frame_number': meta['frame_number'],
+                        'center_x': meta['centroid_x'],
+                        'center_y': meta['centroid_y']
+                    })
+                
+                if detections_list:
+                    detections_df = pd.DataFrame(detections_list)
+                    
+                    # Analyze all trajectories
+                    trajectory_results = analyze_all_trajectories(detections_df, method='linear')
             
-            # Analyze all trajectories
-            trajectory_results = analyze_all_trajectories(detections_df, method='linear')
-            
-            if trajectory_results:
-                # Show summary statistics
-                summary = get_trajectory_summary_stats(trajectory_results)
-                
-                col1, col2, col3, col4 = st.columns(4)
-                with col1:
-                    st.metric("Objects Analyzed", summary['total_objects'])
-                with col2:
-                    st.metric("Avg Prediction Error", f"{summary['avg_mean_error']:.2f} px")
-                with col3:
-                    st.metric("Avg R² Score", f"{summary['avg_r2_x']:.3f}")
-                with col4:
-                    st.metric("Highly Predictable", f"{summary['highly_predictable']}/{summary['total_objects']}")
-                
-                st.caption("**Interpretation:** R² > 0.95 indicates highly linear motion (typical for satellites). Lower R² suggests curved/irregular paths (meteors, aircraft maneuvers).")
-                
-                # Show error plot
-                error_fig = create_trajectory_error_plot(trajectory_results)
-                if error_fig:
-                    st.plotly_chart(error_fig, use_container_width=True)
-                
-                # Allow user to select specific objects for detailed view
-                st.markdown("**Detailed Trajectory Comparison:**")
-                selected_obj = st.selectbox(
-                    "Select object to view prediction details",
-                    options=[r['object_id'] for r in trajectory_results],
-                    format_func=lambda x: f"Object #{x}"
-                )
-                
-                if selected_obj:
-                    selected_result = next(r for r in trajectory_results if r['object_id'] == selected_obj)
-                    
-                    # Get classification for this object
-                    obj_classification = results_df[results_df['clip_id'] == selected_obj]['classification'].iloc[0]
-                    
-                    # Show detailed comparison plot
-                    comparison_fig = create_trajectory_comparison_plot(selected_result, obj_classification)
-                    st.plotly_chart(comparison_fig, use_container_width=True)
-                    
-                    # Show prediction metrics
-                    col1, col2, col3 = st.columns(3)
-                    with col1:
-                        st.metric("Mean Error", f"{selected_result['mean_error']:.2f} px")
-                    with col2:
-                        st.metric("Max Error", f"{selected_result['max_error']:.2f} px")
-                    with col3:
-                        st.metric("RMSE", f"{selected_result['rmse_total']:.2f} px")
-                    
-                    st.info(f"✨ **Technical Insight:** This object's trajectory has an R² score of {selected_result['r2_x']:.3f}, "
-                           f"indicating {'highly' if selected_result['r2_x'] > 0.95 else 'moderately'} predictable linear motion. "
-                           f"{'This is characteristic of satellite passes.' if selected_result['r2_x'] > 0.95 else 'This suggests non-linear or irregular movement patterns.'}")
-        else:
-            st.info("No trajectory data available for analysis.")
+                    if trajectory_results:
+                        # Show summary statistics
+                        summary = get_trajectory_summary_stats(trajectory_results)
+                        
+                        col1, col2, col3, col4 = st.columns(4)
+                        with col1:
+                            st.metric("Objects Analyzed", summary['total_objects'])
+                        with col2:
+                            st.metric("Avg Prediction Error", f"{summary['avg_mean_error']:.2f} px")
+                        with col3:
+                            st.metric("Avg R² Score", f"{summary['avg_r2_x']:.3f}")
+                        with col4:
+                            st.metric("Highly Predictable", f"{summary['highly_predictable']}/{summary['total_objects']}")
+                        
+                        st.caption("**Interpretation:** R² > 0.95 indicates highly linear motion (typical for satellites). Lower R² suggests curved/irregular paths (meteors, aircraft maneuvers).")
+                        
+                        # Show error plot
+                        error_fig = create_trajectory_error_plot(trajectory_results)
+                        if error_fig:
+                            st.plotly_chart(error_fig, use_container_width=True)
+                        
+                        # Allow user to select specific objects for detailed view
+                        st.markdown("**Detailed Trajectory Comparison:**")
+                        selected_obj = st.selectbox(
+                            "Select object to view prediction details",
+                            options=[r['object_id'] for r in trajectory_results],
+                            format_func=lambda x: f"Object #{x}"
+                        )
+                        
+                        if selected_obj:
+                            selected_result = next(r for r in trajectory_results if r['object_id'] == selected_obj)
+                            
+                            # Get classification for this object
+                            obj_classification = results_df[results_df['clip_id'] == selected_obj]['classification'].iloc[0]
+                            
+                            # Show detailed comparison plot
+                            comparison_fig = create_trajectory_comparison_plot(selected_result, obj_classification)
+                            st.plotly_chart(comparison_fig, use_container_width=True)
+                            
+                            # Show prediction metrics
+                            col1, col2, col3 = st.columns(3)
+                            with col1:
+                                st.metric("Mean Error", f"{selected_result['mean_error']:.2f} px")
+                            with col2:
+                                st.metric("Max Error", f"{selected_result['max_error']:.2f} px")
+                            with col3:
+                                st.metric("RMSE", f"{selected_result['rmse_total']:.2f} px")
+                            
+                            st.info(f"✨ **Technical Insight:** This object's trajectory has an R² score of {selected_result['r2_x']:.3f}, "
+                                   f"indicating {'highly' if selected_result['r2_x'] > 0.95 else 'moderately'} predictable linear motion. "
+                                   f"{'This is characteristic of satellite passes.' if selected_result['r2_x'] > 0.95 else 'This suggests non-linear or irregular movement patterns.'}")
+                    else:
+                        st.info("No trajectory data available for analysis.")
     
     # Technical Details Section
     st.markdown("---")

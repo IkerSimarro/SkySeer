@@ -303,7 +303,11 @@ def _create_filtered_video(source_video, output_path, results_df, metadata, clas
     # Get the color for this classification
     color = color_map.get(classification_filter, (255, 255, 255))
     
-    # Create lookup of clip_ids for this classification
+    # Create lookup of clip_ids for this classification with their actual classification
+    classification_lookup = {}
+    for idx, row in results_df.iterrows():
+        classification_lookup[row['clip_id']] = row['classification']
+    
     filtered_clip_ids = set(results_df['clip_id'].tolist())
     
     # Group metadata by output_frame_number, but ONLY for filtered clip_ids
@@ -311,7 +315,15 @@ def _create_filtered_video(source_video, output_path, results_df, metadata, clas
     frame_detections = defaultdict(list)
     for item in metadata:
         clip_id = item['clip_id']
-        if clip_id in filtered_clip_ids:
+        # Double-check: must be in filtered set AND (if filter specified) have matching classification
+        if classification_filter is None:
+            # No filter - include all clip_ids that are in results_df
+            should_include = clip_id in filtered_clip_ids
+        else:
+            # Filter specified - must match classification
+            should_include = clip_id in filtered_clip_ids and classification_lookup.get(clip_id) == classification_filter
+        
+        if should_include:
             frame_num = item.get('output_frame_number', item['frame_number'])
             frame_detections[frame_num].append({
                 'clip_id': clip_id,
@@ -404,27 +416,29 @@ def create_download_zip(clip_paths, results_df, classification_filter=None, meta
             # Use clean version (saved before rectangles were added)
             clean_video = annotated_video.replace('.mp4', '_clean.mp4')
             
-            # Fallback to annotated if clean doesn't exist (shouldn't happen)
-            source_video = clean_video if os.path.exists(clean_video) else annotated_video
-            
-            safe_classification = classification_filter.replace('/', '_') if classification_filter else "all"
-            video_filename = f"{safe_classification}_detections.mp4"
-            
-            # Create temporary filtered video
-            temp_video = tempfile.NamedTemporaryFile(delete=False, suffix='.mp4')
-            temp_video.close()
-            
-            # Generate video with ONLY the filtered classification's rectangles
-            _create_filtered_video(source_video, temp_video.name, filtered_results, metadata, classification_filter)
-            
-            # Add filtered video to zip
-            zip_file.write(temp_video.name, video_filename)
-            
-            # Clean up temp file
-            try:
-                os.remove(temp_video.name)
-            except:
-                pass
+            # Ensure clean video exists - we need it to avoid showing all rectangles
+            if not os.path.exists(clean_video):
+                # If clean doesn't exist, skip video in ZIP (only include CSV/text files)
+                print(f"Warning: Clean video not found at {clean_video}, skipping video in ZIP")
+            else:
+                safe_classification = classification_filter.replace('/', '_') if classification_filter else "all"
+                video_filename = f"{safe_classification}_detections.mp4"
+                
+                # Create temporary filtered video
+                temp_video = tempfile.NamedTemporaryFile(delete=False, suffix='.mp4')
+                temp_video.close()
+                
+                # Generate video with ONLY the filtered classification's rectangles
+                _create_filtered_video(clean_video, temp_video.name, filtered_results, metadata, classification_filter)
+                
+                # Add filtered video to zip
+                zip_file.write(temp_video.name, video_filename)
+                
+                # Clean up temp file
+                try:
+                    os.remove(temp_video.name)
+                except:
+                    pass
         
         # Add CSV report (use filtered results)
         csv_buffer = BytesIO()
@@ -915,7 +929,12 @@ def recommend_settings(video_info, uploaded_file=None):
             )
     
     # Recommendation 4: Max duration based on video length
-    if duration_seconds > 600:  # Long videos might have slower satellites
+    if duration_seconds < 300:  # Short videos (<5 min) - use lower max to filter stars
+        recommendations['max_duration'] = 35.0
+        recommendations['explanations'].append(
+            "⭐ Short video (<5min) - max duration 35s to filter out slow-moving stars"
+        )
+    elif duration_seconds > 600:  # Long videos might have slower satellites
         recommendations['max_duration'] = 100.0
         recommendations['explanations'].append(
             "⭐ Long video (>10min) - max duration 100s (allows slow-moving satellites)"

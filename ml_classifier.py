@@ -206,6 +206,7 @@ class MLClassifier:
         satellite_score = row.get('satellite_score', 0)
         meteor_score = row.get('meteor_score', 0)
         plane_score = row.get('plane_score', 0)
+        avg_speed = row.get('avg_speed', 0)
         
         # Determine best classification based on scores
         scores = {
@@ -216,7 +217,10 @@ class MLClassifier:
         }
         
         # Apply minimal adjustments for extreme cases
-        if avg_speed > 30 and row.get('linearity', 0) > 0.85 and row.get('duration', 0) < 1.5:
+        if avg_speed < 0.5:
+            # Very slow objects (likely stars or stationary noise) - classify as Junk
+            scores['Junk'] *= 5.0
+        elif avg_speed > 30 and row.get('linearity', 0) > 0.85 and row.get('duration', 0) < 1.5:
             scores['Meteor'] *= 1.8
         elif row.get('speed_consistency', 0) < 0.3 or row.get('linearity', 0) < 0.3:
             scores['Junk'] *= 1.5
