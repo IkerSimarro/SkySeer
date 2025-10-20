@@ -252,11 +252,15 @@ def main():
             """)
     
     with col_faq2:
-        with st.expander("😕 Missing objects?"):
+        with st.expander("😕 Missing satellites?"):
             st.markdown("""
-            - Increase sensitivity to 6-7
-            - Decrease minimum duration to 1.0s
-            - Lower frame skip to 2-3
+            **If satellites are not being detected:**
+            - **Increase sensitivity to 6-7** (detects smaller, dimmer objects)
+            - **Decrease min duration to 1.0-1.5s** (catches brief passes)
+            - **Lower frame skip to 2-3** (processes more frames)
+            - **Increase max duration to 25-30s** (allows slower-moving satellites)
+            
+            **Note:** The system is optimized to detect obvious satellite passes. Very faint or very slow satellites may still be missed to avoid false positives.
             """)
         
         with st.expander("🎨 Color codes?"):
@@ -948,27 +952,49 @@ def display_results():
         
         # Show actual feature distribution
         st.markdown("### **Feature Distribution in Current Dataset**")
+        st.markdown("These box plots show how different features separate Satellites from Meteors in your video:")
         
-        feature_cols = ['avg_speed', 'speed_consistency', 'duration', 'linearity']
-        available_features = [col for col in feature_cols if col in results_df.columns]
+        feature_info = {
+            'avg_speed': {
+                'title': 'Average Speed (pixels/frame)',
+                'explanation': '**What to look for:** Meteors typically move much faster (>10 px/frame) than satellites (0.6-35 px/frame). The higher the box, the faster the objects moved.'
+            },
+            'speed_consistency': {
+                'title': 'Speed Consistency (0-1, lower = more consistent)',
+                'explanation': '**What to look for:** Both satellites and meteors should have LOW values (boxes near 0), meaning constant speed. Higher values indicate erratic movement (likely junk).'
+            },
+            'duration': {
+                'title': 'Duration (seconds)',
+                'explanation': '**What to look for:** Satellites typically appear for 3-25 seconds (longer boxes), while meteors are brief flashes lasting 1-4 seconds (boxes near bottom).'
+            },
+            'linearity': {
+                'title': 'Path Linearity (0-1, higher = straighter)',
+                'explanation': '**What to look for:** Both satellites and meteors should have HIGH values (boxes near 1), meaning straight paths. Curved or zigzag paths suggest planes or noise.'
+            }
+        }
+        
+        available_features = [col for col in feature_info.keys() if col in results_df.columns]
         
         if available_features:
             for feature in available_features:
+                info = feature_info[feature]
+                
                 fig = px.box(
                     results_df,
                     x='classification',
                     y=feature,
                     color='classification',
-                    title=f"{feature.replace('_', ' ').title()} by Classification",
-                    labels={feature: feature.replace('_', ' ').title()}
+                    title=info['title'],
+                    labels={feature: info['title']}
                 )
                 fig.update_layout(
                     plot_bgcolor='#0e1117',
                     paper_bgcolor='#0e1117',
                     font=dict(color='white'),
-                    height=300
+                    height=350
                 )
                 st.plotly_chart(fig, use_container_width=True)
+                st.caption(info['explanation'])
     
     # PDF Mission Report Download
     st.markdown("---")
@@ -1045,13 +1071,14 @@ def generate_mission_report_pdf(results_df, metadata, video_info, trajectory_res
         story.append(Spacer(1, 0.3*inch))
         
         story.append(Paragraph("Video Information", heading_style))
+        total_frames = video_info.get('total_frames', 0)
         video_data = [
             ['Parameter', 'Value'],
             ['Filename', str(video_info.get('filename', 'N/A'))],
             ['Duration', video_info.get('duration', 'N/A')],
             ['Resolution', video_info.get('resolution', 'N/A')],
             ['FPS', str(video_info.get('fps', 'N/A'))],
-            ['Total Frames', f"{video_info.get('total_frames', 'N/A'):,}"]
+            ['Total Frames', f"{total_frames:,}" if isinstance(total_frames, (int, float)) else str(total_frames)]
         ]
         
         video_table = Table(video_data, colWidths=[2*inch, 3.5*inch])

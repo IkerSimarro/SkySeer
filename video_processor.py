@@ -52,7 +52,7 @@ class VideoProcessor:
         # Lower varThreshold to detect small, dim satellites
         backSub = cv2.createBackgroundSubtractorMOG2(
             history=500,
-            varThreshold=45,  # Lower threshold - better detection of small satellites
+            varThreshold=40,  # Lower threshold - better detection of small, dim satellites
             detectShadows=False
         )
         
