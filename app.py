@@ -18,6 +18,17 @@ from ml_classifier import MLClassifier
 from utils import create_download_zip, format_duration, get_video_info, recommend_settings
 from db_service import DatabaseService
 from trajectory_visualizer import TrajectoryVisualizer
+from trajectory_analysis import (
+    analyze_all_trajectories, 
+    create_trajectory_comparison_plot,
+    create_trajectory_error_plot,
+    get_trajectory_summary_stats
+)
+from reportlab.lib.pagesizes import letter
+from reportlab.lib import colors
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import inch
 
 # Configure page
 st.set_page_config(
@@ -759,6 +770,426 @@ def display_results():
                 st.error(f"❌ Error extracting clip: {str(e)}")
     else:
         st.warning("⚠️ Original video file not available. Please process a new video to use this feature.")
+    
+    # Trajectory Prediction Analysis Section
+    st.markdown("---")
+    st.subheader("🎯 Trajectory Prediction Analysis")
+    st.markdown("Demonstrates predictive modeling capabilities - comparing actual object paths vs. predicted trajectories using linear regression.")
+    
+    # Initialize trajectory_results outside the expander
+    trajectory_results = None
+    
+    with st.expander("📊 View Trajectory Predictions", expanded=False):
+        # Prepare detection data for trajectory analysis
+        detections_list = []
+        for meta in st.session_state.metadata:
+            detections_list.append({
+                'object_id': meta['clip_id'],
+                'frame_number': meta['frame_number'],
+                'center_x': meta['center_x'],
+                'center_y': meta['center_y']
+            })
+        
+        if detections_list:
+            detections_df = pd.DataFrame(detections_list)
+            
+            # Analyze all trajectories
+            trajectory_results = analyze_all_trajectories(detections_df, method='linear')
+            
+            if trajectory_results:
+                # Show summary statistics
+                summary = get_trajectory_summary_stats(trajectory_results)
+                
+                col1, col2, col3, col4 = st.columns(4)
+                with col1:
+                    st.metric("Objects Analyzed", summary['total_objects'])
+                with col2:
+                    st.metric("Avg Prediction Error", f"{summary['avg_mean_error']:.2f} px")
+                with col3:
+                    st.metric("Avg R² Score", f"{summary['avg_r2_x']:.3f}")
+                with col4:
+                    st.metric("Highly Predictable", f"{summary['highly_predictable']}/{summary['total_objects']}")
+                
+                st.caption("**Interpretation:** R² > 0.95 indicates highly linear motion (typical for satellites). Lower R² suggests curved/irregular paths (meteors, aircraft maneuvers).")
+                
+                # Show error plot
+                error_fig = create_trajectory_error_plot(trajectory_results)
+                if error_fig:
+                    st.plotly_chart(error_fig, use_container_width=True)
+                
+                # Allow user to select specific objects for detailed view
+                st.markdown("**Detailed Trajectory Comparison:**")
+                selected_obj = st.selectbox(
+                    "Select object to view prediction details",
+                    options=[r['object_id'] for r in trajectory_results],
+                    format_func=lambda x: f"Object #{x}"
+                )
+                
+                if selected_obj:
+                    selected_result = next(r for r in trajectory_results if r['object_id'] == selected_obj)
+                    
+                    # Get classification for this object
+                    obj_classification = results_df[results_df['clip_id'] == selected_obj]['classification'].iloc[0]
+                    
+                    # Show detailed comparison plot
+                    comparison_fig = create_trajectory_comparison_plot(selected_result, obj_classification)
+                    st.plotly_chart(comparison_fig, use_container_width=True)
+                    
+                    # Show prediction metrics
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.metric("Mean Error", f"{selected_result['mean_error']:.2f} px")
+                    with col2:
+                        st.metric("Max Error", f"{selected_result['max_error']:.2f} px")
+                    with col3:
+                        st.metric("RMSE", f"{selected_result['rmse_total']:.2f} px")
+                    
+                    st.info(f"✨ **Technical Insight:** This object's trajectory has an R² score of {selected_result['r2_x']:.3f}, "
+                           f"indicating {'highly' if selected_result['r2_x'] > 0.95 else 'moderately'} predictable linear motion. "
+                           f"{'This is characteristic of satellite passes.' if selected_result['r2_x'] > 0.95 else 'This suggests non-linear or irregular movement patterns.'}")
+        else:
+            st.info("No trajectory data available for analysis.")
+    
+    # Technical Details Section
+    st.markdown("---")
+    st.subheader("📚 Technical Details")
+    st.markdown("Deep dive into the machine learning pipeline and computer vision techniques used in SkySeer.")
+    
+    with st.expander("🔬 View ML Pipeline Architecture", expanded=False):
+        st.markdown("""
+        ### **System Architecture Overview**
+        
+        SkySeer employs a sophisticated multi-stage pipeline combining computer vision and unsupervised machine learning:
+        
+        ---
+        
+        #### **Stage 1: Motion Detection**
+        - **Algorithm:** MOG2 (Mixture of Gaussians) Background Subtraction
+        - **Purpose:** Identify moving objects against the static night sky
+        - **Parameters:** Adaptive variance threshold (45), history frames (500)
+        - **Output:** Motion blobs with bounding boxes and frame-by-frame tracking
+        
+        #### **Stage 2: Feature Extraction (11-Dimensional Feature Space)**
+        
+        Each detected object is transformed into a numerical "flight signature" consisting of:
+        
+        1. **avg_speed** - Average velocity in pixels/frame
+        2. **speed_consistency** - Standard deviation of speed (0-1, lower = more consistent)
+        3. **duration** - Total observation time in seconds
+        4. **linearity** - How straight the path is (0-1, higher = straighter)
+        5. **direction_changes** - Number of significant heading changes
+        6. **size_consistency** - Variation in object size across frames
+        7. **acceleration** - Rate of speed change
+        8. **blinking_score** - Detection of periodic brightness changes (aircraft lights)
+        9. **satellite_score** - Weighted score favoring satellite characteristics
+        10. **meteor_score** - Weighted score favoring meteor characteristics
+        11. **avg_brightness** - Average pixel intensity
+        
+        **Why not visual features?** In low-light conditions, kinematic patterns are more reliable than pixel-level features.
+        
+        ---
+        
+        #### **Stage 3: ML Classification (K-Means Clustering)**
+        
+        - **Algorithm:** K-Means Unsupervised Clustering
+        - **Number of Clusters:** 2 (Satellite, Meteor)
+        - **Preprocessing:** StandardScaler normalization on all 11 features
+        - **Classification Logic:**
+          - Cluster centers are analyzed for characteristic patterns
+          - **Satellites:** Moderate speed (0.6-35 px/frame), high linearity, long duration (3-25s)
+          - **Meteors:** High speed (>10 px/frame), short duration (1-4s), high linearity
+          - Objects not matching either pattern are classified as Junk
+        
+        **Why K-Means?**
+        - No labeled training data required
+        - Adapts automatically to new motion patterns
+        - Computationally efficient for real-time analysis
+        
+        ---
+        
+        #### **Stage 4: Aggressive Filtering**
+        
+        - **Speed Validation:** Objects <0.3 px/frame → Junk (stationary noise)
+        - **Target:** <10 detections per video (precision over recall)
+        - **Confidence Scoring:** Distance from cluster center determines confidence (0-100%)
+        
+        ---
+        
+        ### **Performance Characteristics**
+        
+        **Strengths:**
+        - Excellent at detecting obvious satellite passes and meteor streaks
+        - Minimal false positives due to aggressive filtering
+        - No training data dependency
+        
+        **Limitations:**
+        - May miss very faint or very slow-moving objects
+        - Optimized for tripod-mounted, stable footage
+        - Best results with clear, dark skies
+        
+        ---
+        
+        ### **Video Processing**
+        
+        - **Frame Skip:** Adaptive (3-6) based on video length and FPS
+        - **Output Speed:** 10x speedup for efficient review
+        - **Color Coding:** RED = Satellites, YELLOW = Meteors
+        
+        ---
+        
+        ### **Technical Stack**
+        
+        - **Computer Vision:** OpenCV (MOG2, contour detection)
+        - **Machine Learning:** scikit-learn (K-Means, StandardScaler)
+        - **Visualization:** Plotly (interactive charts), Streamlit (web interface)
+        - **Data Processing:** NumPy, Pandas
+        - **Database:** PostgreSQL (multi-night tracking capability)
+        """)
+        
+        # Show actual feature distribution
+        st.markdown("### **Feature Distribution in Current Dataset**")
+        
+        feature_cols = ['avg_speed', 'speed_consistency', 'duration', 'linearity']
+        available_features = [col for col in feature_cols if col in results_df.columns]
+        
+        if available_features:
+            for feature in available_features:
+                fig = px.box(
+                    results_df,
+                    x='classification',
+                    y=feature,
+                    color='classification',
+                    title=f"{feature.replace('_', ' ').title()} by Classification",
+                    labels={feature: feature.replace('_', ' ').title()}
+                )
+                fig.update_layout(
+                    plot_bgcolor='#0e1117',
+                    paper_bgcolor='#0e1117',
+                    font=dict(color='white'),
+                    height=300
+                )
+                st.plotly_chart(fig, use_container_width=True)
+    
+    # PDF Mission Report Download
+    st.markdown("---")
+    st.subheader("📄 Export Mission Report")
+    st.markdown("Generate a professional PDF report documenting all detections, technical parameters, and analysis results.")
+    
+    if st.button("📥 Generate PDF Mission Report", use_container_width=True):
+        with st.spinner("Generating professional mission report..."):
+            pdf_buffer = generate_mission_report_pdf(
+                results_df,
+                st.session_state.metadata,
+                st.session_state.video_info,
+                trajectory_results
+            )
+            
+            if pdf_buffer:
+                st.success("✅ Mission report generated successfully!")
+                st.download_button(
+                    label="📥 Download PDF Report",
+                    data=pdf_buffer,
+                    file_name=f"SkySeer_Mission_Report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
+                    mime="application/pdf",
+                    use_container_width=True
+                )
+            else:
+                st.error("❌ Failed to generate PDF report.")
+
+def generate_mission_report_pdf(results_df, metadata, video_info, trajectory_results=None):
+    """
+    Generate a professional PDF mission report
+    
+    Args:
+        results_df: DataFrame with detection results
+        metadata: List of detection metadata
+        video_info: Dict with video information
+        trajectory_results: Optional trajectory prediction results
+        
+    Returns:
+        BytesIO buffer with PDF content
+    """
+    try:
+        buffer = BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=letter,
+                              rightMargin=72, leftMargin=72,
+                              topMargin=72, bottomMargin=18)
+        
+        story = []
+        styles = getSampleStyleSheet()
+        
+        title_style = ParagraphStyle(
+            'CustomTitle',
+            parent=styles['Heading1'],
+            fontSize=24,
+            textColor=colors.HexColor('#1f77b4'),
+            spaceAfter=30,
+            alignment=1
+        )
+        
+        heading_style = ParagraphStyle(
+            'CustomHeading',
+            parent=styles['Heading2'],
+            fontSize=14,
+            textColor=colors.HexColor('#2ca02c'),
+            spaceAfter=12,
+            spaceBefore=12
+        )
+        
+        title = Paragraph("SkySeer AI - Mission Report", title_style)
+        story.append(title)
+        
+        timestamp = Paragraph(f"<para align=center>Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</para>", 
+                            styles["Normal"])
+        story.append(timestamp)
+        story.append(Spacer(1, 0.3*inch))
+        
+        story.append(Paragraph("Video Information", heading_style))
+        video_data = [
+            ['Parameter', 'Value'],
+            ['Filename', str(video_info.get('filename', 'N/A'))],
+            ['Duration', video_info.get('duration', 'N/A')],
+            ['Resolution', video_info.get('resolution', 'N/A')],
+            ['FPS', str(video_info.get('fps', 'N/A'))],
+            ['Total Frames', f"{video_info.get('total_frames', 'N/A'):,}"]
+        ]
+        
+        video_table = Table(video_data, colWidths=[2*inch, 3.5*inch])
+        video_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 12),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black)
+        ]))
+        story.append(video_table)
+        story.append(Spacer(1, 0.3*inch))
+        
+        story.append(Paragraph("Detection Summary", heading_style))
+        total_detections = len(results_df)
+        satellites = len(results_df[results_df['classification'] == 'Satellite'])
+        meteors = len(results_df[results_df['classification'] == 'Meteor'])
+        
+        summary_data = [
+            ['Metric', 'Count'],
+            ['Total Detections', str(total_detections)],
+            ['Satellites', str(satellites)],
+            ['Meteors', str(meteors)],
+        ]
+        
+        summary_table = Table(summary_data, colWidths=[2.5*inch, 1.5*inch])
+        summary_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 12),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.lightblue),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black)
+        ]))
+        story.append(summary_table)
+        story.append(Spacer(1, 0.3*inch))
+        
+        if trajectory_results:
+            story.append(Paragraph("Trajectory Analysis Summary", heading_style))
+            summary = get_trajectory_summary_stats(trajectory_results)
+            
+            traj_data = [
+                ['Metric', 'Value'],
+                ['Objects Analyzed', str(summary['total_objects'])],
+                ['Avg Prediction Error', f"{summary['avg_mean_error']:.2f} pixels"],
+                ['Avg R² Score (X-axis)', f"{summary['avg_r2_x']:.3f}"],
+                ['Highly Predictable Objects', f"{summary['highly_predictable']}/{summary['total_objects']}"],
+            ]
+            
+            traj_table = Table(traj_data, colWidths=[3*inch, 2*inch])
+            traj_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, 0), 12),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+                ('BACKGROUND', (0, 1), (-1, -1), colors.lightgreen),
+                ('GRID', (0, 0), (-1, -1), 1, colors.black)
+            ]))
+            story.append(traj_table)
+            story.append(Spacer(1, 0.3*inch))
+        
+        story.append(PageBreak())
+        story.append(Paragraph("Detailed Detection Results", heading_style))
+        
+        detection_data = [['ID', 'Classification', 'Confidence', 'Speed', 'Duration']]
+        for _, row in results_df.iterrows():
+            detection_data.append([
+                str(int(row['clip_id'])),
+                row['classification'],
+                f"{row['confidence']*100:.0f}%",
+                f"{row['avg_speed']:.1f} px/f",
+                f"{row['duration']:.1f}s"
+            ])
+        
+        det_table = Table(detection_data, colWidths=[0.6*inch, 1.3*inch, 1.1*inch, 1.1*inch, 1.1*inch])
+        det_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 9),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.white),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.lightgrey])
+        ]))
+        story.append(det_table)
+        story.append(Spacer(1, 0.3*inch))
+        
+        story.append(PageBreak())
+        story.append(Paragraph("Technical Documentation", heading_style))
+        
+        tech_text = """
+        <b>Detection Pipeline:</b><br/>
+        1. MOG2 Background Subtraction for motion detection<br/>
+        2. 11-dimensional feature extraction (speed, linearity, duration, etc.)<br/>
+        3. K-Means clustering for unsupervised classification<br/>
+        4. Aggressive filtering to minimize false positives<br/>
+        <br/>
+        <b>Classification Criteria:</b><br/>
+        • Satellites: Moderate speed (0.6-35 px/frame), high linearity, 3-25s duration<br/>
+        • Meteors: High speed (>10 px/frame), short duration (1-4s), high linearity<br/>
+        • Junk: Objects not matching satellite/meteor patterns or speed <0.3 px/frame<br/>
+        <br/>
+        <b>System Characteristics:</b><br/>
+        • Target: <10 detections per video (precision over recall)<br/>
+        • Optimized for stable, tripod-mounted footage<br/>
+        • Best results with clear, dark skies<br/>
+        """
+        
+        tech_para = Paragraph(tech_text, styles['Normal'])
+        story.append(tech_para)
+        
+        footer_text = f"""
+        <para align=center>
+        <br/><br/>
+        ---<br/>
+        <i>Generated by SkySeer AI - Advanced Sky Object Detection System</i><br/>
+        <i>Report Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</i>
+        </para>
+        """
+        story.append(Spacer(1, 0.5*inch))
+        story.append(Paragraph(footer_text, styles['Normal']))
+        
+        doc.build(story)
+        buffer.seek(0)
+        return buffer
+        
+    except Exception as e:
+        print(f"Error generating PDF: {e}")
+        return None
 
 def extract_object_clip(object_ids, video_path, metadata, results_df):
     """

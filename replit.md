@@ -2,116 +2,7 @@
 
 ## Overview
 
-SkySeer is an advanced computer vision and machine learning system for detecting and classifying sky objects in night sky video footage. It focuses on identifying very obvious movements like satellite passes and meteor events, minimizing false positives. The system processes raw video into structured data through motion detection, numerical "flight signature" extraction, and K-Means clustering for categorization (satellites, meteors). It aggressively filters results to achieve less than 10 detections per typical video, prioritizing precision over recall. This project is ideal for amateur astronomy and low-light camera setups.
-
-## Recent Changes
-
-**October 16, 2025 - Latest:**
-
-**Category Download Filtering & Restored Satellite Detection:**
-- **Category-Specific Video Filtering:** Downloads show ONLY Satellite or Meteor objects
-  - Satellite downloads: only satellites with RED boxes
-  - Meteor downloads: only meteors with YELLOW boxes
-  - Only Satellite and Meteor available for download (Junk/Plane hidden)
-  - Each category ZIP includes: filtered video + filtered CSV + filtered summary
-  - Clean video preserved before annotation for proper filtering
-- **Restored Satellite Detection:** Removed speed-based filtering that was blocking satellites
-  - Removed forced-to-Junk speed thresholds (all speeds now allowed)
-  - Removed speed penalties from satellite scoring (matches working version)
-  - Restored 3-cluster classification (Satellite/Meteor/Plane) for better accuracy
-  - Satellite detection now matches previous working behavior
-
-**Critical Video Processing Fixes:**
-- **Precise 10x Speed Control:** Fixed output video duration to be exactly 1/10th of input duration
-  - Formula: output_fps = 10 * fps / frame_skip ensures consistent speedup
-  - 10-minute input now correctly produces 1-minute output
-  - Works correctly regardless of frame_skip setting
-- **Object ID Synchronization:** Fixed ID mismatch between video annotations and results table
-  - Removed duplicate rectangle drawing during initial processing (was causing frame misalignment)
-  - Metadata stores BOTH input frame numbers (for speed calculations) and output frame numbers (for video overlay)
-  - Output frame numbers are 0-based to match video frame indices exactly
-  - Video overlay now uses synchronized frame numbering
-  - IDs in video now precisely match IDs in Available Objects table and Clip Extractor
-- **Video Display Optimization:** Color-coded rectangles for classification
-  - RED boxes for Satellites with "ID:{number} Satellite" labels
-  - YELLOW boxes for Meteors with "ID:{number} Meteor" labels
-  - BLUE boxes for Planes, GRAY boxes for Junk (if detected)
-  - All objects visible in main video so users can see detections
-  - IDs match Available Objects table and Clip Extractor
-
-**Improved Meteor Detection & Simplified Classification:**
-- **Enhanced Meteor Scoring:** Optimized meteor detection with realistic thresholds
-  - Speed-focused: >10 px/frame for meteor classification (lowered from 15 for better detection)
-  - Extended duration: 1-4 seconds considered typical meteor range (up to 4s)
-  - Reduced brightness bias: Meteors can be faint like satellites (max 1.5x bonus instead of 2x)
-  - Linearity squared to heavily favor straight paths
-  - Speed is the primary discriminator between satellites and meteors
-- **Removed Plane Classification:** Simplified system to focus on satellites and meteors only
-  - Plane detection was unreliable and rarely used
-  - Updated ML classifier from 3 clusters to 2 clusters (Satellite/Meteor)
-  - Removed all plane-related scoring and UI elements
-  - Cleaner, more focused classification system
-
-**Category-Specific Download Enhancement:**
-- Fixed download functionality - now includes full sped-up video (10x speed) in all category downloads
-- Each category download (Satellite, Meteor, Junk) contains:
-  * Complete 1-minute video (for 10-minute input) showing ALL detections with color-coded boxes
-  * CSV report filtered to show only that classification's objects
-  * Category-specific SUMMARY.txt with filtered statistics
-- Video shows all objects (user can see context): Green=Satellites, Red=Meteors, Gray=Junk
-- Labels format: "ID:{number} {classification}" matching Available Objects table
-- Improved recommended settings panel with clean metric cards and collapsible explanations
-
-**October 15, 2025:**
-
-**Critical Accuracy Improvements:**
-- **Enhanced Small Satellite Detection:** Lowered minimum object size threshold from 40 to ~15 pixels to capture distant satellites
-- **Improved Background Subtraction:** Reduced varThreshold from 60 to 45 for better detection of dim, small objects
-- **Speed-Based Classification Filter:** Added speed validation to reduce false positives
-  - Objects moving <0.3 px/frame are forced to Junk classification (eliminates stationary noise)
-  - Objects moving 0.3-0.6 px/frame receive moderate penalties (40-60%)
-  - Optimal satellite speed range: 0.6-35 px/frame with full scoring
-  - Very fast objects (>35 px/frame) penalized to favor meteor classification
-- **Balanced Satellite vs Plane Scoring:**
-  - Satellites peak at 3-15s duration (1.4x boost), remain strong for longer passes (1.0x up to 25s)
-  - Planes require EITHER blinking lights OR long duration (15+s) to score high
-  - Planes without blinking get same speed penalties as satellites
-  - Blinking bonus capped for slow objects to prevent tower light false positives
-- **Result:** Balanced detection of slow-moving distant satellites while filtering stationary objects and properly discriminating satellites from planes
-
-**October 15, 2025:**
-
-**Enhanced Plane Detection:**
-- Implemented sophisticated blinking light pattern detection for improved aircraft identification
-- Added periodic blinking analysis that detects on/off brightness patterns typical of navigation lights
-- Increased blinking bonus from 0.2x to 0.8x for stronger plane vs satellite discrimination
-- New blinking_score feature combines brightness variance with periodic flash detection
-- Safeguarded against division by zero in brightness calculations
-
-**ML Classification Optimization:**
-- Added blinking_score to 11-dimensional feature space for better accuracy
-- Enhanced feature set now includes: speed, consistency, duration, linearity, direction changes, size consistency, acceleration, blinking patterns, and object-specific scores
-
-**ZIP Download Enhancements:**
-- Added SUMMARY.txt file with detection counts and detailed object listings
-- Enhanced README.txt with improved organization and file structure explanation
-- Summary includes: classification, confidence %, duration, and average speed for each detected object
-
-**Comprehensive 502 Timeout Fix (Updated October 15, 2025):**
-- Fixed critical WebSocket timeout issue affecting ALL processing stages
-- **Stage 1 (Motion Detection):** Progress callbacks fire every (30 × frame_skip) frames, sending updates every 3-6 seconds
-- **Stage 2 (Feature Extraction):** Added multi-step progress updates with unique status text
-- **Stage 3 (ML Classification):** Implemented intermediate progress callbacks during AI analysis
-- **Stage 4 (Rectangle Drawing):** Added per-clip progress updates to prevent timeout on large result sets
-- All status updates use unique content (callback counts, frame numbers, percentages) to prevent Streamlit deduplication
-- WebSocket now receives fresh data throughout entire pipeline, preventing 60-second timeout
-- Fixed ML classifier defensive programming: uses .get() methods with fallbacks for all field access
-- Works with all video lengths and processing scenarios
-
-**UI Improvements:**
-- Removed "About Me" section for cleaner, more professional interface
-- "How It Works" section now displays in full width
-- Corrected Maximum Clip Duration slider range from 5-120s to 5-30s to align with typical recommendation values (~15s)
+SkySeer AI is an advanced computer vision and machine learning system designed for detecting and classifying sky objects such as satellites and meteors in night sky video footage. It processes raw video to identify movements, extracts numerical "flight signatures," and uses K-Means clustering for categorization, prioritizing precision to minimize false positives. The system includes trajectory prediction analysis for aerospace applications, comprehensive technical documentation of its ML pipeline, and professional PDF mission report generation. It aims to provide a robust solution for amateur astronomy and low-light camera setups.
 
 ## User Preferences
 
@@ -121,44 +12,49 @@ Preferred communication style: Simple, everyday language.
 
 ### Frontend Architecture
 
-The application uses Streamlit as a single-page web application with a sidebar configuration panel. It provides a web-based interface for video upload (up to 5GB), real-time processing feedback, interactive data visualization (Plotly), advanced trajectory visualization, and downloadable results. The interface consists of a main content area for video upload, processing controls, and results, and a sidebar for configuration parameters.
+The application uses Streamlit to provide a web-based interface. It features a sidebar for configuration, allowing video upload (up to 5GB), real-time processing feedback, and interactive data visualizations (Plotly). The interface supports advanced trajectory visualization and enables the download of processed results.
 
 ### Backend Architecture
 
-The system employs a multi-stage sequential processing pipeline:
+The system operates through a multi-stage sequential processing pipeline:
 
-1.  **Video Ingestion**: Uses OpenCV for frame extraction, MOG2 background subtraction for motion detection, and generates motion clips with metadata.
-2.  **Feature Extraction**: Transforms visual detections into numerical "flight signatures" by calculating kinematic metrics (speed, acceleration, trajectory linearity) and consistency scores.
-3.  **ML Classification**: Applies StandardScaler for feature normalization and K-Means clustering (3 clusters) to categorize objects as Satellite, Meteor, Plane, or Junk, with confidence scores.
-4.  **Utility Functions**: Handles video metadata, file operations (ZIP creation), and formatting.
-5.  **Trajectory Visualization**: Creates interactive path visualizations, speed heatmaps, polar plots for direction, and timeline analyses.
-6.  **Database Service**: Manages PostgreSQL connections for persisting analysis sessions, detection clips, and object detections, enabling multi-night analysis and historical tracking.
+1.  **Video Ingestion**: Employs OpenCV for frame extraction and MOG2 background subtraction to detect motion and generate clips.
+2.  **Feature Extraction**: Converts visual detections into 11-dimensional numerical "flight signatures" using kinematic metrics (speed, acceleration, trajectory linearity) and consistency scores.
+3.  **ML Classification**: Utilizes StandardScaler for feature normalization and K-Means clustering (3 clusters) to categorize objects as Satellite, Meteor, or Junk, with confidence scores.
+4.  **Utility Functions**: Manages video metadata, file operations (ZIP creation), and data formatting.
+5.  **Trajectory Visualization**: Generates interactive path visualizations, speed heatmaps, polar plots, and timeline analyses, including predictive modeling for object trajectories.
 
-The pipeline architecture separates concerns for maintainability and extensibility. It is robust to visual noise, uses unsupervised learning, and statistical feature analysis.
+The pipeline is designed for maintainability and extensibility, focusing on robustness to visual noise, unsupervised learning, and statistical feature analysis.
 
 ### Data Storage Solutions
 
-A hybrid storage architecture combines file-based storage and a PostgreSQL database. File-based storage handles input video files and output classified motion clips (organized into Satellite/, Meteor/, Plane/, Junk/ directories). Temporary files are used during OpenCV processing. The PostgreSQL database stores `AnalysisSession`, `DetectionClip`, and `ObjectDetection` data to enable multi-night analysis, historical tracking, and query-based analysis.
+A hybrid storage approach is used, combining file-based storage for input videos and classified output clips, and a PostgreSQL database for `AnalysisSession`, `DetectionClip`, and `ObjectDetection` data. This setup supports multi-night analysis and historical tracking.
 
 ### Machine Learning Model Architecture
 
-The system utilizes an unsupervised learning approach with K-Means Clustering (3 clusters) for automatic categorization of motion patterns. It operates on an 11-dimensional feature space derived from kinematic "flight signatures" and brightness patterns rather than visual features, which are more reliable in low-light conditions. The feature space includes: average speed, speed consistency, duration, linearity, direction changes, size consistency, acceleration, blinking patterns, and object-specific scores. This approach requires no labeled training data and adapts to new data patterns without retraining.
+The system employs an unsupervised K-Means Clustering model (3 clusters) for automatic categorization. It operates on an 11-dimensional feature space derived from kinematic and brightness patterns, which are more reliable in low-light conditions. This approach eliminates the need for labeled training data and adapts to new patterns automatically.
 
 ## External Dependencies
 
 ### Computer Vision Libraries
--   **OpenCV (cv2)**: Video processing, frame extraction, MOG2 background subtraction.
--   **NumPy**: Numerical operations.
+
+-   **OpenCV (cv2)**: For video processing, frame extraction, and background subtraction.
+-   **NumPy**: For numerical operations.
 
 ### Machine Learning Libraries
--   **scikit-learn**: K-Means clustering, feature scaling.
+
+-   **scikit-learn**: For K-Means clustering and feature scaling.
 
 ### Web Framework & UI
--   **Streamlit**: Web application framework, UI components.
--   **Plotly**: Interactive data visualization.
+
+-   **Streamlit**: For the web application framework and UI components.
+-   **Plotly**: For interactive data visualization.
 
 ### Data Processing
--   **Pandas**: DataFrame operations.
+
+-   **Pandas**: For DataFrame operations.
 
 ### Utility Libraries
--   **Python Standard Library**: File/directory operations (`os`, `shutil`), archive creation (`zipfile`), in-memory file handling (`io.BytesIO`), timestamp generation (`datetime`), efficient data structures (`collections`), CSV handling (`csv`), encoding (`base64`), temporary files (`tempfile`).
+
+-   **ReportLab**: Professional PDF generation for mission reports.
+-   **Python Standard Library**: For file/directory operations, archive creation, in-memory file handling, timestamp generation, efficient data structures, CSV handling, encoding, and temporary files.
