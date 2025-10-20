@@ -109,7 +109,7 @@ def main():
         max_duration = st.slider(
             "Maximum Clip Duration (seconds)",
             min_value=5.0,
-            max_value=30.0,
+            max_value=120.0,
             value=15.0,
             step=1.0,
             help="Filters out stationary objects like stars (which appear to move due to Earth's rotation). Objects visible longer than this are discarded. Most satellites cross in 5-30 seconds."
