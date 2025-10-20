@@ -786,8 +786,8 @@ def display_results():
             detections_list.append({
                 'object_id': meta['clip_id'],
                 'frame_number': meta['frame_number'],
-                'center_x': meta['center_x'],
-                'center_y': meta['center_y']
+                'center_x': meta['centroid_x'],
+                'center_y': meta['centroid_y']
             })
         
         if detections_list:
