@@ -664,7 +664,8 @@ def display_results():
                             classification_filter=classification,
                             metadata=st.session_state.metadata
                         )
-                        st.session_state.prepared_zips[classification] = zip_buffer
+                        # Convert BytesIO to bytes for session state storage
+                        st.session_state.prepared_zips[classification] = zip_buffer.getvalue()
                         st.rerun()
     
     # Object Clip Extractor Section

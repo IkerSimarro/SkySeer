@@ -25,7 +25,7 @@ class VideoProcessor:
         # Convert sensitivity to contour area threshold
         # Higher sensitivity = lower threshold (detects smaller objects)
         # Lowered threshold to detect small, distant satellites
-        self.min_contour_area = max(8, 50 - (sensitivity * 7))
+        self.min_contour_area = max(5, 50 - (sensitivity * 8))
         
     def process_video(self, video_path, progress_callback=None):
         """
@@ -52,7 +52,7 @@ class VideoProcessor:
         # Lower varThreshold to detect small, dim satellites
         backSub = cv2.createBackgroundSubtractorMOG2(
             history=500,
-            varThreshold=40,  # Lower threshold - better detection of small, dim satellites
+            varThreshold=35,  # Lower threshold - better detection of small, dim satellites
             detectShadows=False
         )
         
