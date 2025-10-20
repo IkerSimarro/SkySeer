@@ -804,7 +804,7 @@ def recommend_settings(video_info, uploaded_file=None):
     recommendations = {
         'sensitivity': 4,
         'min_duration': 1.5,
-        'max_duration': 15.0,
+        'max_duration': 80.0,
         'max_duration_enabled': True,  # Always enabled now
         'frame_skip': 3,
         'explanations': []
@@ -916,14 +916,14 @@ def recommend_settings(video_info, uploaded_file=None):
     
     # Recommendation 4: Max duration based on video length
     if duration_seconds > 600:  # Long videos might have slower satellites
-        recommendations['max_duration'] = 25.0
+        recommendations['max_duration'] = 100.0
         recommendations['explanations'].append(
-            "⭐ Long video (>10min) - max duration 25s (allows slower-moving satellites)"
+            "⭐ Long video (>10min) - max duration 100s (allows slow-moving satellites)"
         )
     else:
-        recommendations['max_duration'] = 15.0
+        recommendations['max_duration'] = 80.0
         recommendations['explanations'].append(
-            "⭐ Max duration 15s to filter stationary stars"
+            "⭐ Max duration 80s to catch slow satellites while filtering stationary stars"
         )
     
     # Recommendation 5: Noise-specific advice

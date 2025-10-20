@@ -110,9 +110,9 @@ def main():
             "Maximum Clip Duration (seconds)",
             min_value=5.0,
             max_value=120.0,
-            value=15.0,
+            value=80.0,
             step=1.0,
-            help="Filters out stationary objects like stars (which appear to move due to Earth's rotation). Objects visible longer than this are discarded. Most satellites cross in 5-30 seconds."
+            help="Filters out stationary objects like stars (which appear to move due to Earth's rotation). Objects visible longer than this are discarded. Slow-moving satellites can take 60-100+ seconds to cross the frame."
         )
         
         # Frame skip rate for performance
@@ -255,12 +255,12 @@ def main():
         with st.expander("😕 Missing satellites?"):
             st.markdown("""
             **If satellites are not being detected:**
+            - **Increase max duration to 80-100s** (slow satellites can take 60+ seconds to cross!)
             - **Increase sensitivity to 6-7** (detects smaller, dimmer objects)
             - **Decrease min duration to 1.0-1.5s** (catches brief passes)
             - **Lower frame skip to 2-3** (processes more frames)
-            - **Increase max duration to 25-30s** (allows slower-moving satellites)
             
-            **Note:** The system is optimized to detect obvious satellite passes. Very faint or very slow satellites may still be missed to avoid false positives.
+            **Note:** Many satellites move very slowly and need 60-100 seconds to cross the frame. Max duration is the most important setting!
             """)
         
         with st.expander("🎨 Color codes?"):

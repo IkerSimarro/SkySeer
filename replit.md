@@ -8,6 +8,15 @@ SkySeer AI is an advanced computer vision and machine learning system designed f
 
 Preferred communication style: Simple, everyday language.
 
+## Recent Findings
+
+### Satellite Detection Optimization (Oct 2025)
+- **Critical Discovery**: Maximum clip duration was the primary bottleneck for satellite detection
+- **Optimal Settings**: Max duration of 80-100 seconds captures slow-moving satellites that take 60+ seconds to cross the frame
+- **Previous Issue**: Default 15s max duration was filtering out many valid satellites
+- **Detection Parameters**: varThreshold=35 (MOG2 sensitivity), min_contour_area down to 5 pixels at sensitivity=7
+- **Result**: Significantly improved detection rate for small, dim, and slow-moving satellites
+
 ## System Architecture
 
 ### Frontend Architecture
