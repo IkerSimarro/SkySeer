@@ -25,7 +25,7 @@ SkySeer AI is an intelligent video analysis tool that automatically detects and 
 - **Display:** 1920x1080 or higher recommended
 
 ### How to Run
-1. **Double-click** `launcher.exe` to launch the application
+1. **Double-click** `launcher.exe` inside the dist folder to launch the application
 2. Your default web browser will open automatically to the SkySeer interface
 3. If the browser doesn't open, manually navigate to: `http://localhost:5000`
 
