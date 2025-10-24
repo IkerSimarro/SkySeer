@@ -3,3 +3,6 @@
 /temp_uploads/140[[:space:]]mins[[:space:]]unedited.mp4 filter=lfs diff=lfs merge=lfs -text
 /temp_uploads/My[[:space:]]Video.mp4 filter=lfs diff=lfs merge=lfs -text
 /processed_clips/clip_0001_clean.mp4 filter=lfs diff=lfs merge=lfs -text
+/dist/processed_clips/clip_0001.mp4 filter=lfs diff=lfs merge=lfs -text
+/dist/processed_clips/clip_0001_clean.mp4 filter=lfs diff=lfs merge=lfs -text
+/dist/temp_uploads/My[[:space:]]Video.mp4 filter=lfs diff=lfs merge=lfs -text
