@@ -39,7 +39,7 @@ The system autonomously classifies objects based on their flight behavior.
 
 | **Satellite Detection (Class 0)** | **Meteor Detection (Class 1)** |
 |:---:|:---:|
-| <img src="Screenshots/23.png" width="100%"> | <img src="Screenshots/24.png" width="100%"> |
+| <img src="Screenshots/23.png" width="100%"> | <img src="Screenshots/25.png" width="100%"> |
 | **Characteristics:** High linearity ($R^2 > 0.95$), Constant Velocity, Long Duration. | **Characteristics:** High velocity spike, Short duration, Brightness flare. |
 
 ---
@@ -72,12 +72,12 @@ Instead of relying on a labeled dataset (which is scarce for night sky objects),
 ---
 
 ## 💻 Software Interface
-The engine is wrapped in a **Streamlit** dashboard, allowing for drag-and-drop video processing, real-time parameter tuning, and data visualization.
+SkySeer features a comprehensive **Streamlit Dashboard** that gives users full control over the computer vision pipeline.
 
-<div align="center">
-  <img src="Screenshots/1.png" alt="SkySeer Interface" width="85%">
-  <p><i>The SkySeer Dashboard: Upload, Process, and Analyze.</i></p>
-</div>
+| **Main Dashboard** | **Analysis View** |
+|:---:|:---:|
+| <img src="Screenshots/3.png" width="100%"> | <img src="Screenshots/4.png" width="100%"> |
+| *Intuitive Drag-and-Drop Video Upload* | *Real-time Processing Status & Logs* |
 
 ---
 
