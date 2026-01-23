@@ -12,112 +12,67 @@
 <br>
 
 <p align="center">
-  <b>SkySeer</b> is a computer vision engine that turns raw night-sky footage into actionable data.<br>
-  It autonomously filters static stars, isolates moving objects, and classifies them into <b>Satellites</b>, <b>Meteors</b>, or <b>Noise</b> using unsupervised learning.
+  <b>SkySeer</b> uses Computer Vision to turn hours of raw night-sky footage into actionable data.<br>
+  It autonomously isolates movement, calculates flight kinematics, and classifies objects without human supervision.
 </p>
 
 </div>
 
 ---
 
-## 🚀 1. The Engineering Problem
-Amateur astronomers record terabytes of footage, but 99% of it is empty sky. Manual analysis is tedious, and standard motion detectors fail because they cannot distinguish between specific celestial objects.
+## 🚀 The Engineering Pipeline
+We process raw video through a 3-stage pipeline.
 
-**SkySeer** solves this with a custom 3-stage pipeline.
-
-<div align="center">
-  <img src="Screenshots/3.png" width="80%">
-  <p><i>The automated processing pipeline: Motion -> Features -> Classification.</i></p>
-</div>
+| **System Architecture** | **The Problem** |
+|:---:|:---|
+| <img src="Screenshots/3.png" width="100%"> | Amateur astronomers record terabytes of footage, but 99% of it is empty sky.<br><br><b>SkySeer</b> filters out the static stars and only captures independent movement, reducing 10 hours of video to a 2-minute "Highlights" reel of Satellites and Meteors. |
 
 ---
 
-## ⚙️ 2. System Configuration & Upload
-The application provides a drag-and-drop interface for processing video files (MP4, AVI, MKV).
+## 🛠️ Step-by-Step Logic
+Here is exactly how the Computer Vision engine works, step-by-step.
 
-| **Upload Interface** | **Processing Status** |
+| **Step 1: Motion Isolation** | **Step 2: Feature Extraction** |
 |:---:|:---:|
-| <img src="Screenshots/1.png" width="100%"> | <img src="Screenshots/2.png" width="100%"> |
-| *Simple drag-and-drop entry point.* | *Real-time feedback on the analysis pipeline.* |
+| <img src="Screenshots/4.png" width="100%"> | <img src="Screenshots/5.png" width="100%"> |
+| We use **Mixture of Gaussians (MOG2)** to subtract the static background stars. | For every moving object, we calculate a **Velocity Vector** $(\Delta x, \Delta y)$ and **Linearity Score** ($R^2$). |
 
----
-
-## 🛠️ 3. The Engineering Pipeline (Deep Dive)
-
-### Step 1: Motion Isolation (Background Modeling)
-We use **MOG2 (Mixture of Gaussians)** to model the static star field. This allows the system to "subtract" the sky and only focus on independent movement.
-* **Sensitivity:** Controls the threshold for pixel variance.
-* **Frame Skip:** Accelerates processing for 4K/long-exposure footage.
-
-<div align="center">
-  <img src="Screenshots/4.png" width="85%">
-  <p><i>Configuring the Motion Detection Engine.</i></p>
-</div>
-
-### Step 2: Feature Extraction (Kinematics)
-Once an object is tracked, we extract its **Flight Signature**.
-* **Velocity Vector:** Speed ($\Delta x, \Delta y$) per frame.
-* **Linearity ($R^2$):** How straight the path is (Satellites $\approx$ 1.0).
-* **Duration:** How long the object persists.
-
-<div align="center">
-  <img src="Screenshots/5.png" width="85%">
-  <p><i>Extracting kinematic features from raw contours.</i></p>
-</div>
-
-### Step 3: Unsupervised Classification
-Instead of labeled training data, we use **K-Means Clustering** to group objects based on their kinematic features.
-* **Satellites:** High linearity, constant speed.
-* **Meteors:** High speed, short duration, brightness flares.
-
-<div align="center">
-  <img src="Screenshots/6.png" width="85%">
-  <p><i>The Machine Learning classification logic.</i></p>
-</div>
-
----
-
-## 🎛️ 4. Fine-Tuning & Optimization
-Night sky footage varies wildly (light pollution, clouds, sensor noise). SkySeer allows for granular control over the computer vision thresholds to reduce false positives.
-
-| **Detection Settings** | **Advanced Filters** |
+| **Step 3: ML Classification** | **Step 4: Output Generation** |
 |:---:|:---:|
-| <img src="Screenshots/8.png" width="100%"> | <img src="Screenshots/9.png" width="100%"> |
-| *Adjusting minimum object area and duration.* | *Filtering out wind shake and cloud noise.* |
+| <img src="Screenshots/6.png" width="100%"> | <img src="Screenshots/22.png" width="100%"> |
+| **K-Means Clustering** groups objects by behavior (Speed vs. Duration) to label them. | The system generates a CSV manifest and a 10x speed timelapse. |
 
 ---
 
-## 📸 5. Detection Results
+## 🎛️ Configuration & Tuning
+SkySeer allows for granular control over the detection thresholds to handle different weather conditions.
 
-The system outputs a processed video with color-coded bounding boxes and a detailed CSV manifest.
+| **Upload & Status** | **Sensitivity Tuning** |
+|:---:|:---:|
+| <img src="Screenshots/2.png" width="100%"> | <img src="Screenshots/8.png" width="100%"> |
+| *Real-time processing logs.* | *Adjusting the pixel threshold.* |
 
-### 🔴 Satellite Detection (Class 0)
-Identified by **Linear Trajectory** and **Sustained Velocity**. Note the red bounding box and the ID tag.
+| **Frame Skipping** | **Advanced Filters** |
+|:---:|:---:|
+| <img src="Screenshots/7.png" width="100%"> | <img src="Screenshots/9.png" width="100%"> |
+| *Optimizing for 4K footage.* | *Filtering wind/cloud noise.* |
 
-<div align="center">
-  <img src="Screenshots/23.png" width="90%">
-</div>
+---
 
-### 🟡 Meteor Detection (Class 1)
-Identified by **High Velocity** and **Transient Duration**. Note the yellow bounding box distinguishing it from the satellite.
+## 📸 Detection Results
 
-<div align="center">
-  <img src="Screenshots/24.png" width="90%">
-</div>
+The system autonomously classifies objects based on their flight behavior.
 
-### 📊 Data Export
-SkySeer generates a folder containing the sped-up video (10x) and a CSV report for scientific analysis.
-
-<div align="center">
-  <img src="Screenshots/22.png" width="80%">
-  <p><i>The final output manifest containing object IDs, timestamps, and classifications.</i></p>
-</div>
+| **🔴 Satellite Detection (Class 0)** | **🟡 Meteor Detection (Class 1)** |
+|:---:|:---:|
+| <img src="Screenshots/23.png" width="100%"> | <img src="Screenshots/25.png" width="100%"> |
+| **Characteristics:**<br>• High Linearity ($R^2 > 0.95$)<br>• Constant Velocity<br>• Long Duration | **Characteristics:**<br>• High Velocity Spike<br>• Transient Duration<br>• Brightness Flare |
 
 ---
 
 ## 💻 Installation & Usage
 
-### 1. Clone the Repository
+### 1. Clone the Repo
 ```bash
 git clone [https://github.com/IkerSimarro/SkySeer.git](https://github.com/IkerSimarro/SkySeer.git)
 cd SkySeer
