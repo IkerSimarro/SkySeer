@@ -5,7 +5,6 @@
 
 [![Python](https://img.shields.io/badge/Python-3.9%2B-blue?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
 [![OpenCV](https://img.shields.io/badge/OpenCV-Computer%20Vision-green?style=for-the-badge&logo=opencv&logoColor=white)](https://opencv.org/)
-[![Scikit-Learn](https://img.shields.io/badge/Scikit_Learn-Machine_Learning-orange?style=for-the-badge&logo=scikit-learn&logoColor=white)](https://scikit-learn.org/)
 [![Streamlit](https://img.shields.io/badge/Streamlit-UI-red?style=for-the-badge&logo=streamlit&logoColor=white)](https://streamlit.io/)
 
 <br>
@@ -13,89 +12,110 @@
 <br>
 
 <p align="center">
-  <b>SkySeer</b> is a computer vision pipeline designed to automate the analysis of night-sky footage.<br>
-  It solves the "Empty Sky Problem" by filtering 99% of static frames and classifying the remaining 1% of motion into <b>Satellites</b>, <b>Meteors</b>, or <b>Noise</b> using unsupervised learning.
+  <b>SkySeer</b> is a computer vision engine that turns raw night-sky footage into actionable data.<br>
+  It autonomously filters static stars, isolates moving objects, and classifies them into <b>Satellites</b>, <b>Meteors</b>, or <b>Noise</b> using unsupervised learning.
 </p>
-
-[View Demo](#-detection-results) • [Read the Logic](#-the-engineering-pipeline) • [Install](#-installation--usage)
 
 </div>
 
 ---
 
-## 🚀 The Engineering Problem
-Amateur astronomers and UAP researchers record terabytes of footage, but manual analysis is impossible. Standard motion detectors (like security cameras) fail in astrophotography because they cannot distinguish between:
-* **Satellites:** Linear trajectory, constant velocity, sustained duration.
-* **Meteors:** Transient, high-velocity bursts, variable brightness.
-* **Sensor Noise:** Wind shake, cloud drift, or grain.
+## 🚀 1. The Engineering Problem
+Amateur astronomers record terabytes of footage, but 99% of it is empty sky. Manual analysis is tedious, and standard motion detectors fail because they cannot distinguish between specific celestial objects.
 
-**SkySeer** solves this by extracting **Kinematic Signatures** (Velocity, Linearity, Duration) from raw pixels and clustering them in a high-dimensional feature space.
+**SkySeer** solves this with a custom 3-stage pipeline.
+
+<div align="center">
+  <img src="Screenshots/3.png" width="80%">
+  <p><i>The automated processing pipeline: Motion -> Features -> Classification.</i></p>
+</div>
 
 ---
 
-## 📸 Detection Results
+## ⚙️ 2. System Configuration & Upload
+The application provides a drag-and-drop interface for processing video files (MP4, AVI, MKV).
 
-The system autonomously classifies objects based on their flight behavior.
-
-| **Satellite Detection (Class 0)** | **Meteor Detection (Class 1)** |
+| **Upload Interface** | **Processing Status** |
 |:---:|:---:|
-| <img src="Screenshots/23.png" width="100%"> | <img src="Screenshots/25.png" width="100%"> |
-| **Characteristics:** High linearity ($R^2 > 0.95$), Constant Velocity, Long Duration. | **Characteristics:** High velocity spike, Short duration, Brightness flare. |
+| <img src="Screenshots/1.png" width="100%"> | <img src="Screenshots/2.png" width="100%"> |
+| *Simple drag-and-drop entry point.* | *Real-time feedback on the analysis pipeline.* |
 
 ---
 
-## 🛠️ The Engineering Pipeline
+## 🛠️ 3. The Engineering Pipeline (Deep Dive)
 
-SkySeer processes video in three distinct mathematical stages:
+### Step 1: Motion Isolation (Background Modeling)
+We use **MOG2 (Mixture of Gaussians)** to model the static star field. This allows the system to "subtract" the sky and only focus on independent movement.
+* **Sensitivity:** Controls the threshold for pixel variance.
+* **Frame Skip:** Accelerates processing for 4K/long-exposure footage.
 
-### 1. Motion Isolation (Background Modeling)
-We utilize a **Mixture of Gaussians (MOG2)** background subtractor to model the static star field.
-* **Star Removal:** The system learns the "static" background over $N$ frames.
-* **Noise Filtering:** Morphological operations (Erosion/Dilation) remove single-pixel sensor noise.
+<div align="center">
+  <img src="Screenshots/4.png" width="85%">
+  <p><i>Configuring the Motion Detection Engine.</i></p>
+</div>
 
-### 2. Kinematic Feature Extraction
-Once a contour is tracked, we extract physics-based features to define its identity. For a set of centroids $C = \{(x_1, y_1), ..., (x_n, y_n)\}$, we calculate:
+### Step 2: Feature Extraction (Kinematics)
+Once an object is tracked, we extract its **Flight Signature**.
+* **Velocity Vector:** Speed ($\Delta x, \Delta y$) per frame.
+* **Linearity ($R^2$):** How straight the path is (Satellites $\approx$ 1.0).
+* **Duration:** How long the object persists.
 
-**A. Velocity Vector:**
-$$v = \frac{\sqrt{(x_i - x_{i-1})^2 + (y_i - y_{i-1})^2}}{\Delta t}$$
+<div align="center">
+  <img src="Screenshots/5.png" width="85%">
+  <p><i>Extracting kinematic features from raw contours.</i></p>
+</div>
 
-**B. Trajectory Linearity ($R^2$):**
-We fit a linear regression model to the path. Satellites approach $R^2 \approx 1.0$, while insects/birds/noise show lower linearity.
+### Step 3: Unsupervised Classification
+Instead of labeled training data, we use **K-Means Clustering** to group objects based on their kinematic features.
+* **Satellites:** High linearity, constant speed.
+* **Meteors:** High speed, short duration, brightness flares.
 
-### 3. Unsupervised Classification (K-Means)
-Instead of relying on a labeled dataset (which is scarce for night sky objects), SkySeer uses **K-Means Clustering ($k=3$)** to group objects dynamically.
-
-* **Cluster 0 (Satellites):** Low variance in velocity, high linearity.
-* **Cluster 1 (Meteors):** High variance in velocity, short duration.
-* **Cluster 2 (Noise):** Discarded based on erratic trajectory.
+<div align="center">
+  <img src="Screenshots/6.png" width="85%">
+  <p><i>The Machine Learning classification logic.</i></p>
+</div>
 
 ---
 
-## 💻 Software Interface
-SkySeer features a comprehensive **Streamlit Dashboard** that gives users full control over the computer vision pipeline.
+## 🎛️ 4. Fine-Tuning & Optimization
+Night sky footage varies wildly (light pollution, clouds, sensor noise). SkySeer allows for granular control over the computer vision thresholds to reduce false positives.
 
-| **Main Dashboard** | **Analysis View** |
+| **Detection Settings** | **Advanced Filters** |
 |:---:|:---:|
-| <img src="Screenshots/3.png" width="100%"> | <img src="Screenshots/4.png" width="100%"> |
-| *Intuitive Drag-and-Drop Video Upload* | *Real-time Processing Status & Logs* |
+| <img src="Screenshots/8.png" width="100%"> | <img src="Screenshots/9.png" width="100%"> |
+| *Adjusting minimum object area and duration.* | *Filtering out wind shake and cloud noise.* |
 
 ---
 
-## 📊 Data Output
-Beyond visual bounding boxes, SkySeer generates a scientific manifest (`analysis_report.csv`) containing:
-* **Timestamp:** Exact frame of entry/exit.
-* **Object ID:** Unique tracking identifier.
-* **Classification:** Satellite vs. Meteor.
-* **Confidence Score:** Distance from the cluster centroid.
-* **Velocity Profile:** Avg speed (px/frame).
+## 📸 5. Detection Results
+
+The system outputs a processed video with color-coded bounding boxes and a detailed CSV manifest.
+
+### 🔴 Satellite Detection (Class 0)
+Identified by **Linear Trajectory** and **Sustained Velocity**. Note the red bounding box and the ID tag.
+
+<div align="center">
+  <img src="Screenshots/23.png" width="90%">
+</div>
+
+### 🟡 Meteor Detection (Class 1)
+Identified by **High Velocity** and **Transient Duration**. Note the yellow bounding box distinguishing it from the satellite.
+
+<div align="center">
+  <img src="Screenshots/24.png" width="90%">
+</div>
+
+### 📊 Data Export
+SkySeer generates a folder containing the sped-up video (10x) and a CSV report for scientific analysis.
+
+<div align="center">
+  <img src="Screenshots/22.png" width="80%">
+  <p><i>The final output manifest containing object IDs, timestamps, and classifications.</i></p>
+</div>
 
 ---
 
 ## 💻 Installation & Usage
-
-### Prerequisites
-* Python 3.8+
-* OpenCV (`opencv-python`)
 
 ### 1. Clone the Repository
 ```bash
