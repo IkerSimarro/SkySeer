@@ -5,6 +5,7 @@
 
 [![Python](https://img.shields.io/badge/Python-3.9%2B-blue?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
 [![OpenCV](https://img.shields.io/badge/OpenCV-Computer%20Vision-green?style=for-the-badge&logo=opencv&logoColor=white)](https://opencv.org/)
+[![Scikit-Learn](https://img.shields.io/badge/Scikit_Learn-Machine_Learning-orange?style=for-the-badge&logo=scikit-learn&logoColor=white)](https://scikit-learn.org/)
 [![Streamlit](https://img.shields.io/badge/Streamlit-UI-red?style=for-the-badge&logo=streamlit&logoColor=white)](https://streamlit.io/)
 
 <br>
@@ -20,53 +21,68 @@
 
 ---
 
-## 🚀 The Engineering Pipeline
-We process raw video through a 3-stage pipeline.
+## 🔬 Technical Architecture
+SkySeer operates on a custom **3-Stage Pipeline** that transforms raw pixels into classified astronomical events.
 
-| **System Architecture** | **The Problem** |
-|:---:|:---|
-| <img src="Screenshots/3.png" width="100%"> | Amateur astronomers record terabytes of footage, but 99% of it is empty sky.<br><br><b>SkySeer</b> filters out the static stars and only captures independent movement, reducing 10 hours of video to a 2-minute "Highlights" reel of Satellites and Meteors. |
+### 1. Motion Isolation (Computer Vision)
+We accept raw video (4K/1080p) and process it using **Mixture of Gaussians (MOG2)** background subtraction.
+* **Algorithm:** `cv2.createBackgroundSubtractorMOG2`
+* **Parameters:** Adaptive variance threshold (45), History (500 frames).
+* **Noise Reduction:** Morphological Opening/Closing to remove sensor grain.
 
----
+<div align="center">
+  <img src="Screenshots/4.png" width="90%">
+  <p><i>The pipeline filters 99% of empty sky frames, passing only active contours to the next stage.</i></p>
+</div>
 
-## 🛠️ Step-by-Step Logic
-Here is exactly how the Computer Vision engine works, step-by-step.
+### 2. Kinematic Feature Extraction
+Every tracked object is transformed into an **11-Dimensional Feature Vector**. We don't just look at the image; we look at the *physics* of the flight path.
 
-| **Step 1: Motion Isolation** | **Step 2: Feature Extraction** |
-|:---:|:---:|
-| <img src="Screenshots/4.png" width="100%"> | <img src="Screenshots/5.png" width="100%"> |
-| We use **Mixture of Gaussians (MOG2)** to subtract the static background stars. | For every moving object, we calculate a **Velocity Vector** $(\Delta x, \Delta y)$ and **Linearity Score** ($R^2$). |
+| **Core Features** | **Visualized Data** |
+|:---|:---:|
+| • **Velocity:** Avg speed ($px/frame$) and Acceleration.<br>• **Linearity ($R^2$):** How straight the trajectory is.<br>• **Consistency:** Standard deviation of speed.<br>• **Blinking Score:** Detects periodic flashing (planes).<br>• **Duration:** Total time on screen. | <img src="Screenshots/13.png" width="100%"><br><i>Linear Regression analysis calculating the RMSE of a satellite trajectory ($R^2 \approx 0.99$).</i> |
 
-| **Step 3: ML Classification** | **Step 4: Output Generation** |
-|:---:|:---:|
-| <img src="Screenshots/6.png" width="100%"> | <img src="Screenshots/22.png" width="100%"> |
-| **K-Means Clustering** groups objects by behavior (Speed vs. Duration) to label them. | The system generates a CSV manifest and a 10x speed timelapse. |
+### 3. Unsupervised Classification (Machine Learning)
+Instead of relying on labeled datasets (which are scarce for night sky objects), SkySeer uses **K-Means Clustering** to separate objects based on their kinematic signatures.
 
----
+* **Scaling:** All 11 features are normalized using `StandardScaler`.
+* **Clustering:** Objects group naturally into two distinct classes:
+    * **Satellites:** High Linearity, Low Speed Variance, Long Duration.
+    * **Meteors:** High Velocity, High Burst Brightness, Short Duration.
 
-## 🎛️ Configuration & Tuning
-SkySeer allows for granular control over the detection thresholds to handle different weather conditions.
-
-| **Upload & Status** | **Sensitivity Tuning** |
-|:---:|:---:|
-| <img src="Screenshots/2.png" width="100%"> | <img src="Screenshots/8.png" width="100%"> |
-| *Real-time processing logs.* | *Adjusting the pixel threshold.* |
-
-| **Frame Skipping** | **Advanced Filters** |
-|:---:|:---:|
-| <img src="Screenshots/7.png" width="100%"> | <img src="Screenshots/9.png" width="100%"> |
-| *Optimizing for 4K footage.* | *Filtering wind/cloud noise.* |
+<div align="center">
+  <img src="Screenshots/16.png" width="90%">
+  <p><i>Feature Distribution Analysis: Notice the clear separation in "Duration" and "Speed" between Satellites (Dark Blue) and Noise (Light Blue).</i></p>
+</div>
 
 ---
 
 ## 📸 Detection Results
 
-The system autonomously classifies objects based on their flight behavior.
+The system outputs a processed video with color-coded bounding boxes and valid confidence scores.
 
-| **🔴 Satellite Detection (Class 0)** | **🟡 Meteor Detection (Class 1)** |
+| **🔴 Satellite Detection** | **🟡 Meteor Detection** |
 |:---:|:---:|
 | <img src="Screenshots/23.png" width="100%"> | <img src="Screenshots/25.png" width="100%"> |
-| **Characteristics:**<br>• High Linearity ($R^2 > 0.95$)<br>• Constant Velocity<br>• Long Duration | **Characteristics:**<br>• High Velocity Spike<br>• Transient Duration<br>• Brightness Flare |
+| **Class 0 Characteristics:**<br>• High Linearity ($R^2 > 0.95$)<br>• Constant Velocity<br>• Long Duration (>3s) | **Class 1 Characteristics:**<br>• High Velocity Spike<br>• Transient Duration (<2s)<br>• Brightness Flare |
+
+---
+
+## 📊 Data Visualization
+SkySeer provides an interactive dashboard to analyze the night's traffic.
+
+| **Speed Heatmaps** | **Classification Breakdown** |
+|:---:|:---:|
+| <img src="Screenshots/8.png" width="100%"> | <img src="Screenshots/5.png" width="100%"> |
+| *Visualizing traffic lanes and velocity hotspots.* | *Quantifying the ratio of Satellites vs. Junk/Noise.* |
+
+---
+
+## ⚙️ Configuration & Output
+
+| **Fine-Tuning Controls** | **Data Export** |
+|:---|:---|
+| <img src="Screenshots/3.png" width="200"> | <img src="Screenshots/20.png" width="100%"><br><br><b>The Output Package:</b><br>SkySeer generates a comprehensive mission folder containing:<br>• `Satellite_detections.mp4` (10x Speed)<br>• `analysis_report.csv` (Scientific Data)<br>• `SUMMARY.txt` (Quick Stats) |
 
 ---
 
