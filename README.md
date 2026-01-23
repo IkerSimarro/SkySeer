@@ -86,13 +86,6 @@ SkySeer provides an interactive dashboard to analyze the night's traffic.
 
 ---
 
-## 💻 Installation & Usage
-
-### 1. Clone the Repo
-```bash
-git clone [https://github.com/IkerSimarro/SkySeer.git](https://github.com/IkerSimarro/SkySeer.git)
-cd SkySeer
-
 📂 Project Structure
 SkySeer/
 ├── src/
@@ -110,3 +103,13 @@ Iker Simarro Cuevas
 Focus: Computer Vision, Signal Processing, Scientific ML
 
 https://www.linkedin.com/in/iker-simarro-546169227/
+
+---
+
+## 💻 Installation & Usage
+
+### 1. Clone the Repo
+```bash
+git clone [https://github.com/IkerSimarro/SkySeer.git](https://github.com/IkerSimarro/SkySeer.git)
+cd SkySeer
+
