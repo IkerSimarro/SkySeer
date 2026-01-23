@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🌌 SkySeer: Autonomous Night Sky Surveillance
+# 🌌 SkySeer: Autonomous Night Sky Processing
 ### AI-Powered Detection for Satellites, Meteors, and UAP
 
 [![Python](https://img.shields.io/badge/Python-3.9%2B-blue?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
