@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🌌 SkySeer: Autonomous Night Sky Processing
+# SkySeer: Autonomous Night Sky Processing
 ### AI-Powered Detection for Satellites, Meteors, and UAP
 
 [![Python](https://img.shields.io/badge/Python-3.9%2B-blue?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
@@ -21,7 +21,7 @@
 
 ---
 
-## 🔬 Technical Architecture
+## Technical Architecture
 SkySeer operates on a custom **3-Stage Pipeline** that transforms raw pixels into classified astronomical events.
 
 ### 1. Motion Isolation (Computer Vision)
@@ -57,7 +57,7 @@ Instead of relying on labeled datasets (which are scarce for night sky objects),
 
 ---
 
-## 📸 Detection Results
+## Detection Results
 
 The system outputs a processed video with color-coded bounding boxes and valid confidence scores.
 
@@ -68,7 +68,7 @@ The system outputs a processed video with color-coded bounding boxes and valid c
 
 ---
 
-## 📊 Data Visualization
+## Data Visualization
 SkySeer provides an interactive dashboard to analyze the night's traffic.
 
 | **Speed Heatmaps** | **Classification Breakdown** |
@@ -78,7 +78,7 @@ SkySeer provides an interactive dashboard to analyze the night's traffic.
 
 ---
 
-## ⚙️ Configuration & Output
+## Configuration & Output
 
 | **Fine-Tuning Controls** | **Data Export** |
 |:---|:---|
@@ -86,7 +86,7 @@ SkySeer provides an interactive dashboard to analyze the night's traffic.
 
 ---
 
-📂 Project Structure
+ Project Structure
 SkySeer/
 ├── src/
 │   ├── motion_engine.py    # Core MOG2 Logic
@@ -97,7 +97,7 @@ SkySeer/
 ├── requirements.txt        # Dependencies
 └── README.md               # Documentation
 
-👨‍💻 Author
+ Author
 Iker Simarro Cuevas
 
 Focus: Computer Vision, Signal Processing, Scientific ML
@@ -106,7 +106,7 @@ https://www.linkedin.com/in/iker-simarro-546169227/
 
 ---
 
-## 💻 Installation & Usage
+## Installation & Usage
 
 ### 1. Clone the Repo
 ```bash
