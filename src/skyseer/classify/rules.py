@@ -1,0 +1,88 @@
+"""Heuristic baseline classifier.
+
+Each class gets a hand-designed score from the track features; the highest wins. The
+``confidence`` is the winning score's share of all scores. It expresses how clearly one
+rule dominates, **not** a calibrated probability. It is kept as a transparent baseline
+to compare the learned model against.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+from ..config import RulesConfig
+from ..models import ObjectClass
+
+
+@dataclass(slots=True)
+class Classification:
+    label: ObjectClass
+    confidence: float
+    scores: dict[str, float]
+
+
+def _band(value: float, bands: list[tuple[float, float]], above: float) -> float:
+    """Piecewise-constant factor: the first (upper_bound, factor) whose bound exceeds value."""
+    for upper, factor in bands:
+        if value < upper:
+            return factor
+    return above
+
+
+class RuleClassifier:
+    def __init__(self, config: RulesConfig):
+        self.config = config
+
+    def scores(self, f: dict[str, float]) -> dict[str, float]:
+        c = self.config
+        duration, speed, linearity = f["duration"], f["avg_speed"], f["linearity"]
+        steady = f["size_consistency"] * f["brightness_consistency"]
+
+        # Satellite: steady speed, straight line, constant size and brightness, 3-18 s pass.
+        satellite = (
+            f["speed_consistency"]
+            * linearity
+            * steady
+            * _band(duration, c.satellite_duration_bands, c.satellite_long_factor)
+        )
+
+        # Meteor: fast, straight, brief, often bright.
+        speed_factor = min(speed / c.meteor_reference_speed, 3.0)
+        brief = 1.0 / max(duration, 0.1) if duration < c.meteor_max_duration else 0.3
+        bright = 1.0 + min(f["max_brightness"] / 255.0, 0.5)
+        meteor = speed_factor * linearity * brief * bright
+
+        # Plane: steady and long-lived, with blinking navigation lights.
+        blink = f["blinking_score"]
+        penalty = 0.65 if steady > 0.6 and blink < c.blink_change_threshold else 1.0
+        plane = (
+            f["speed_consistency"]
+            * linearity
+            * _band(duration, c.plane_duration_bands, c.plane_long_factor)
+            * (1.0 + min(blink * 0.8, 0.8))
+            * penalty
+        )
+
+        junk = c.junk_base_score
+        if speed < c.stationary_speed:
+            junk *= 5.0  # hot pixels, twinkling stars, stationary noise
+        elif speed > c.meteor_reference_speed and linearity > 0.85 and duration < 1.5:
+            meteor *= 1.8
+        elif f["speed_consistency"] < 0.3 or linearity < 0.3:
+            junk *= 1.5
+
+        return {
+            ObjectClass.SATELLITE: satellite,
+            ObjectClass.METEOR: meteor,
+            ObjectClass.PLANE: plane,
+            ObjectClass.JUNK: junk,
+        }
+
+    def classify(self, features: dict[str, float]) -> Classification:
+        scores = self.scores(features)
+        label = max(scores, key=lambda k: scores[k])
+        total = sum(scores.values())
+        confidence = scores[label] / total if total > 0 else 0.0
+        return Classification(
+            ObjectClass(label), confidence, {str(k): v for k, v in scores.items()}
+        )

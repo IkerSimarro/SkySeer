@@ -1,0 +1,49 @@
+# SkySeer default configuration.
+# Every value here is also the built-in default; copy this file and change only what you
+# need, then run e.g.  skyseer analyze video.mp4 --config my.yaml
+# Units: pixels are full-resolution image pixels, "frame" means a source video frame.
+
+pipeline:
+  frame_skip: 1               # process every Nth frame (2-3 speeds up long videos)
+
+detector:
+  sensitivity: 5              # 1-10; higher finds fainter, smaller blobs (and more noise)
+  process_scale: 1.0          # downscale before detection, e.g. 0.5 on a Raspberry Pi
+  mog2_history: 500           # frames of background memory
+  mog2_var_threshold: 35.0    # lower = more sensitive to dim changes
+  blur_kernel: 5
+  morph_kernel: 3
+  max_area_fraction: 0.01     # ignore blobs bigger than 1% of the frame (clouds, headlights)
+
+tracker:
+  max_distance: 60.0          # px between predicted position and a detection
+  new_track_distance: 150.0   # px gate for a track's second point (velocity still unknown)
+  max_missed_seconds: 1.0     # a track ends after this long unseen
+  process_noise: 1.0          # Kalman: how much objects may accelerate
+  measurement_noise: 2.0      # Kalman: centroid jitter in px
+
+filter:
+  min_duration: 0.3           # seconds
+  max_duration: null          # seconds, null = no limit
+  min_detections: 3
+
+star_filter:                  # tracks drifting in lockstep are background stars
+  enabled: true
+  min_group_size: 4
+  velocity_tolerance: 0.1     # relative speed difference
+  direction_tolerance_deg: 10.0
+  min_temporal_overlap: 0.5
+  max_spatial_distance: 500.0
+  min_speed: 0.01
+
+rules:                        # heuristic baseline classifier
+  meteor_reference_speed: 30.0      # px/frame considered "fast"
+  meteor_max_duration: 3.0          # s
+  satellite_duration_bands: [[3, 0.6], [18, 1.2], [25, 0.85]]   # [upper_s, factor]
+  satellite_long_factor: 0.65
+  plane_duration_bands: [[10, 0.4], [15, 0.8]]
+  plane_long_factor: 1.1
+  blink_change_threshold: 0.15
+  direction_change_deg: 30.0
+  junk_base_score: 0.1
+  stationary_speed: 0.5             # px/frame; slower tracks are noise or stars
