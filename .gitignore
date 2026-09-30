@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Build output
+/build/
+/dist/*.exe
+*.spec
+web/node_modules/
+web/dist/
+src/skyseer/api/static/
+
+# Runtime data (videos, clips, databases, caches)
+data/
+samples/
+*.mp4
+*.avi
+*.mov
+*.mkv
+*.db
+*.sqlite
+dist/processed_clips/
+dist/temp_uploads/
+
+# Editors / OS / tooling
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.lnk
+.local/
+.replit
+replit.nix
