@@ -47,6 +47,8 @@ class FileSource:
                 seconds=self.frame_count / self.fps
             )
             log.info("No start time given; assuming %s from file mtime", start_time.isoformat())
+        elif start_time.tzinfo is None:
+            start_time = start_time.replace(tzinfo=UTC)  # naive times are taken as UTC
         self.start_time = start_time.astimezone(UTC)
 
     def __iter__(self) -> Iterator[Frame]:

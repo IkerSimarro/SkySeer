@@ -1,4 +1,4 @@
-"""Command-line interface: ``skyseer analyze``, ``skyseer live``, ``skyseer synth``."""
+"""Command-line interface: ``skyseer analyze | calibrate | live | synth | bench``."""
 
 from __future__ import annotations
 
@@ -6,10 +6,11 @@ import csv
 import json
 import logging
 from collections import Counter
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated
 
+import numpy as np
 import typer
 from rich.console import Console
 from rich.logging import RichHandler
@@ -233,6 +234,118 @@ def bench(
         f"Classification accuracy: {total.accuracy:.1%}  False positives: {total.false_positives}"
     )
     console.print(f"Throughput: {frames / elapsed:.1f} frames/s ({frames} frames)")
+
+
+@app.command()
+def calibrate(
+    source: Annotated[
+        Path, typer.Argument(exists=True, dir_okay=False, help="Night-sky video or photo")
+    ],
+    out: Annotated[Path | None, typer.Option("--out", "-o", help="Output directory")] = None,
+    config: ConfigOpt = None,
+    time: Annotated[
+        datetime | None,
+        typer.Option(
+            "--time", help="UTC time of the recording start / photo (e.g. 2026-10-07T21:30:00)"
+        ),
+    ] = None,
+    lat: Annotated[float | None, typer.Option(help="Observer latitude, degrees N")] = None,
+    lon: Annotated[float | None, typer.Option(help="Observer longitude, degrees E")] = None,
+    elevation: Annotated[float | None, typer.Option(help="Observer elevation, metres")] = None,
+    fov: Annotated[float | None, typer.Option(help="Approx. horizontal field of view, deg")] = None,
+    at: Annotated[float, typer.Option(help="Seconds into the video to calibrate at")] = 0.0,
+    verbose: VerboseOpt = False,
+) -> None:
+    """Work out exactly where the camera points, from the stars in the image."""
+    import cv2
+
+    from .astro.calibrate import CalibrationError, load_sky_image
+    from .astro.calibrate import calibrate as solve
+    from .astro.catalog import build_database
+    from .astro.frames import Observer
+    from .astro.overlay import draw_calibration
+
+    _setup_logging(verbose)
+    cfg = load_config(config)
+    a, o = cfg.astro, cfg.observer
+    lat = o.latitude if lat is None else lat
+    lon = o.longitude if lon is None else lon
+    observer = None
+    if lat is not None and lon is not None:
+        observer = Observer(lat, lon, o.elevation_m if elevation is None else elevation)
+    else:
+        console.print(
+            "[yellow]No location given: solving sky coordinates only "
+            "(add --lat/--lon for compass direction and altitude).[/yellow]"
+        )
+    when = None if time is None else (time if time.tzinfo else time.replace(tzinfo=UTC))
+
+    data_dir = Path(a.data_dir)
+    with console.status("Preparing star database (first run downloads and builds it)..."):
+        db = build_database(a.database_min_fov, a.database_max_fov, a.database_max_mag, data_dir)
+    image, frame_time = load_sky_image(source, when, at, a.calibration_seconds)
+    try:
+        with console.status("Recognising stars..."):
+            cal = solve(
+                image,
+                frame_time,
+                observer,
+                fov_estimate=fov or a.fov_estimate,
+                fov_max_error=a.fov_tolerance if (fov or a.fov_estimate) else None,
+                database=db,
+            )
+    except CalibrationError as e:
+        console.print(f"[red]Calibration failed:[/red] {e}")
+        raise typer.Exit(1) from e
+
+    out_dir = out or Path("data/calibrations") / f"{source.stem}_{datetime.now():%Y%m%d_%H%M%S}"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    cal.save(out_dir / "calibration.json")
+    cv2.imwrite(
+        str(out_dir / "calibration.png"),
+        draw_calibration(np.clip(image, 0, 255).astype(np.uint8), cal),
+    )
+
+    s = cal.summary()
+    table = Table(title="Camera calibration", show_header=False, title_style="bold cyan")
+    table.add_column(style="cyan")
+    table.add_column(justify="right")
+    if observer is not None:
+        table.add_row(
+            "Pointing azimuth", f"{s['pointing_az']:.2f}°  ({_compass(s['pointing_az'])})"
+        )
+        table.add_row("Pointing altitude", f"{s['pointing_alt']:.2f}°")
+        table.add_row("Image roll", f"{s['pointing_roll']:+.2f}°")
+    table.add_row("Image centre RA / Dec", f"{s['center_ra']:.3f}° / {s['center_dec']:+.3f}°")
+    table.add_row("Field of view", f"{s['fov_h']:.2f}° x {s['fov_v']:.2f}°")
+    table.add_row("Pixel scale", f'{s["pixel_scale_arcsec"]:.1f}"/px')
+    table.add_row("Lens distortion k1, k2", f"{s['distortion_k1']:+.4f}, {s['distortion_k2']:+.4f}")
+    table.add_row("Stars matched", str(s["stars_matched"]))
+    table.add_row("Residual", f'{s["rms_arcsec"]:.0f}" ({s["rms_px"]:.2f} px)')
+    console.print(table)
+    console.print(f"Saved calibration and overlay to [bold]{out_dir}[/bold]")
+
+
+def _compass(az: float) -> str:
+    points = [
+        "N",
+        "NNE",
+        "NE",
+        "ENE",
+        "E",
+        "ESE",
+        "SE",
+        "SSE",
+        "S",
+        "SSW",
+        "SW",
+        "WSW",
+        "W",
+        "WNW",
+        "NW",
+        "NNW",
+    ]
+    return points[int((az % 360) / 22.5 + 0.5) % 16]
 
 
 @app.command()

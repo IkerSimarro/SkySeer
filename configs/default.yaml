@@ -47,3 +47,18 @@ rules:                        # heuristic baseline classifier
   direction_change_deg: 30.0
   junk_base_score: 0.1
   stationary_speed: 0.5             # px/frame; slower tracks are noise or stars
+
+observer:                     # where the camera is (GPS fills this in on the station)
+  latitude: null              # degrees, north positive
+  longitude: null             # degrees, east positive
+  elevation_m: 0.0
+
+astro:                        # star-based calibration (plate solving)
+  fov_estimate: null          # approx. horizontal field of view in degrees, e.g. 55 for
+                              # the Pi HQ camera + 6 mm lens; speeds up the first solve
+  fov_tolerance: 10.0
+  calibration_seconds: 2.0    # seconds of video stacked into one clean star image
+  database_min_fov: 20.0      # range of fields of view the star database supports
+  database_max_fov: 70.0
+  database_max_mag: 6.5       # faintest catalogue stars used
+  data_dir: data/astro        # star catalogue and databases are cached here

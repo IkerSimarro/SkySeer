@@ -78,6 +78,30 @@ class RulesConfig(_Section):
     stationary_speed: float = 0.5
 
 
+class ObserverConfig(_Section):
+    """Where the camera is. Filled in by hand, or automatically from GPS on the station."""
+
+    latitude: float | None = Field(None, ge=-90, le=90, description="Degrees, north positive")
+    longitude: float | None = Field(None, ge=-180, le=180, description="Degrees, east positive")
+    elevation_m: float = 0.0
+
+    @property
+    def known(self) -> bool:
+        return self.latitude is not None and self.longitude is not None
+
+
+class AstroConfig(_Section):
+    fov_estimate: float | None = Field(
+        None, description="Approximate horizontal field of view in degrees (speeds up solving)"
+    )
+    fov_tolerance: float = 10.0
+    calibration_seconds: float = Field(2.0, description="Video stacked for a calibration")
+    database_min_fov: float = 20.0
+    database_max_fov: float = 70.0
+    database_max_mag: float = 6.5
+    data_dir: str = "data/astro"
+
+
 class PipelineConfig(_Section):
     frame_skip: int = Field(1, ge=1, description="Process every Nth frame")
 
@@ -89,6 +113,8 @@ class Config(_Section):
     filter: FilterConfig = FilterConfig()
     star_filter: StarFilterConfig = StarFilterConfig()
     rules: RulesConfig = RulesConfig()
+    observer: ObserverConfig = ObserverConfig()
+    astro: AstroConfig = AstroConfig()
 
 
 def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
