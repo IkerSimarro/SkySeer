@@ -130,6 +130,39 @@ class SatelliteIdentifier:
         runner = accepted[1] if len(accepted) > 1 else None
         return self._describe(best, runner, t_mid)
 
+    def predicted_path(
+        self, match: SatelliteMatch, times: list[datetime]
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Apparent ENU directions of a matched satellite at camera ``times``.
+
+        The measured clock offset is applied, so the prediction lines up with what the
+        camera recorded. Returns (directions (T, 3), valid (T,)).
+        """
+        idx = np.nonzero(self.catalog.norad == match.norad_id)[0]
+        true_times = [t + timedelta(seconds=match.clock_offset_s) for t in times]
+        enu, valid = self._predict(idx[:1], true_times)
+        return enu[0], valid[0] & (enu[0][:, 2] > 0)
+
+    def predicted_pixels(
+        self,
+        match: SatelliteMatch,
+        camera: Any,
+        start: datetime,
+        end: datetime,
+        margin_s: float = 10.0,
+        step_s: float = 0.25,
+    ) -> np.ndarray:
+        """(K, 2) pixel polyline of the predicted path from ``start - margin`` to
+        ``end + margin``, clipped to the image (for drawing on the video)."""
+        n = int(((end - start).total_seconds() + 2 * margin_s) / step_s) + 1
+        times = [
+            start - timedelta(seconds=margin_s) + timedelta(seconds=k * step_s) for k in range(n)
+        ]
+        enu, ok = self.predicted_path(match, times)
+        uv, front = camera.vec_to_pixel(enu)
+        keep = camera.in_image(uv, front & ok)
+        return np.asarray(uv[keep])
+
     # ------------------------------------------------------------------ steps
     def _observed_points(self, path: SkyPath) -> tuple[list[datetime], np.ndarray]:
         n = len(path.times)

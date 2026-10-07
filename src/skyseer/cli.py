@@ -34,6 +34,15 @@ app = typer.Typer(
 )
 console = Console()
 
+# Accepted time formats: seconds may have decimals; an explicit offset (+02:00) overrides UTC.
+TIME_FORMATS = [
+    "%Y-%m-%dT%H:%M:%S",
+    "%Y-%m-%dT%H:%M:%S.%f",
+    "%Y-%m-%d %H:%M:%S",
+    "%Y-%m-%d %H:%M:%S.%f",
+    "%Y-%m-%dT%H:%M:%S%z",
+    "%Y-%m-%dT%H:%M:%S.%f%z",
+]
 ConfigOpt = Annotated[Path | None, typer.Option("--config", "-c", help="YAML config file")]
 VerboseOpt = Annotated[bool, typer.Option("--verbose", "-v", help="Debug logging")]
 
@@ -247,7 +256,11 @@ def analyze(
     out: Annotated[Path | None, typer.Option("--out", "-o", help="Output directory")] = None,
     config: ConfigOpt = None,
     start_time: Annotated[
-        datetime | None, typer.Option(help="Recording start, UTC (e.g. 2026-09-30T21:15:00)")
+        datetime | None,
+        typer.Option(
+            help="Recording start, UTC unless a zone is given (2026-09-30T21:15:00.5)",
+            formats=TIME_FORMATS,
+        ),
     ] = None,
     lat: LatOpt = None,
     lon: LonOpt = None,
@@ -316,8 +329,17 @@ def analyze(
     if cal is not None:
         cal.save(out_dir / "calibration.json")
     if video_out and reported:
+        predictions = {}
+        if identifier is not None and cal is not None:
+            for e in reported:
+                if e.identification is not None:
+                    predictions[e.id] = identifier.predicted_pixels(
+                        e.identification, cal.camera, e.track.start_time, e.track.end_time
+                    )
         with console.status("Rendering annotated video..."):
-            render_annotated_video(video, reported, out_dir / "annotated.mp4")
+            render_annotated_video(
+                video, reported, out_dir / "annotated.mp4", predictions=predictions
+            )
 
     counts = Counter(str(e.label) for e in events)
     console.print(_summary(reported))
@@ -460,7 +482,9 @@ def calibrate(
     time: Annotated[
         datetime | None,
         typer.Option(
-            "--time", help="UTC time of the recording start / photo (e.g. 2026-10-07T21:30:00)"
+            "--time",
+            help="UTC time of the recording start / photo (e.g. 2026-10-07T21:30:00)",
+            formats=TIME_FORMATS,
         ),
     ] = None,
     lat: LatOpt = None,
