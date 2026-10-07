@@ -79,6 +79,7 @@ class Tracker:
         self.config = config
         self.fps = fps
         self.max_missed_frames = max(1, round(config.max_missed_seconds * fps))
+        self.tentative_missed_frames = max(1, round(config.tentative_missed_seconds * fps))
         self._active: list[_ActiveTrack] = []
         self._next_id = 1
 
@@ -89,7 +90,12 @@ class Tracker:
     def update(self, detections: list[Detection], frame_index: int) -> list[Track]:
         """Feed one processed frame's detections. Returns tracks that just finished."""
         self._associate(detections, frame_index)
-        finished = [a for a in self._active if frame_index - a.last_frame > self.max_missed_frames]
+        finished = [
+            a
+            for a in self._active
+            if frame_index - a.last_frame
+            > (self.max_missed_frames if a.hits >= 3 else self.tentative_missed_frames)
+        ]
         if finished:
             self._active = [a for a in self._active if a not in finished]
         return [a.track for a in finished]
@@ -100,17 +106,30 @@ class Tracker:
         self._active = []
         return tracks
 
+    def _gate(self, active: _ActiveTrack, frame_index: int) -> float:
+        """Matching window around a track's predicted position (px).
+
+        Before the velocity is known the window is wide. Afterwards it is tight right after
+        a detection and widens only with the gap, by the speed error the track could have
+        accumulated, so a slow object can't suddenly "jump" onto a nearby fast one and
+        a faint satellite can still be picked up again after fading for a few seconds.
+        """
+        c = self.config
+        if active.hits == 1:
+            return c.new_track_distance
+        dt = max(frame_index - active.last_frame, 1)
+        speed = float(np.hypot(*active.kf.state[2:]))
+        widen = (c.gate_velocity_floor + c.gate_velocity_tolerance * speed) * dt
+        return float(min(c.max_distance, max(c.gate_floor_px, widen)))
+
     def _associate(self, detections: list[Detection], frame_index: int) -> None:
         unmatched = set(range(len(detections)))
         if self._active and detections:
             cost = np.full((len(self._active), len(detections)), _UNMATCHABLE)
             det_xy = np.array([(d.x, d.y) for d in detections])
             for i, active in enumerate(self._active):
-                gate = (
-                    self.config.new_track_distance if active.hits == 1 else self.config.max_distance
-                )
                 dist = np.linalg.norm(det_xy - active.predicted_position(frame_index), axis=1)
-                cost[i] = np.where(dist <= gate, dist, _UNMATCHABLE)
+                cost[i] = np.where(dist <= self._gate(active, frame_index), dist, _UNMATCHABLE)
             rows, cols = linear_sum_assignment(cost)
             for r, c in zip(rows, cols, strict=True):
                 if cost[r, c] < _UNMATCHABLE:

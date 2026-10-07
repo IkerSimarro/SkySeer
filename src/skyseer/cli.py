@@ -8,7 +8,7 @@ import logging
 from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated
+from typing import TYPE_CHECKING, Annotated, Any
 
 import numpy as np
 import typer
@@ -305,6 +305,7 @@ def analyze(
     identifier = _identifier(cfg, cal.observer, tle, clock_tolerance) if cal is not None else None
 
     source = FileSource(video, when)
+    stats: dict[str, Any] = {}
     with Progress(
         TextColumn("[cyan]Analysing"),
         BarColumn(),
@@ -320,6 +321,7 @@ def analyze(
                 lambda i: progress.update(task, completed=i),
                 calibration=cal,
                 identifier=identifier,
+                stats=stats,
             )
         )
         progress.update(task, completed=source.frame_count)
@@ -344,7 +346,18 @@ def analyze(
     counts = Counter(str(e.label) for e in events)
     console.print(_summary(reported))
     console.print("All tracks by class: " + ", ".join(f"{k}={v}" for k, v in counts.items()))
+    if stats.get("disturbances"):
+        spans = ", ".join(f"{_mmss(a)}-{_mmss(b)}" for a, b in stats["disturbances"][:8])
+        more = " ..." if len(stats["disturbances"]) > 8 else ""
+        console.print(
+            f"Ignored {len(stats['disturbances'])} camera movement(s) / scene "
+            f"change(s) at {spans}{more} ({stats['discarded_tracks']} tracks discarded)"
+        )
     console.print(f"Results written to [bold]{out_dir}[/bold]")
+
+
+def _mmss(seconds: float) -> str:
+    return f"{int(seconds // 60)}:{int(seconds % 60):02d}"
 
 
 @app.command()

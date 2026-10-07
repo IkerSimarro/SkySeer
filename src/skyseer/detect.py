@@ -16,6 +16,28 @@ class MotionDetector:
     boards; coordinates, boxes and areas are always reported in full-resolution pixels.
     """
 
+    @staticmethod
+    def _sky_noise(gray: np.ndarray) -> float:
+        """Robust pixel noise of the frame (high-pass residual, sampled for speed)."""
+        g = gray.astype(np.float32)
+        resid = (g - cv2.GaussianBlur(g, (0, 0), 2))[::4, ::4]
+        return 1.4826 * float(np.median(np.abs(resid - np.median(resid))))
+
+    def reset(self) -> None:
+        """Forget the background (after the camera moved or the scene changed)."""
+        self._subtractor = cv2.createBackgroundSubtractorMOG2(
+            history=self.config.mog2_history,
+            varThreshold=self.config.mog2_var_threshold,
+            detectShadows=False,
+        )
+
+    @property
+    def changed_fraction(self) -> float:
+        """Fraction of the last frame flagged as changed (0..1)."""
+        if self.last_mask is None:
+            return 0.0
+        return float(np.count_nonzero(self.last_mask)) / self.last_mask.size
+
     def __init__(self, config: DetectorConfig, frame_size: tuple[int, int]):
         self.config = config
         width, height = frame_size
@@ -31,6 +53,7 @@ class MotionDetector:
         self._min_area = config.min_area * area_factor
         self._max_area = config.max_area_fraction * width * height * area_factor
         self.last_mask: np.ndarray | None = None
+        self._noise: float | None = None
 
     def detect(self, frame: Frame) -> list[Detection]:
         image = frame.image
@@ -41,26 +64,46 @@ class MotionDetector:
             else cv2.resize(gray_full, self._work_size, interpolation=cv2.INTER_AREA)
         )
         k = self.config.blur_kernel
-        blurred = cv2.GaussianBlur(gray, (k, k), 0)
+        blurred = cv2.GaussianBlur(gray, (k, k), 0) if k > 1 else gray
 
         mask = self._subtractor.apply(blurred)
-        mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, self._kernel)
-        mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, self._kernel)
+        if self.config.morph_kernel > 1:
+            mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, self._kernel)
+            mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, self._kernel)
         self.last_mask = mask
 
-        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        # Connected components give the true pixel count of each blob (an outline's
+        # enclosed area is 0 for a 1-2 px object, which used to hide faint satellites).
+        n, labels, stats, _ = cv2.connectedComponentsWithStats(mask, connectivity=8)
         inv = 1.0 / self.scale
         detections: list[Detection] = []
-        for contour in contours:
-            area = cv2.contourArea(contour)
-            if not (self._min_area < area < self._max_area):
+        if n > 1 and (self._noise is None or frame.index % 15 == 0):
+            self._noise = self._sky_noise(gray)
+        for i in range(1, n):
+            x, y, w, h, area = (int(v) for v in stats[i])
+            if not (self._min_area <= area < self._max_area):
                 continue
-            x, y, w, h = cv2.boundingRect(contour)
-            m = cv2.moments(contour)
-            if m["m00"]:
-                cx, cy = m["m10"] / m["m00"], m["m01"] / m["m00"]
-            else:
-                cx, cy = x + w / 2, y + h / 2
+            # Brightness-weighted centroid: sub-pixel positions for the astrometry.
+            comp = labels[y : y + h, x : x + w] == i
+            roi_w = gray[y : y + h, x : x + w].astype(np.float32)
+            weights = np.where(comp, roi_w - roi_w[comp].min() + 1.0, 0.0)
+            yy, xx = np.mgrid[0:h, 0:w]
+            total = float(weights.sum())
+            cx = x + float((xx * weights).sum()) / total
+            cy = y + float((yy * weights).sum()) / total
+
+            # Contrast against a ring of sky around the blob (not the whole frame), so
+            # strobe flashes stand out even when the sky brightness varies.
+            x0, y0 = max(0, x - 3), max(0, y - 3)
+            ring = gray[y0 : y + h + 3, x0 : x + w + 3]
+            inside = labels[y0 : y + h + 3, x0 : x + w + 3] == i
+            around = ring[~inside]
+            sky = float(np.median(around)) if around.size else float(ring.min())
+            contrast = float(roi_w[comp].max()) - sky
+            # Spread of the surroundings relative to this camera's own sky noise: ~1 on a
+            # clear sky whatever the camera, several times higher inside cloud texture.
+            spread = 1.4826 * float(np.median(np.abs(around - sky))) if around.size else 0.0
+            texture = spread / max(self._noise or 0.0, 0.5)
 
             # Map back to full resolution for brightness and reporting.
             fx, fy = int(x * inv), int(y * inv)
@@ -76,6 +119,8 @@ class MotionDetector:
                     area=area * inv * inv,
                     mean_brightness=float(roi.mean()) if roi.size else 0.0,
                     max_brightness=float(roi.max()) if roi.size else 0.0,
+                    contrast=contrast,
+                    texture=texture,
                 )
             )
         return detections

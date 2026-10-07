@@ -5,20 +5,24 @@
 
 pipeline:
   frame_skip: 1               # process every Nth frame (2-3 speeds up long videos)
+  disturbance_fraction: 0.005 # >0.5% of the picture changing at once = camera moved or
+                              # scene changed (normal sky, even cloudy, stays < 0.3%)
+  disturbance_padding_s: 1.0  # tracks this close to a disturbance are discarded
 
 detector:
   sensitivity: 5              # 1-10; higher finds fainter, smaller blobs (and more noise)
   process_scale: 1.0          # downscale before detection, e.g. 0.5 on a Raspberry Pi
   mog2_history: 500           # frames of background memory
   mog2_var_threshold: 35.0    # lower = more sensitive to dim changes
-  blur_kernel: 5
-  morph_kernel: 3
+  blur_kernel: 3              # 1 = none; more blur dims tiny satellites
+  morph_kernel: 1             # mask clean-up; >1 erases objects smaller than the kernel
+  min_area_px: null           # override the minimum blob size that sensitivity implies
   max_area_fraction: 0.01     # ignore blobs bigger than 1% of the frame (clouds, headlights)
 
 tracker:
   max_distance: 60.0          # px between predicted position and a detection
   new_track_distance: 150.0   # px gate for a track's second point (velocity still unknown)
-  max_missed_seconds: 1.0     # a track ends after this long unseen
+  max_missed_seconds: 3.0     # a track ends after this long unseen (bridges faint gaps)
   process_noise: 1.0          # Kalman: how much objects may accelerate
   measurement_noise: 2.0      # Kalman: centroid jitter in px
 
@@ -37,16 +41,19 @@ star_filter:                  # tracks drifting in lockstep are background stars
   min_speed: 0.01
 
 rules:                        # heuristic baseline classifier
-  meteor_reference_speed: 30.0      # px/frame considered "fast"
+  # Speeds are in image diagonals per second, so the rules work at any resolution.
+  meteor_reference_speed: 0.4       # "fast": crossing ~40% of the frame per second
   meteor_max_duration: 3.0          # s
-  satellite_duration_bands: [[3, 0.6], [18, 1.2], [25, 0.85]]   # [upper_s, factor]
-  satellite_long_factor: 0.65
-  plane_duration_bands: [[10, 0.4], [15, 0.8]]
-  plane_long_factor: 1.1
+  satellite_duration_bands: [[1.0, 0.4], [3.0, 0.8]]   # [upper_s, factor]
+  satellite_long_factor: 1.0        # long passes are normal with wide lenses
+  plane_duration_bands: [[1.5, 0.5]]
+  plane_long_factor: 1.0
+  plane_base_score: 0.1             # planes are recognised by their strobe rhythm
+  cloud_texture: 3.0                # surroundings this much noisier than clear sky = cloud
   blink_change_threshold: 0.15
   direction_change_deg: 30.0
   junk_base_score: 0.1
-  stationary_speed: 0.5             # px/frame; slower tracks are noise or stars
+  stationary_speed: 0.0015          # slower tracks are noise or stars
 
 observer:                     # where the camera is (GPS fills this in on the station)
   latitude: null              # degrees, north positive

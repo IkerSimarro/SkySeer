@@ -20,17 +20,26 @@ class DetectorConfig(_Section):
     )
     mog2_history: int = 500
     mog2_var_threshold: float = 35.0
-    blur_kernel: int = 5
-    morph_kernel: int = 3
+    blur_kernel: int = Field(3, description="1 = no blur; larger blurs dim 1-2 px objects")
+    morph_kernel: int = Field(
+        1, description="Mask clean-up kernel; >1 erases objects smaller than the kernel"
+    )
     max_area_fraction: float = Field(
         0.01,
         description="Blobs larger than this fraction of the frame are ignored (clouds, lights)",
     )
 
+    min_area_px: float | None = Field(
+        None, description="Override the minimum blob area (px) that sensitivity implies"
+    )
+
     @property
     def min_area(self) -> float:
         """Minimum blob area in full-resolution pixels, derived from sensitivity."""
-        return max(5.0, 50.0 - self.sensitivity * 8.0)
+        if self.min_area_px is not None:
+            return self.min_area_px
+        # Faint satellites can be 1-2 px wide; noise blobs are rejected later by tracking.
+        return max(1.0, 12.0 - self.sensitivity * 2.0)
 
 
 class TrackerConfig(_Section):
@@ -40,7 +49,19 @@ class TrackerConfig(_Section):
     new_track_distance: float = Field(
         150.0, description="Gate (px) for the second detection, before velocity is known"
     )
-    max_missed_seconds: float = Field(1.0, description="Seconds unseen before a track ends")
+    max_missed_seconds: float = Field(
+        3.0,
+        description="Seconds unseen before a track ends; faint satellites fade in and out, "
+        "and the motion model bridges the gaps",
+    )
+    tentative_missed_seconds: float = Field(
+        0.3, description="Unconfirmed tracks (1-2 detections, maybe noise) end sooner"
+    )
+    gate_floor_px: float = Field(8.0, description="Smallest matching window around a prediction")
+    gate_velocity_tolerance: float = Field(
+        0.5, description="Allowed relative speed error per frame of gap (widens the window)"
+    )
+    gate_velocity_floor: float = Field(0.3, description="Allowed speed error, px/frame")
     process_noise: float = 1.0
     measurement_noise: float = 2.0
 
@@ -64,18 +85,30 @@ class StarFilterConfig(_Section):
 
 
 class RulesConfig(_Section):
-    """Thresholds for the heuristic baseline classifier (px/frame, seconds)."""
+    """Thresholds for the heuristic baseline classifier.
 
-    meteor_reference_speed: float = 30.0
+    Speeds are in image diagonals per second, so the same rules work at any resolution and
+    frame rate. Durations are in seconds.
+    """
+
+    meteor_reference_speed: float = Field(0.4, description="Diagonals/s considered 'fast'")
     meteor_max_duration: float = 3.0
-    satellite_duration_bands: list[tuple[float, float]] = [(3, 0.6), (18, 1.2), (25, 0.85)]
-    satellite_long_factor: float = 0.65
-    plane_duration_bands: list[tuple[float, float]] = [(10, 0.4), (15, 0.8)]
-    plane_long_factor: float = 1.1
+    # (upper_bound_s, factor): only very short tracks are penalised. How long a satellite
+    # stays in view depends on the lens (minutes for an all-sky camera), so long is fine.
+    satellite_duration_bands: list[tuple[float, float]] = [(1.0, 0.4), (3.0, 0.8)]
+    satellite_long_factor: float = 1.0
+    plane_duration_bands: list[tuple[float, float]] = [(1.5, 0.5)]
+    plane_long_factor: float = 1.0
+    plane_base_score: float = Field(0.1, description="Plane score with no strobes seen")
+    cloud_texture: float = Field(
+        3.0, description="Surroundings this many times noisier than clear sky = cloud"
+    )
     blink_change_threshold: float = 0.15
     direction_change_deg: float = 30.0
     junk_base_score: float = 0.1
-    stationary_speed: float = 0.5
+    stationary_speed: float = Field(
+        0.0015, description="Diagonals/s below which a track is noise or a star"
+    )
 
 
 class ObserverConfig(_Section):
@@ -128,6 +161,14 @@ class SatelliteConfig(_Section):
 
 class PipelineConfig(_Section):
     frame_skip: int = Field(1, ge=1, description="Process every Nth frame")
+    disturbance_fraction: float = Field(
+        0.005,
+        description="If more than this fraction of the picture changes at once, the camera "
+        "moved or the scene changed: those frames are ignored, not tracked",
+    )
+    disturbance_padding_s: float = Field(
+        1.0, description="Tracks within this many seconds of a disturbance are discarded"
+    )
 
 
 class Config(_Section):

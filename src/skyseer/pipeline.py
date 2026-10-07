@@ -5,7 +5,9 @@ from __future__ import annotations
 import logging
 from collections import deque
 from collections.abc import Callable, Iterator
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
+
+import numpy as np
 
 from .classify import RuleClassifier
 from .config import Config
@@ -44,6 +46,7 @@ class Pipeline:
         identifier: SatelliteIdentifier | None = None,
     ):
         self.config = config
+        self._diagonal = float(np.hypot(*frame_size))
         self.calibration = calibration
         self.autocal = autocal
         self.identifier = identifier
@@ -56,23 +59,85 @@ class Pipeline:
         self._context_frames = round(60 * fps)
         self._next_event_id = 1
         self.last_detections: list[Detection] = []
+        # Camera movement / scene changes: frame ranges where the whole picture changed.
+        self.disturbances: list[list[int]] = []
+        self.discarded_tracks = 0
+        self._pad = round(config.pipeline.disturbance_padding_s * fps)
+        self._pending: list[Track] = []  # finished tracks waiting out the padding
+        self._first_index: int | None = None
+        self._settle_until = -1
 
     def process(self, frame: Frame) -> list[Event]:
         if self.autocal is not None:
             self.autocal.feed(frame)
-            if self.autocal.calibration is not None:
-                self.calibration = self.autocal.calibration
+            self.calibration = self.autocal.calibration
         if frame.index % self.config.pipeline.frame_skip:
             return []
-        self.last_detections = self.detector.detect(frame)
-        finished = self.tracker.update(self.last_detections, frame.index)
-        return self._handle(finished, frame.index)
+        if self._first_index is None:
+            self._first_index = frame.index
+        detections = self.detector.detect(frame)
+        if self._is_disturbed(frame.index):
+            detections = []
+        self.last_detections = detections
+        self._pending.extend(self.tracker.update(detections, frame.index))
+        return self._release(frame.index)
 
     def finish(self) -> list[Event]:
         """Flush tracks still open when the stream ends."""
-        finished = self.tracker.flush()
-        last = max((t.last_frame for t in finished), default=0)
-        return self._handle(finished, last)
+        self._pending.extend(self.tracker.flush())
+        return self._release(None)
+
+    # ----------------------------------------------------------- disturbances
+    def _is_disturbed(self, index: int) -> bool:
+        """Detect frames where the camera moved or the scene changed, and recover."""
+        if index < self._settle_until:
+            # A freshly reset background model flags everything for its first frames;
+            # ignore detections while it settles, without counting a new disturbance.
+            return True
+        warming_up = index - (self._first_index or 0) < self.fps * 0.5  # background forming
+        if warming_up or self.detector.changed_fraction <= (
+            self.config.pipeline.disturbance_fraction
+        ):
+            return False
+        gap = 3 * self.config.pipeline.frame_skip
+        if self.disturbances and index - self.disturbances[-1][1] <= gap:
+            self.disturbances[-1][1] = index
+        else:
+            self.disturbances.append([index, index])
+            log.info("Camera moved or scene changed at frame %d; ignoring it", index)
+            self._camera_moved()
+        self.detector.reset()  # learn the new view quickly instead of over ~15 s
+        self._settle_until = index + max(2, round(0.3 * self.fps))
+        return True
+
+    def _camera_moved(self) -> None:
+        if self.autocal is not None:
+            self.autocal.camera_moved()
+            self.calibration = None
+        elif self.calibration is not None:
+            log.warning(
+                "The camera view changed: sky positions are no longer reliable and "
+                "are dropped from here on"
+            )
+            self.calibration = None
+
+    def _overlaps_disturbance(self, track: Track) -> bool:
+        return any(
+            track.first_frame <= end + self._pad and track.last_frame >= start - self._pad
+            for start, end in self.disturbances
+        )
+
+    def _release(self, frame_index: int | None) -> list[Event]:
+        """Report finished tracks once no disturbance can still follow within the padding."""
+        if frame_index is None:
+            ready, self._pending = self._pending, []
+            frame_index = max((t.last_frame for t in ready), default=0)
+        else:
+            ready = [t for t in self._pending if frame_index - t.last_frame > self._pad]
+            self._pending = [t for t in self._pending if frame_index - t.last_frame <= self._pad]
+        clean = [t for t in ready if not self._overlaps_disturbance(t)]
+        self.discarded_tracks += len(ready) - len(clean)
+        return self._handle(clean, frame_index)
 
     def _handle(self, finished: list[Track], frame_index: int) -> list[Event]:
         while self._recent and frame_index - self._recent[0].last_frame > self._context_frames:
@@ -90,7 +155,9 @@ class Pipeline:
 
     def _classify(self, track: Track, context: list[Track]) -> Event:
         rules = self.config.rules
-        features = extract_features(track, rules.direction_change_deg, rules.blink_change_threshold)
+        features = extract_features(
+            track, rules.direction_change_deg, rules.blink_change_threshold, self._diagonal
+        )
         if self.star_filter.is_star(track, context):
             label, confidence, scores = ObjectClass.STAR, 0.9, {}
         else:
@@ -137,8 +204,13 @@ def run(
     calibration: Calibration | None = None,
     autocal: AutoCalibrator | None = None,
     identifier: SatelliteIdentifier | None = None,
+    stats: dict[str, Any] | None = None,
 ) -> Iterator[Event]:
-    """Run the pipeline over a whole source, yielding events as they complete."""
+    """Run the pipeline over a whole source, yielding events as they complete.
+
+    If ``stats`` is given it is filled at the end with the disturbances that were ignored
+    (camera moved / scene changed) and how many tracks they invalidated.
+    """
     pipeline = Pipeline(
         config, source.fps, (source.width, source.height), calibration, autocal, identifier
     )
@@ -150,3 +222,8 @@ def run(
         yield from pipeline.finish()
     finally:
         source.close()
+        if stats is not None:
+            stats["disturbances"] = [
+                (s / source.fps, e / source.fps) for s, e in pipeline.disturbances
+            ]
+            stats["discarded_tracks"] = pipeline.discarded_tracks

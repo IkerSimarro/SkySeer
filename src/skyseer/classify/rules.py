@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+import numpy as np
+
 from ..config import RulesConfig
 from ..models import ObjectClass
 
@@ -35,35 +37,44 @@ class RuleClassifier:
 
     def scores(self, f: dict[str, float]) -> dict[str, float]:
         c = self.config
-        duration, speed, linearity = f["duration"], f["avg_speed"], f["linearity"]
+        duration, linearity = f["duration"], f["linearity"]
+        speed = f["speed_frac_per_s"]  # image diagonals per second: resolution-independent
         steady = f["size_consistency"] * f["brightness_consistency"]
+        flash = f["flash_score"]
 
-        # Satellite: steady speed, straight line, constant size and brightness, 3-18 s pass.
+        # Satellite: steady speed, straight line, constant brightness, no strobes.
         satellite = (
             f["speed_consistency"]
             * linearity
             * steady
             * _band(duration, c.satellite_duration_bands, c.satellite_long_factor)
+            * (1.0 - 0.85 * flash)
         )
 
         # Meteor: fast, straight, brief, often bright.
         speed_factor = min(speed / c.meteor_reference_speed, 3.0)
         brief = 1.0 / max(duration, 0.1) if duration < c.meteor_max_duration else 0.3
         bright = 1.0 + min(f["max_brightness"] / 255.0, 0.5)
-        meteor = speed_factor * linearity * brief * bright
+        # Meteors are straight (a curved fast streak is an insect or bat near the lens) and
+        # leave a continuous trail rather than a handful of flickering dots.
+        straight = float(np.clip(1.0 - (f["path_deviation"] - 0.01) / 0.04, 0.0, 1.0))
+        enough = float(np.clip((f["detection_count"] - 3.0) / 4.0, 0.0, 1.0))
+        meteor = speed_factor * linearity * brief * bright * straight * enough
 
-        # Plane: steady and long-lived, with blinking navigation lights.
-        blink = f["blinking_score"]
-        penalty = 0.65 if steady > 0.6 and blink < c.blink_change_threshold else 1.0
+        # Plane: moves like a satellite but its strobes flash at a steady rhythm.
         plane = (
             f["speed_consistency"]
             * linearity
             * _band(duration, c.plane_duration_bands, c.plane_long_factor)
-            * (1.0 + min(blink * 0.8, 0.8))
-            * penalty
+            * (c.plane_base_score + 1.2 * flash)
         )
 
-        junk = c.junk_base_score
+        # Cloud texture: bright fragments that "move" inside clouds are not objects. Real
+        # objects crossing clear sky have cloudiness ~1.
+        clean = min(1.0, (c.cloud_texture / max(f["cloudiness"], 1e-6)) ** 2)
+        satellite, meteor, plane = satellite * clean, meteor * clean, plane * clean
+
+        junk = c.junk_base_score / max(clean, 0.05)
         if speed < c.stationary_speed:
             junk *= 5.0  # hot pixels, twinkling stars, stationary noise
         elif speed > c.meteor_reference_speed and linearity > 0.85 and duration < 1.5:

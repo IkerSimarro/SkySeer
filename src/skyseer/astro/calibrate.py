@@ -229,22 +229,62 @@ def load_sky_image(
     return image.astype(np.float32), start_time.astimezone(UTC)
 
 
-def find_stars(image: np.ndarray, max_stars: int = 400) -> np.ndarray:
+def sky_mask(image: np.ndarray, margin: int = 10) -> np.ndarray:
+    """Boolean mask of open sky, excluding trees, roofs and other dark foreground.
+
+    At night the sky glows faintly while silhouettes are darker, so a heavily smoothed
+    image separates the two. The boundary is pushed ``margin`` px into the sky, because
+    edges of silhouettes produce spurious star-like peaks. Returns all-True when there is
+    no clear foreground (e.g. an all-sky camera).
+    """
+    import cv2
+
+    img = np.asarray(image, dtype=np.float32)
+    blur = cv2.GaussianBlur(img, (0, 0), 12)
+    p5, p50 = np.percentile(blur, [5, 50])
+    if p50 - p5 < 1.0:
+        return np.ones(img.shape, dtype=bool)
+    sky = (blur > p5 + 0.5 * (p50 - p5)).astype(np.uint8)
+    k = 2 * margin + 1
+    return cv2.erode(sky, np.ones((k, k), np.uint8)).astype(bool)
+
+
+def find_stars(
+    image: np.ndarray, max_stars: int = 400, mask: np.ndarray | None = None, k_sigma: float = 5.0
+) -> np.ndarray:
     """Star centroids as (N, 2) pixel (x, y), brightest first.
 
-    Pixel convention matches the motion detector: integer coordinates are pixel centres.
+    Designed for real video as much as clean astro images: the local background is removed,
+    noise is measured robustly over the sky, and only compact peaks are kept, which
+    rejects silhouette edges, cloud texture and compression blocks. Pixel convention
+    matches the motion detector: integer coordinates are pixel centres.
     """
-    cents = tetra3.get_centroids_from_image(
-        np.asarray(image, dtype=np.float32),
-        sigma=3,
-        filtsize=25,
-        max_area=200,
-        min_area=2,
-        max_returned=max_stars,
-    )
-    if len(cents) == 0:
+    import cv2
+
+    img = np.asarray(image, dtype=np.float32)
+    if mask is None:
+        mask = sky_mask(img)
+    resid = img - cv2.GaussianBlur(img, (0, 0), 4)
+    vals = resid[mask]
+    if vals.size < 100:
         return np.zeros((0, 2))
-    return np.asarray(cents)[:, ::-1] - 0.5  # tetra3 gives (y, x) with 0.5 at pixel centre
+    sigma = 1.4826 * float(np.median(np.abs(vals - np.median(vals)))) + 1e-6
+    is_peak = (resid == cv2.dilate(resid, np.ones((3, 3), np.uint8))) & (resid > k_sigma * sigma)
+    is_peak &= mask
+    is_peak[:3, :] = is_peak[-3:, :] = False
+    is_peak[:, :3] = is_peak[:, -3:] = False
+    ys, xs = np.nonzero(is_peak)
+    pos = np.clip(resid, 0, None)
+    yy, xx = np.mgrid[-1:2, -1:2]
+    found: list[tuple[float, float, float]] = []
+    for y, x in zip(ys, xs, strict=True):
+        w3 = pos[y - 1 : y + 2, x - 1 : x + 2]
+        f3, f7 = float(w3.sum()), float(pos[y - 3 : y + 4, x - 3 : x + 4].sum())
+        if f7 <= 0 or f3 / f7 < 0.55:  # light spread out: an edge, ridge or cloud, not a star
+            continue
+        found.append((f3, x + float((xx * w3).sum()) / f3, y + float((yy * w3).sum()) / f3))
+    found.sort(reverse=True)
+    return np.array([(x, y) for _, x, y in found[:max_stars]]).reshape(-1, 2)
 
 
 # ---------------------------------------------------------------------- solving

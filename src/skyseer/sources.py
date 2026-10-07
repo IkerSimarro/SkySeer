@@ -33,8 +33,17 @@ class FileSource:
     astronomy layer needs absolute time. Without it, the file's modification time is used.
     """
 
-    def __init__(self, path: str | Path, start_time: datetime | None = None):
+    def __init__(
+        self,
+        path: str | Path,
+        start_time: datetime | None = None,
+        from_s: float = 0.0,
+        to_s: float | None = None,
+    ):
+        """``from_s``/``to_s`` limit processing to part of the video. Frame indices and
+        timestamps stay those of the full video."""
         self.path = Path(path)
+        self.from_s, self.to_s = from_s, to_s
         self._cap = cv2.VideoCapture(str(self.path))
         if not self._cap.isOpened():
             raise ValueError(f"Could not open video file: {self.path}")
@@ -52,8 +61,11 @@ class FileSource:
         self.start_time = start_time.astimezone(UTC)
 
     def __iter__(self) -> Iterator[Frame]:
-        index = 0
-        while True:
+        index = int(self.from_s * self.fps)
+        last = None if self.to_s is None else int(self.to_s * self.fps)
+        if index:
+            self._cap.set(cv2.CAP_PROP_POS_FRAMES, index)
+        while last is None or index < last:
             ok, image = self._cap.read()
             if not ok:
                 break

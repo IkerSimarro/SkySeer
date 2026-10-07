@@ -39,6 +39,8 @@ class Detection:
     area: float
     mean_brightness: float
     max_brightness: float
+    contrast: float = 0.0  # peak brightness above the surrounding sky (reveals strobes)
+    texture: float = 0.0  # spread of the surrounding sky / frame noise: ~1 clear, >3 cloud
 
     @property
     def aspect_ratio(self) -> float:

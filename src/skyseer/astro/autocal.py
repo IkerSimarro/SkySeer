@@ -53,6 +53,7 @@ class AutoCalibrator:
         self._last_attempt: datetime | None = None
         self._last_success: datetime | None = None
         self.calibration: Calibration | None = None
+        self._hint: Calibration | None = None
         if cache_path is not None and cache_path.exists():
             try:
                 cached = Calibration.load(cache_path)
@@ -92,7 +93,7 @@ class AutoCalibrator:
         mid_time = self._frames[len(self._frames) // 2][1]
         self._last_attempt = now
         a = self.config
-        hint = self.calibration
+        hint = self.calibration or self._hint
 
         def job() -> Calibration:
             # Database build (first run only) also happens off the detection thread.
@@ -129,6 +130,17 @@ class AutoCalibrator:
         if self.cache_path is not None:
             self.cache_path.parent.mkdir(parents=True, exist_ok=True)
             cal.save(self.cache_path)
+
+    def camera_moved(self) -> None:
+        """The view changed: drop the current solution and re-solve as soon as possible.
+
+        The old solution is kept only as a starting hint (the quick re-calibration fails
+        and falls back to a full solve if the camera really points somewhere new).
+        """
+        self._hint = self.calibration or self._hint
+        self.calibration = None
+        self._frames.clear()  # frames from before the move would blur the star image
+        self._last_attempt = self._last_success = None
 
     def wait(self, timeout: float | None = None) -> None:
         """Block until an in-flight calibration finishes (used at shutdown and in tests)."""

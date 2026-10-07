@@ -7,7 +7,8 @@ from skyseer.config import load_config
 def test_defaults():
     cfg = load_config()
     assert cfg.detector.sensitivity == 5
-    assert cfg.detector.min_area == 10
+    assert cfg.detector.min_area == 2  # tiny on purpose: faint satellites can be 1-2 px
+    assert load_config(detector={"min_area_px": 7}).detector.min_area == 7
 
 
 def test_yaml_and_overrides(tmp_path):
