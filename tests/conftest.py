@@ -42,6 +42,24 @@ def linear_points(
     return [(start + i, x0 + vx * i, y0 + vy * i) for i in range(0, frames, step)]
 
 
+ASTRO_DATA = Path("data/astro")
+
+
+@pytest.fixture(scope="session")
+def catalog():
+    from skyseer.astro.catalog import load_stars
+
+    return load_stars(7.0, data_dir=ASTRO_DATA)
+
+
+@pytest.fixture(scope="session")
+def test_db():
+    """A narrower solver database than production: builds in ~1 minute, cached on disk."""
+    from skyseer.astro.catalog import build_database
+
+    return build_database(45, 65, 6.0, data_dir=ASTRO_DATA)
+
+
 @pytest.fixture(scope="session")
 def synth_clip(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, GroundTruth]:
     path = tmp_path_factory.mktemp("synth") / "scene.mp4"

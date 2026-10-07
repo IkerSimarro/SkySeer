@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from collections import deque
 from collections.abc import Callable, Iterator
+from typing import TYPE_CHECKING
 
 from .classify import RuleClassifier
 from .config import Config
@@ -14,6 +15,10 @@ from .models import Detection, Event, Frame, ObjectClass, Track
 from .sources import FrameSource
 from .starfield import StarFieldFilter
 from .track import Tracker
+
+if TYPE_CHECKING:
+    from .astro.autocal import AutoCalibrator
+    from .astro.calibrate import Calibration
 
 log = logging.getLogger(__name__)
 
@@ -28,8 +33,17 @@ class Pipeline:
     a live camera.
     """
 
-    def __init__(self, config: Config, fps: float, frame_size: tuple[int, int]):
+    def __init__(
+        self,
+        config: Config,
+        fps: float,
+        frame_size: tuple[int, int],
+        calibration: Calibration | None = None,
+        autocal: AutoCalibrator | None = None,
+    ):
         self.config = config
+        self.calibration = calibration
+        self.autocal = autocal
         self.fps = fps
         self.detector = MotionDetector(config.detector, frame_size)
         self.tracker = Tracker(config.tracker, fps)
@@ -41,6 +55,10 @@ class Pipeline:
         self.last_detections: list[Detection] = []
 
     def process(self, frame: Frame) -> list[Event]:
+        if self.autocal is not None:
+            self.autocal.feed(frame)
+            if self.autocal.calibration is not None:
+                self.calibration = self.autocal.calibration
         if frame.index % self.config.pipeline.frame_skip:
             return []
         self.last_detections = self.detector.detect(frame)
@@ -77,6 +95,10 @@ class Pipeline:
             label, confidence, scores = result.label, result.confidence, result.scores
         event = Event(self._next_event_id, track, label, confidence, features, scores)
         self._next_event_id += 1
+        if self.calibration is not None:
+            from .astro.sky import sky_path
+
+            event.sky = sky_path(track, self.calibration)
         log.info(
             "Event %d: %s (%.2f) %.1fs, %d detections",
             event.id,
@@ -89,10 +111,14 @@ class Pipeline:
 
 
 def run(
-    source: FrameSource, config: Config, progress: ProgressCallback | None = None
+    source: FrameSource,
+    config: Config,
+    progress: ProgressCallback | None = None,
+    calibration: Calibration | None = None,
+    autocal: AutoCalibrator | None = None,
 ) -> Iterator[Event]:
     """Run the pipeline over a whole source, yielding events as they complete."""
-    pipeline = Pipeline(config, source.fps, (source.width, source.height))
+    pipeline = Pipeline(config, source.fps, (source.width, source.height), calibration, autocal)
     try:
         for frame in source:
             yield from pipeline.process(frame)

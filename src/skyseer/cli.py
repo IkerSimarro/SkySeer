@@ -8,7 +8,7 @@ import logging
 from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 
 import numpy as np
 import typer
@@ -23,6 +23,10 @@ from .models import Event
 from .pipeline import run
 from .render import render_annotated_video
 from .sources import CameraSource, FileSource
+
+if TYPE_CHECKING:  # the astronomy stack is imported lazily to keep the CLI quick to start
+    from .astro.calibrate import Calibration
+    from .astro.frames import Observer
 
 app = typer.Typer(
     help="SkySeer: satellite and meteor detection for night-sky video.", no_args_is_help=True
@@ -76,19 +80,99 @@ def write_reports(events: list[Event], out_dir: Path) -> None:
 
 def _summary(events: list[Event]) -> Table:
     table = Table(title=f"{len(events)} events", header_style="bold cyan")
-    for col in ("#", "Class", "Conf.", "Start (UTC)", "Duration", "Speed px/f", "Linearity"):
-        table.add_column(col, justify="right" if col not in ("Class",) else "left")
+    with_sky = any(e.sky is not None for e in events)
+    with_id = any(e.identification_checked for e in events)
+    cols = ["#", "Class", "Conf.", "Start (UTC)", "Duration"]
+    cols += ["Speed °/s", "Arc °"] if with_sky else ["Speed px/f", "Linearity"]
+    if with_id:
+        cols.append("Identified as")
+    for col in cols:
+        table.add_column(col, justify="left" if col in ("Class", "Identified as") else "right")
     for e in events:
-        table.add_row(
+        row = [
             str(e.id),
             str(e.label),
             f"{e.confidence:.2f}",
             e.track.start_time.strftime("%H:%M:%S"),
             f"{e.track.duration:.1f}s",
-            f"{e.features['avg_speed']:.2f}",
-            f"{e.features['linearity']:.2f}",
-        )
+        ]
+        if with_sky:
+            row += (
+                [f"{e.sky.angular_speed:.2f}", f"{e.sky.arc_deg:.1f}"]
+                if e.sky is not None
+                else ["-", "-"]
+            )
+        else:
+            row += [f"{e.features['avg_speed']:.2f}", f"{e.features['linearity']:.2f}"]
+        if with_id:
+            m = e.identification
+            row.append(
+                m.short_label()
+                if m is not None
+                else ("[dim]no catalogued match[/dim]" if e.identification_checked else "")
+            )
+        table.add_row(*row)
     return table
+
+
+LatOpt = Annotated[float | None, typer.Option("--lat", help="Observer latitude, degrees N")]
+LonOpt = Annotated[float | None, typer.Option("--lon", help="Observer longitude, degrees E")]
+ElevOpt = Annotated[float | None, typer.Option("--elevation", help="Observer elevation, m")]
+
+
+def _observer(
+    cfg: Config, lat: float | None, lon: float | None, elevation: float | None
+) -> Observer | None:
+    """Observer from CLI options, falling back to the config file; None if unknown."""
+    from .astro.frames import Observer
+
+    o = cfg.observer
+    lat = o.latitude if lat is None else lat
+    lon = o.longitude if lon is None else lon
+    if lat is None or lon is None:
+        return None
+    return Observer(lat, lon, o.elevation_m if elevation is None else elevation)
+
+
+def _calibrate_recording(
+    video: Path, cfg: Config, observer: Observer | None, start_time: datetime | None
+) -> Calibration | None:
+    """Calibrate from the first seconds of a recording; None (with a warning) on failure."""
+    from .astro.calibrate import CalibrationError, calibrate, load_sky_image
+    from .astro.catalog import build_database
+
+    a = cfg.astro
+    try:
+        with console.status("Preparing star database (first run downloads and builds it)..."):
+            db = build_database(
+                a.database_min_fov, a.database_max_fov, a.database_max_mag, Path(a.data_dir)
+            )
+        with console.status("Recognising stars to calibrate the camera..."):
+            image, when = load_sky_image(video, start_time, 0.0, a.calibration_seconds)
+            cal = calibrate(
+                image,
+                when,
+                observer,
+                fov_estimate=a.fov_estimate,
+                fov_max_error=a.fov_tolerance if a.fov_estimate else None,
+                database=db,
+            )
+    except CalibrationError as e:
+        console.print(
+            f"[yellow]Camera calibration failed ({e}); continuing without sky coordinates.[/yellow]"
+        )
+        return None
+    s = cal.summary()
+    where = (
+        f"az {s['pointing_az']:.1f}°, alt {s['pointing_alt']:.1f}°"
+        if observer is not None
+        else f"RA {s['center_ra']:.1f}°, Dec {s['center_dec']:+.1f}°"
+    )
+    console.print(
+        f"[green]Camera calibrated[/green] from {cal.n_stars} stars: pointing {where}, "
+        f"field {s['fov_h']:.1f}° x {s['fov_v']:.1f}°"
+    )
+    return cal
 
 
 @app.command()
@@ -99,6 +183,15 @@ def analyze(
     start_time: Annotated[
         datetime | None, typer.Option(help="Recording start, UTC (e.g. 2026-09-30T21:15:00)")
     ] = None,
+    lat: LatOpt = None,
+    lon: LonOpt = None,
+    elevation: ElevOpt = None,
+    calibration: Annotated[
+        Path | None, typer.Option(help="Use a saved calibration.json instead of solving")
+    ] = None,
+    sky: Annotated[
+        bool, typer.Option("--sky/--no-sky", help="Calibrate from the stars and add sky positions")
+    ] = True,
     sensitivity: Annotated[int | None, typer.Option(min=1, max=10)] = None,
     frame_skip: Annotated[int | None, typer.Option(min=1)] = None,
     video_out: Annotated[
@@ -111,8 +204,22 @@ def analyze(
     _setup_logging(verbose)
     cfg = _config(config, sensitivity, frame_skip)
     out_dir = out or Path("data/runs") / f"{video.stem}_{datetime.now():%Y%m%d_%H%M%S}"
-    source = FileSource(video, start_time)
+    when = (
+        None
+        if start_time is None
+        else (start_time if start_time.tzinfo else start_time.replace(tzinfo=UTC))
+    )
+    observer = _observer(cfg, lat, lon, elevation)
 
+    cal = None
+    if calibration is not None:
+        from .astro.calibrate import Calibration
+
+        cal = Calibration.load(calibration)
+    elif sky:
+        cal = _calibrate_recording(video, cfg, observer, when)
+
+    source = FileSource(video, when)
     with Progress(
         TextColumn("[cyan]Analysing"),
         BarColumn(),
@@ -121,11 +228,15 @@ def analyze(
         console=console,
     ) as progress:
         task = progress.add_task("", total=source.frame_count or None)
-        events = list(run(source, cfg, lambda i: progress.update(task, completed=i)))
+        events = list(
+            run(source, cfg, lambda i: progress.update(task, completed=i), calibration=cal)
+        )
         progress.update(task, completed=source.frame_count)
 
     reported = events if include_junk else [e for e in events if e.label not in ("Junk", "Star")]
     write_reports(reported, out_dir)
+    if cal is not None:
+        cal.save(out_dir / "calibration.json")
     if video_out and reported:
         with console.status("Rendering annotated video..."):
             render_annotated_video(video, reported, out_dir / "annotated.mp4")
@@ -140,6 +251,12 @@ def analyze(
 def live(
     camera: Annotated[str, typer.Option(help="Camera index or stream URL")] = "0",
     config: ConfigOpt = None,
+    lat: LatOpt = None,
+    lon: LonOpt = None,
+    elevation: ElevOpt = None,
+    sky: Annotated[
+        bool, typer.Option("--sky/--no-sky", help="Keep the camera calibrated from the stars")
+    ] = True,
     verbose: VerboseOpt = False,
 ) -> None:
     """Run detection on a live camera and print events as they happen (Ctrl+C to stop)."""
@@ -150,15 +267,29 @@ def live(
     console.print(
         f"Watching camera {camera} at {source.width}x{source.height}, {source.fps:.0f} fps"
     )
+    autocal = None
+    if sky:
+        from .astro.autocal import AutoCalibrator
+
+        autocal = AutoCalibrator(
+            cfg.astro,
+            _observer(cfg, lat, lon, elevation),
+            source.fps,
+            cache_path=Path(cfg.astro.data_dir) / "live_calibration.json",
+        )
     try:
-        for e in run(source, cfg):
+        for e in run(source, cfg, autocal=autocal):
             if e.label not in ("Junk", "Star"):
+                where = f", {e.sky.angular_speed:.2f}°/s" if e.sky is not None else ""
                 console.print(
                     f"[bold]{e.track.start_time:%H:%M:%S}[/bold] #{e.id} {e.label} "
-                    f"({e.confidence:.2f}, {e.track.duration:.1f}s)"
+                    f"({e.confidence:.2f}, {e.track.duration:.1f}s{where})"
                 )
     except KeyboardInterrupt:
         console.print("Stopped.")
+    finally:
+        if autocal is not None:
+            autocal.close()
 
 
 @app.command()
@@ -249,9 +380,9 @@ def calibrate(
             "--time", help="UTC time of the recording start / photo (e.g. 2026-10-07T21:30:00)"
         ),
     ] = None,
-    lat: Annotated[float | None, typer.Option(help="Observer latitude, degrees N")] = None,
-    lon: Annotated[float | None, typer.Option(help="Observer longitude, degrees E")] = None,
-    elevation: Annotated[float | None, typer.Option(help="Observer elevation, metres")] = None,
+    lat: LatOpt = None,
+    lon: LonOpt = None,
+    elevation: ElevOpt = None,
     fov: Annotated[float | None, typer.Option(help="Approx. horizontal field of view, deg")] = None,
     at: Annotated[float, typer.Option(help="Seconds into the video to calibrate at")] = 0.0,
     verbose: VerboseOpt = False,
@@ -262,18 +393,13 @@ def calibrate(
     from .astro.calibrate import CalibrationError, load_sky_image
     from .astro.calibrate import calibrate as solve
     from .astro.catalog import build_database
-    from .astro.frames import Observer
     from .astro.overlay import draw_calibration
 
     _setup_logging(verbose)
     cfg = load_config(config)
-    a, o = cfg.astro, cfg.observer
-    lat = o.latitude if lat is None else lat
-    lon = o.longitude if lon is None else lon
-    observer = None
-    if lat is not None and lon is not None:
-        observer = Observer(lat, lon, o.elevation_m if elevation is None else elevation)
-    else:
+    a = cfg.astro
+    observer = _observer(cfg, lat, lon, elevation)
+    if observer is None:
         console.print(
             "[yellow]No location given: solving sky coordinates only "
             "(add --lat/--lon for compass direction and altitude).[/yellow]"

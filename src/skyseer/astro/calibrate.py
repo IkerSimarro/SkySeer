@@ -30,9 +30,11 @@ from .catalog import StarCatalog, build_database, load_stars
 from .frames import (
     Observer,
     apply_refraction,
+    icrs_to_enu_matrices,
     icrs_to_enu_matrix,
     radec_to_vec,
     remove_refraction,
+    sidereal_drift,
     vec_to_altaz,
     vec_to_radec,
 )
@@ -46,9 +48,13 @@ class CalibrationError(RuntimeError):
 
 @dataclass
 class Calibration:
-    """A solved camera. With an observer it is referenced to the local horizon (ENU) and
-    stays valid for as long as the camera isn't moved; without one it is referenced to the
-    stars (ICRS) and only valid near ``time``."""
+    """A solved camera.
+
+    With an observer it is referenced to the local horizon (ENU) and stays valid for as long
+    as the camera isn't moved. Without one it is referenced to the stars (ICRS) at ``time``;
+    sky coordinates at other times are still exact (the sky's rotation is applied), only
+    altitude/azimuth and refraction are unavailable.
+    """
 
     camera: CameraModel
     time: datetime
@@ -73,6 +79,8 @@ class Calibration:
         if self.observer is not None:
             v = remove_refraction(v)
             v = v @ icrs_to_enu_matrix(when or self.time, self.observer)  # ENU → ICRS
+        elif when is not None and when != self.time:
+            v = v @ sidereal_drift(self.time, when).T
         return vec_to_radec(v)
 
     def pixel_to_altaz(self, uv: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -87,7 +95,30 @@ class Calibration:
         v = radec_to_vec(ra, dec)
         if self.observer is not None:
             v = apply_refraction(v @ icrs_to_enu_matrix(when or self.time, self.observer).T)
+        elif when is not None and when != self.time:
+            v = v @ sidereal_drift(self.time, when)
         return self.camera.vec_to_pixel(v)
+
+    def pixel_to_radec_at(
+        self, uv: np.ndarray, times: list[datetime]
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """RA/Dec of each pixel at its own timestamp (vectorised over a track)."""
+        v = self.camera.pixel_to_vec(uv)
+        ref = self.observer if self.observer is not None else Observer(0.0, 0.0)
+        mats = icrs_to_enu_matrices(times, ref)  # (N, 3, 3) ICRS → ENU
+        if self.observer is not None:
+            v = remove_refraction(v)
+        else:
+            # Pixel direction is fixed on the ground: ICRS(t0) → ground → ICRS(t).
+            v = v @ icrs_to_enu_matrix(self.time, ref).T
+        v_icrs = np.einsum("nji,nj->ni", mats, v)  # apply Mᵀ per point
+        return vec_to_radec(v_icrs)
+
+    def pixel_to_enu(self, uv: np.ndarray) -> np.ndarray:
+        """Apparent (refracted) ENU unit vectors for pixels. Needs the observer location."""
+        if self.observer is None:
+            raise CalibrationError("Horizon directions need the observer location")
+        return self.camera.pixel_to_vec(uv)
 
     def summary(self) -> dict[str, Any]:
         hfov, vfov = self.camera.fov_deg
@@ -250,8 +281,15 @@ def calibrate(
     refine_mag: float = 6.5,
     min_stars: int = 10,
     max_rms_px: float = 1.5,
+    hint: Calibration | None = None,
 ) -> Calibration:
-    """Solve the camera from one (preferably stacked) grayscale image taken at ``time``."""
+    """Solve the camera from one (preferably stacked) grayscale image taken at ``time``.
+
+    With a ``hint`` (a previous calibration of the same camera) the slow pattern search is
+    skipped: the previous model is refined directly against the catalogue, which takes a
+    fraction of a second. If that fails, e.g. because the camera was moved, it falls back to
+    a full lost-in-space solve.
+    """
     time = time.astimezone(UTC)
     h, w = image.shape[:2]
     stars = find_stars(image)
@@ -259,6 +297,63 @@ def calibrate(
     if len(stars) < 6:
         raise CalibrationError(f"Only {len(stars)} stars found; is the image dark and in focus?")
 
+    to_frame = icrs_to_enu_matrix(time, observer) if observer is not None else np.eye(3)
+
+    def frame_vecs(ra: np.ndarray, dec: np.ndarray) -> np.ndarray:
+        v = radec_to_vec(ra, dec) @ to_frame.T
+        return apply_refraction(v) if observer is not None else v
+
+    cat = catalog or load_stars(refine_mag, time.year + time.timetuple().tm_yday / 365.25)
+    cat = cat.brighter_than(refine_mag)
+    limits = (min_stars, max_rms_px)
+
+    # A hint is only meaningful for the same camera at the same place.
+    if (
+        hint is not None
+        and (hint.camera.width, hint.camera.height) == (w, h)
+        and (hint.observer == observer)
+    ):
+        start = _carry_forward(hint, time, observer)
+        try:
+            cal = _refine(
+                start, stars, cat, frame_vecs, time, observer, {"method": "hint"}, *limits
+            )
+            log.info("Re-calibrated from previous solution (%d stars)", cal.n_stars)
+            return cal
+        except CalibrationError as e:
+            log.info("Quick re-calibration failed (%s); doing a full solve", e)
+
+    model, solver_info = _lost_in_space(
+        stars, w, h, frame_vecs, fov_estimate, fov_max_error, database
+    )
+    return _refine(model, stars, cat, frame_vecs, time, observer, solver_info, *limits)
+
+
+def _carry_forward(hint: Calibration, time: datetime, observer: Observer | None) -> CameraModel:
+    """The previous camera model, valid at ``time``.
+
+    A horizon-referenced (ENU) model does not change while the camera stays put. A
+    star-referenced (ICRS) model must turn with the sky between the two times.
+    """
+    cam = hint.camera
+    if observer is not None:
+        return cam
+    drift = sidereal_drift(hint.time, time)
+    return CameraModel(
+        cam.width, cam.height, cam.f, cam.cx, cam.cy, drift @ cam.rotation, cam.k1, cam.k2
+    )
+
+
+def _lost_in_space(
+    stars: np.ndarray,
+    w: int,
+    h: int,
+    frame_vecs: Any,
+    fov_estimate: float | None,
+    fov_max_error: float | None,
+    database: Path | None,
+) -> tuple[CameraModel, dict[str, Any]]:
+    """Pattern-match the brightest stars against the database (no prior knowledge)."""
     solver = _solver(database or build_database())
     t3_stars = stars[:, ::-1] + 0.5
     # Escalating attempts: the fast default usually works; in wide, distorted fields the
@@ -292,11 +387,12 @@ def calibrate(
             f"Plate solve failed with {len(stars)} stars (FOV estimate {fov_estimate}). "
             "Check focus, exposure and the field-of-view setting."
         )
-    solver_info = {
+    solver_info: dict[str, Any] = {
         k: (float(result[k]) if result[k] is not None else None)
         for k in ("RA", "Dec", "Roll", "FOV", "distortion", "RMSE", "Prob", "T_solve")
     }
     solver_info["Matches"] = int(result["Matches"])
+    solver_info["method"] = "lost-in-space"
     log.info(
         "Plate solve: RA %.3f Dec %.3f FOV %.2f, %d stars, %.0f ms",
         result["RA"],
@@ -305,12 +401,6 @@ def calibrate(
         result["Matches"],
         result["T_solve"],
     )
-
-    to_frame = icrs_to_enu_matrix(time, observer) if observer is not None else np.eye(3)
-
-    def frame_vecs(ra: np.ndarray, dec: np.ndarray) -> np.ndarray:
-        v = radec_to_vec(ra, dec) @ to_frame.T
-        return apply_refraction(v) if observer is not None else v
 
     m_stars = np.asarray(result["matched_stars"])
     m_px = np.asarray(result["matched_centroids"])[:, ::-1] - 0.5
@@ -324,10 +414,23 @@ def calibrate(
         fit_distortion=len(m_px) >= 10,
         fit_center=False,
     )
+    return fit.model, solver_info
 
-    # Refinement: match the full catalogue across the whole frame and refit.
-    cat = catalog or load_stars(refine_mag, time.year + time.timetuple().tm_yday / 365.25)
-    cat = cat.brighter_than(refine_mag)
+
+def _refine(
+    model: CameraModel,
+    stars: np.ndarray,
+    cat: StarCatalog,
+    frame_vecs: Any,
+    time: datetime,
+    observer: Observer | None,
+    solver_info: dict[str, Any],
+    min_stars: int,
+    max_rms_px: float,
+) -> Calibration:
+    """Match the full catalogue across the whole frame, refit, and validate the result."""
+    w, h = model.width, model.height
+    fit = None
     cat_vecs = frame_vecs(cat.ra, cat.dec)
     if observer is not None:
         above = cat_vecs[:, 2] > np.sin(np.radians(2.0))  # skip stars lost in horizon haze
@@ -335,7 +438,6 @@ def calibrate(
             StarCatalog(cat.hip[above], cat.ra[above], cat.dec[above], cat.mag[above]),
             cat_vecs[above],
         )
-    model = fit.model
     radius = 6.0
     fit_i = fit_j = None  # catalogue / centroid indices used by the latest refined fit
     for _ in range(4):
@@ -365,6 +467,8 @@ def calibrate(
         )
         radius = max(2.0, 3.0 * fit.rms_px)
 
+    if fit is None:
+        raise CalibrationError("Solution rejected: too few catalogue stars line up")
     matched: list[dict[str, float]] = []
     if fit_i is not None and fit_j is not None:
         for a, b, e, ok in zip(fit_i, fit_j, fit.residuals_px, fit.inliers, strict=True):

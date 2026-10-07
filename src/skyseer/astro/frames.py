@@ -63,6 +63,32 @@ def icrs_to_enu_matrix(when: datetime, observer: Observer) -> np.ndarray:
     return ecef_to_enu @ to_ecef
 
 
+def icrs_to_enu_matrices(times: list[datetime], observer: Observer) -> np.ndarray:
+    """Vectorised :func:`icrs_to_enu_matrix`: (N, 3, 3) for N timestamps."""
+    t = timescale().from_datetimes(times)
+    to_date = np.moveaxis(np.asarray(t.M), -1, 0)  # (N, 3, 3)
+    gast = np.radians(np.asarray(t.gast) * 15.0)
+    c, s = np.cos(gast), np.sin(gast)
+    rz = np.zeros((len(times), 3, 3))
+    rz[:, 0, 0], rz[:, 0, 1], rz[:, 1, 0], rz[:, 1, 1], rz[:, 2, 2] = c, s, -s, c, 1.0
+    lat, lon = np.radians(observer.latitude), np.radians(observer.longitude)
+    sl, cl, so, co = np.sin(lat), np.cos(lat), np.sin(lon), np.cos(lon)
+    enu = np.array([[-so, co, 0.0], [-sl * co, -sl * so, cl], [cl * co, cl * so, sl]])
+    return enu @ rz @ to_date
+
+
+def sidereal_drift(t0: datetime, t1: datetime) -> np.ndarray:
+    """Rotation taking the sky direction behind a fixed camera pixel at ``t0`` to the one
+    behind the same pixel at ``t1`` (ICRS → ICRS).
+
+    The Earth turns once per sidereal day, so a fixed camera sweeps across the stars at
+    ~15 arcsec per second. This depends only on time, not on where the observer is: the
+    observer terms cancel in M(t1)ᵀ·M(t0).
+    """
+    ref = Observer(0.0, 0.0)
+    return icrs_to_enu_matrix(t1, ref).T @ icrs_to_enu_matrix(t0, ref)
+
+
 def radec_to_vec(ra_deg: ArrayLike | float, dec_deg: ArrayLike | float) -> np.ndarray:
     ra, dec = np.radians(ra_deg), np.radians(dec_deg)
     return np.stack([np.cos(dec) * np.cos(ra), np.cos(dec) * np.sin(ra), np.sin(dec)], axis=-1)

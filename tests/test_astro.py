@@ -1,12 +1,10 @@
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
 
 import numpy as np
 import pytest
 
 from skyseer.astro.calibrate import Calibration, CalibrationError, calibrate
 from skyseer.astro.camera import CameraModel, fit_camera, wahba_rotation
-from skyseer.astro.catalog import build_database, load_stars
 from skyseer.astro.frames import (
     Observer,
     altaz_to_vec,
@@ -20,19 +18,6 @@ from skyseer.astro.frames import (
 )
 from skyseer.astro.simulate import camera_looking_at, render_starfield
 from skyseer.astro.starnames import STAR_NAMES
-
-DATA = Path("data/astro")
-
-
-@pytest.fixture(scope="session")
-def catalog():
-    return load_stars(7.0, data_dir=DATA)
-
-
-@pytest.fixture(scope="session")
-def test_db():
-    # A narrower database than production: builds in ~1 minute, cached between runs.
-    return build_database(45, 65, 6.0, data_dir=DATA)
 
 
 # --------------------------------------------------------------------------- frames

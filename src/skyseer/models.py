@@ -93,10 +93,13 @@ class Event:
     confidence: float
     features: dict[str, float]
     scores: dict[str, float]
+    sky: Any = None  # astro.sky.SkyPath when the camera is calibrated
+    identification: Any = None  # astro.satellites.SatelliteMatch when matched to an orbit
+    identification_checked: bool = False  # True if an orbit catalogue was searched
 
     def to_dict(self) -> dict[str, Any]:
         t = self.track
-        return {
+        out = {
             "id": self.id,
             "track_id": t.id,
             "label": str(self.label),
@@ -118,3 +121,10 @@ class Event:
                 for d in t.detections
             ],
         }
+        if self.sky is not None:
+            out["sky"] = self.sky.to_dict()
+        if self.identification is not None:
+            out["identification"] = self.identification.to_dict()
+        elif self.identification_checked:
+            out["identification"] = None  # searched the catalogue, nothing matched
+        return out
