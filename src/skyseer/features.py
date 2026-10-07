@@ -47,14 +47,17 @@ FEATURE_NAMES: tuple[str, ...] = (
     "flash_score",
     "cloudiness",
     "path_deviation",
+    "path_deviation_max",
 )
 
 
-def path_deviation(pos: np.ndarray) -> float:
-    """Largest sideways distance from the best straight line, relative to path length.
+def path_deviation(pos: np.ndarray, percentile: float = 80.0) -> float:
+    """Sideways distance from the best straight line, relative to path length.
 
     Meteors travel in straight lines (well under 1%); insects, bats and birds close to the
-    camera curve and wiggle.
+    camera curve and wiggle. The 80th percentile is used rather than the maximum: an
+    aircraft strobe briefly shifts the measured position (spikes), whereas a curving or
+    wiggling path deviates over much of its length.
     """
     if len(pos) < 3:
         return 0.0
@@ -64,7 +67,7 @@ def path_deviation(pos: np.ndarray) -> float:
     span = float(along.max() - along.min())
     if span < 1.0:
         return 0.0
-    return float(np.abs(centred @ vt[1]).max() / span)
+    return float(np.percentile(np.abs(centred @ vt[1]), percentile) / span)
 
 
 def _consistency(std: float, mean: float = 1.0) -> float:
@@ -174,6 +177,7 @@ def extract_features(
         # ~1 on clear sky; well above 3 when the "object" is moving cloud texture.
         "cloudiness": float(np.median([d.texture for d in dets])),
         "path_deviation": path_deviation(pos),
+        "path_deviation_max": path_deviation(pos, 100.0),
         "duration": track.duration,
         "detection_count": float(n),
         "avg_speed": avg_speed,

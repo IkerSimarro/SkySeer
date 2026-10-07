@@ -95,7 +95,7 @@ class RulesConfig(_Section):
     meteor_max_duration: float = 3.0
     # (upper_bound_s, factor): only very short tracks are penalised. How long a satellite
     # stays in view depends on the lens (minutes for an all-sky camera), so long is fine.
-    satellite_duration_bands: list[tuple[float, float]] = [(1.0, 0.4), (3.0, 0.8)]
+    satellite_duration_bands: list[tuple[float, float]] = [(1.0, 0.3), (2.0, 0.6), (3.0, 0.85)]
     satellite_long_factor: float = 1.0
     plane_duration_bands: list[tuple[float, float]] = [(1.5, 0.5)]
     plane_long_factor: float = 1.0

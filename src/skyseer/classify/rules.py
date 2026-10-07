@@ -57,7 +57,8 @@ class RuleClassifier:
         bright = 1.0 + min(f["max_brightness"] / 255.0, 0.5)
         # Meteors are straight (a curved fast streak is an insect or bat near the lens) and
         # leave a continuous trail rather than a handful of flickering dots.
-        straight = float(np.clip(1.0 - (f["path_deviation"] - 0.01) / 0.04, 0.0, 1.0))
+        # (Real meteors in tests: max deviation <= 0.8%; curved insect streaks >= 2.5%.)
+        straight = float(np.clip(1.0 - (f["path_deviation_max"] - 0.012) / 0.012, 0.0, 1.0))
         enough = float(np.clip((f["detection_count"] - 3.0) / 4.0, 0.0, 1.0))
         meteor = speed_factor * linearity * brief * bright * straight * enough
 
@@ -73,6 +74,16 @@ class RuleClassifier:
         # objects crossing clear sky have cloudiness ~1.
         clean = min(1.0, (c.cloud_texture / max(f["cloudiness"], 1e-6)) ** 2)
         satellite, meteor, plane = satellite * clean, meteor * clean, plane * clean
+
+        # Satellites and aircraft also travel in straight lines across the sky (a little
+        # curvature is allowed for lens distortion over long arcs); wiggles and hooks are
+        # insects or bats close to the lens.
+        straight_slow = float(np.clip(1.0 - (f["path_deviation"] - 0.03) / 0.07, 0.0, 1.0))
+        # Every real object actually travels; a flickering dot that stays put does not.
+        moving = float(np.clip(speed / c.stationary_speed - 1.0, 0.0, 1.0))
+        satellite *= straight_slow * moving
+        plane *= straight_slow * moving
+        meteor *= moving
 
         junk = c.junk_base_score / max(clean, 0.05)
         if speed < c.stationary_speed:

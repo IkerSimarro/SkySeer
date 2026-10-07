@@ -44,7 +44,7 @@ rules:                        # heuristic baseline classifier
   # Speeds are in image diagonals per second, so the rules work at any resolution.
   meteor_reference_speed: 0.4       # "fast": crossing ~40% of the frame per second
   meteor_max_duration: 3.0          # s
-  satellite_duration_bands: [[1.0, 0.4], [3.0, 0.8]]   # [upper_s, factor]
+  satellite_duration_bands: [[1.0, 0.3], [2.0, 0.6], [3.0, 0.85]]   # [upper_s, factor]
   satellite_long_factor: 1.0        # long passes are normal with wide lenses
   plane_duration_bands: [[1.5, 0.5]]
   plane_long_factor: 1.0
