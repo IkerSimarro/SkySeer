@@ -18,8 +18,8 @@ web/dist/
 src/skyseer/api/static/
 
 # Runtime data (videos, clips, databases, caches)
-data/
-samples/
+/data/
+/samples/
 *.mp4
 *.avi
 *.mov

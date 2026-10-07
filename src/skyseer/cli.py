@@ -27,6 +27,7 @@ from .sources import CameraSource, FileSource
 if TYPE_CHECKING:  # the astronomy stack is imported lazily to keep the CLI quick to start
     from .astro.calibrate import Calibration
     from .astro.frames import Observer
+    from .astro.satellites import SatelliteIdentifier
 
 app = typer.Typer(
     help="SkySeer: satellite and meteor detection for night-sky video.", no_args_is_help=True
@@ -72,10 +73,35 @@ def write_reports(events: list[Event], out_dir: Path) -> None:
             "first_frame",
             "last_frame",
         ]
+        sky_cols = [
+            "angular_speed_deg_s",
+            "arc_deg",
+            "start_alt",
+            "start_az",
+            "end_alt",
+            "end_az",
+            "satellite",
+            "norad_id",
+            "clock_offset_s",
+        ]
         writer = csv.writer(fh)
-        writer.writerow(base + feature_keys)
+        writer.writerow(base + sky_cols + feature_keys)
         for r in rows:
-            writer.writerow([r[k] for k in base] + [r["features"][k] for k in feature_keys])
+            sky = r.get("sky") or {}
+            ident = r.get("identification") or {}
+            start, end = sky.get("start", {}), sky.get("end", {})
+            extra = [
+                sky.get("angular_speed_deg_s", ""),
+                sky.get("arc_deg", ""),
+                start.get("alt", ""),
+                start.get("az", ""),
+                end.get("alt", ""),
+                end.get("az", ""),
+                ident.get("name", "").strip(),
+                ident.get("norad_id", ""),
+                ident.get("clock_offset_s", ""),
+            ]
+            writer.writerow([r[k] for k in base] + extra + [r["features"][k] for k in feature_keys])
 
 
 def _summary(events: list[Event]) -> Table:
@@ -175,6 +201,46 @@ def _calibrate_recording(
     return cal
 
 
+TleOpt = Annotated[
+    list[Path] | None,
+    typer.Option("--tle", help="Extra TLE file(s), e.g. historical orbits for an old video"),
+]
+ClockOpt = Annotated[
+    float | None,
+    typer.Option("--clock-tolerance", help="How many seconds the camera clock may be off"),
+]
+
+
+def _identifier(
+    cfg: Config, observer: Observer | None, tle: list[Path] | None, clock: float | None
+) -> SatelliteIdentifier | None:
+    """Satellite identifier from the orbit catalogue, or None if it can't be used."""
+    if observer is None or not cfg.satellites.enabled:
+        if cfg.satellites.enabled:
+            console.print(
+                "[yellow]No location given: satellites will not be named "
+                "(add --lat/--lon).[/yellow]"
+            )
+        return None
+    from .astro.orbits import load_catalog
+    from .astro.satellites import SatelliteIdentifier
+
+    s = cfg.satellites
+    if clock is not None:
+        s = s.model_copy(update={"max_clock_offset_s": clock})
+    extra = [Path(p) for p in s.extra_tle_files] + list(tle or [])
+    try:
+        with console.status("Loading satellite orbits (downloads from CelesTrak if stale)..."):
+            orbits = load_catalog(s.groups, Path(cfg.astro.data_dir), extra, s.max_age_hours)
+    except RuntimeError as e:
+        console.print(
+            f"[yellow]Satellite orbits unavailable ({e}); satellites will not be named.[/yellow]"
+        )
+        return None
+    console.print(f"Loaded orbits of {len(orbits):,} satellites")
+    return SatelliteIdentifier(orbits, observer, s)
+
+
 @app.command()
 def analyze(
     video: Annotated[Path, typer.Argument(exists=True, dir_okay=False, help="Input video")],
@@ -192,6 +258,8 @@ def analyze(
     sky: Annotated[
         bool, typer.Option("--sky/--no-sky", help="Calibrate from the stars and add sky positions")
     ] = True,
+    tle: TleOpt = None,
+    clock_tolerance: ClockOpt = None,
     sensitivity: Annotated[int | None, typer.Option(min=1, max=10)] = None,
     frame_skip: Annotated[int | None, typer.Option(min=1)] = None,
     video_out: Annotated[
@@ -200,7 +268,10 @@ def analyze(
     include_junk: Annotated[bool, typer.Option(help="Also report Junk and Star events")] = False,
     verbose: VerboseOpt = False,
 ) -> None:
-    """Analyse a recorded video and write events.json, events.csv and an annotated video."""
+    """Analyse a recorded video: detect, calibrate from the stars, name satellites.
+
+    Writes events.json, events.csv, calibration.json and an annotated video.
+    """
     _setup_logging(verbose)
     cfg = _config(config, sensitivity, frame_skip)
     out_dir = out or Path("data/runs") / f"{video.stem}_{datetime.now():%Y%m%d_%H%M%S}"
@@ -218,6 +289,7 @@ def analyze(
         cal = Calibration.load(calibration)
     elif sky:
         cal = _calibrate_recording(video, cfg, observer, when)
+    identifier = _identifier(cfg, cal.observer, tle, clock_tolerance) if cal is not None else None
 
     source = FileSource(video, when)
     with Progress(
@@ -229,7 +301,13 @@ def analyze(
     ) as progress:
         task = progress.add_task("", total=source.frame_count or None)
         events = list(
-            run(source, cfg, lambda i: progress.update(task, completed=i), calibration=cal)
+            run(
+                source,
+                cfg,
+                lambda i: progress.update(task, completed=i),
+                calibration=cal,
+                identifier=identifier,
+            )
         )
         progress.update(task, completed=source.frame_count)
 
@@ -257,6 +335,8 @@ def live(
     sky: Annotated[
         bool, typer.Option("--sky/--no-sky", help="Keep the camera calibrated from the stars")
     ] = True,
+    tle: TleOpt = None,
+    clock_tolerance: ClockOpt = None,
     verbose: VerboseOpt = False,
 ) -> None:
     """Run detection on a live camera and print events as they happen (Ctrl+C to stop)."""
@@ -267,22 +347,25 @@ def live(
     console.print(
         f"Watching camera {camera} at {source.width}x{source.height}, {source.fps:.0f} fps"
     )
-    autocal = None
+    autocal = identifier = None
     if sky:
         from .astro.autocal import AutoCalibrator
 
+        observer = _observer(cfg, lat, lon, elevation)
         autocal = AutoCalibrator(
             cfg.astro,
-            _observer(cfg, lat, lon, elevation),
+            observer,
             source.fps,
             cache_path=Path(cfg.astro.data_dir) / "live_calibration.json",
         )
+        identifier = _identifier(cfg, observer, tle, clock_tolerance)
     try:
-        for e in run(source, cfg, autocal=autocal):
+        for e in run(source, cfg, autocal=autocal, identifier=identifier):
             if e.label not in ("Junk", "Star"):
                 where = f", {e.sky.angular_speed:.2f}°/s" if e.sky is not None else ""
+                name = f" = {e.identification.short_label()}" if e.identification else ""
                 console.print(
-                    f"[bold]{e.track.start_time:%H:%M:%S}[/bold] #{e.id} {e.label} "
+                    f"[bold]{e.track.start_time:%H:%M:%S}[/bold] #{e.id} {e.label}{name} "
                     f"({e.confidence:.2f}, {e.track.duration:.1f}s{where})"
                 )
     except KeyboardInterrupt:
@@ -472,6 +555,30 @@ def _compass(az: float) -> str:
         "NNW",
     ]
     return points[int((az % 360) / 22.5 + 0.5) % 16]
+
+
+@app.command()
+def orbits(
+    config: ConfigOpt = None,
+    update: Annotated[bool, typer.Option("--update", help="Force a fresh download")] = False,
+) -> None:
+    """Download (or check) the satellite orbit catalogue used to name satellites."""
+    from .astro.orbits import load_catalog as load_orbits
+    from .astro.orbits import update_catalog
+
+    _setup_logging(False)
+    cfg = load_config(config)
+    s = cfg.satellites
+    data_dir = Path(cfg.astro.data_dir)
+    with console.status("Contacting CelesTrak..."):
+        paths = update_catalog(s.groups, data_dir, s.max_age_hours, force=update)
+        cat = load_orbits(s.groups, data_dir, [Path(p) for p in s.extra_tle_files], download=False)
+    ages = cat.epoch_age_days(datetime.now(UTC))
+    console.print(f"{len(cat):,} satellites from {', '.join(str(p) for p in paths)}")
+    console.print(
+        f"Orbital elements are {float(np.median(ages)):.1f} days old (median); "
+        "they stay accurate for about a week."
+    )
 
 
 @app.command()

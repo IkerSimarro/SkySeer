@@ -19,6 +19,7 @@ from .track import Tracker
 if TYPE_CHECKING:
     from .astro.autocal import AutoCalibrator
     from .astro.calibrate import Calibration
+    from .astro.satellites import SatelliteIdentifier
 
 log = logging.getLogger(__name__)
 
@@ -40,10 +41,12 @@ class Pipeline:
         frame_size: tuple[int, int],
         calibration: Calibration | None = None,
         autocal: AutoCalibrator | None = None,
+        identifier: SatelliteIdentifier | None = None,
     ):
         self.config = config
         self.calibration = calibration
         self.autocal = autocal
+        self.identifier = identifier
         self.fps = fps
         self.detector = MotionDetector(config.detector, frame_size)
         self.tracker = Tracker(config.tracker, fps)
@@ -95,15 +98,32 @@ class Pipeline:
             label, confidence, scores = result.label, result.confidence, result.scores
         event = Event(self._next_event_id, track, label, confidence, features, scores)
         self._next_event_id += 1
+        if label is ObjectClass.STAR:
+            event.label_source = "starfield"
         if self.calibration is not None:
             from .astro.sky import sky_path
 
             event.sky = sky_path(track, self.calibration)
+            if (
+                self.identifier is not None
+                and label is not ObjectClass.STAR
+                and self.identifier.can_check(event.sky)
+            ):
+                event.identification_checked = True
+                match = self.identifier.identify(event.sky)
+                if match is not None:
+                    event.identification = match
+                    if match.confidence >= 0.5:
+                        # A confident orbit match outranks the motion rules.
+                        event.label, event.label_source = ObjectClass.SATELLITE, "orbit"
+                        event.confidence = match.confidence
+                    log.info("Event %d identified as %s", event.id, match.short_label())
         log.info(
-            "Event %d: %s (%.2f) %.1fs, %d detections",
+            "Event %d: %s (%.2f, %s) %.1fs, %d detections",
             event.id,
-            label,
-            confidence,
+            event.label,
+            event.confidence,
+            event.label_source,
             track.duration,
             len(track.detections),
         )
@@ -116,9 +136,12 @@ def run(
     progress: ProgressCallback | None = None,
     calibration: Calibration | None = None,
     autocal: AutoCalibrator | None = None,
+    identifier: SatelliteIdentifier | None = None,
 ) -> Iterator[Event]:
     """Run the pipeline over a whole source, yielding events as they complete."""
-    pipeline = Pipeline(config, source.fps, (source.width, source.height), calibration, autocal)
+    pipeline = Pipeline(
+        config, source.fps, (source.width, source.height), calibration, autocal, identifier
+    )
     try:
         for frame in source:
             yield from pipeline.process(frame)

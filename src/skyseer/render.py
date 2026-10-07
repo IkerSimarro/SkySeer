@@ -78,9 +78,10 @@ def render_annotated_video(
             for ev, (x, y, w, h) in active or []:
                 color = _bgr(CLASS_COLORS[ev.label])
                 cv2.rectangle(frame, (x - pad, y - pad), (x + w + pad, y + h + pad), color, 2)
+                name = ev.identification.name.strip() if ev.identification else str(ev.label)
                 cv2.putText(
                     frame,
-                    f"#{ev.id} {ev.label}",
+                    f"#{ev.id} {name}",
                     (x - pad, max(12, y - pad - 6)),
                     cv2.FONT_HERSHEY_SIMPLEX,
                     0.5,

@@ -62,3 +62,15 @@ astro:                        # star-based calibration (plate solving)
   database_max_fov: 70.0
   database_max_mag: 6.5       # faintest catalogue stars used
   data_dir: data/astro        # star catalogue and databases are cached here
+
+satellites:                   # naming satellites from public orbit data (needs the location)
+  enabled: true
+  groups: [active, visual]    # CelesTrak lists: active payloads + bright rocket bodies
+  max_age_hours: 24.0         # re-download orbits older than this (cached for offline use)
+  extra_tle_files: []         # e.g. historical orbits for an old video (space-track.org)
+  max_clock_offset_s: 3.0     # how wrong the camera clock may be; ~0.1 with GPS time
+  max_cross_track_deg: 0.3    # max sideways distance between seen and predicted path
+  max_timing_spread_s: 0.5    # max variation of the timing offset along the path
+  candidate_radius_deg: 2.0
+  max_candidates: 40
+  max_elements_age_days: 10.0 # orbits further than this from the recording date are unusable

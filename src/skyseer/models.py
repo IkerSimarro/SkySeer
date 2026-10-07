@@ -96,6 +96,7 @@ class Event:
     sky: Any = None  # astro.sky.SkyPath when the camera is calibrated
     identification: Any = None  # astro.satellites.SatelliteMatch when matched to an orbit
     identification_checked: bool = False  # True if an orbit catalogue was searched
+    label_source: str = "rules"  # "rules", "starfield" or "orbit" (matched a known satellite)
 
     def to_dict(self) -> dict[str, Any]:
         t = self.track
@@ -103,6 +104,7 @@ class Event:
             "id": self.id,
             "track_id": t.id,
             "label": str(self.label),
+            "label_source": self.label_source,
             "confidence": round(self.confidence, 3),
             "start_time": t.start_time.isoformat(),
             "end_time": t.end_time.isoformat(),

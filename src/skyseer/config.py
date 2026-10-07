@@ -102,6 +102,30 @@ class AstroConfig(_Section):
     data_dir: str = "data/astro"
 
 
+class SatelliteConfig(_Section):
+    """Identifying detections against the public satellite catalogue (needs the location)."""
+
+    enabled: bool = True
+    groups: list[str] = Field(
+        default_factory=lambda: ["active", "visual"],
+        description="CelesTrak groups: 'active' payloads plus 'visual' (bright rocket bodies)",
+    )
+    max_age_hours: float = Field(24.0, description="Re-download orbits older than this")
+    extra_tle_files: list[str] = Field(
+        default_factory=list, description="Extra TLE files, e.g. historical sets for old videos"
+    )
+    max_clock_offset_s: float = Field(
+        3.0, description="How wrong the camera clock may be (GPS-timed stations: ~0.1 s)"
+    )
+    max_cross_track_deg: float = 0.3
+    max_timing_spread_s: float = 0.5
+    candidate_radius_deg: float = 2.0
+    max_candidates: int = 40
+    max_elements_age_days: float = Field(
+        10.0, description="Skip identification if orbital elements are further from the date"
+    )
+
+
 class PipelineConfig(_Section):
     frame_skip: int = Field(1, ge=1, description="Process every Nth frame")
 
@@ -115,6 +139,7 @@ class Config(_Section):
     rules: RulesConfig = RulesConfig()
     observer: ObserverConfig = ObserverConfig()
     astro: AstroConfig = AstroConfig()
+    satellites: SatelliteConfig = SatelliteConfig()
 
 
 def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
