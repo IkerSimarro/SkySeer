@@ -116,9 +116,12 @@ def write_reports(events: list[Event], out_dir: Path) -> None:
 def _summary(events: list[Event]) -> Table:
     table = Table(title=f"{len(events)} events", header_style="bold cyan")
     with_sky = any(e.sky is not None for e in events)
-    with_id = any(e.identification_checked for e in events)
+    with_mag = any(e.photometry is not None for e in events)
+    with_id = any(e.identification_checked or e.shower_checked for e in events)
     cols = ["#", "Class", "Conf.", "Start (UTC)", "Duration"]
     cols += ["Speed °/s", "Arc °"] if with_sky else ["Speed px/f", "Linearity"]
+    if with_mag:
+        cols.append("Mag")
     if with_id:
         cols.append("Identified as")
     for col in cols:
@@ -139,15 +142,28 @@ def _summary(events: list[Event]) -> Table:
             )
         else:
             row += [f"{e.features['avg_speed']:.2f}", f"{e.features['linearity']:.2f}"]
+        if with_mag:
+            row.append(e.photometry.peak_label if e.photometry is not None else "-")
         if with_id:
-            m = e.identification
-            row.append(
-                m.short_label()
-                if m is not None
-                else ("[dim]no catalogued match[/dim]" if e.identification_checked else "")
-            )
+            row.append(_identity(e))
         table.add_row(*row)
     return table
+
+
+def _identity(e: Event) -> str:
+    """What the event is beyond its class: satellite name, meteor shower, fireball."""
+    parts = []
+    if e.identification is not None:
+        parts.append(e.identification.short_label())
+    elif e.identification_checked and e.label == "Satellite":
+        parts.append("[dim]no catalogued match[/dim]")
+    if e.shower_checked:
+        parts.append(e.shower.short_label() if e.shower is not None else "sporadic")
+    if e.periodicity is not None:
+        parts.append(f"blinks every {e.periodicity.period_s:.1f}s")
+    if e.fireball:
+        parts.append("[bold red]FIREBALL[/bold red]")
+    return ", ".join(parts)
 
 
 LatOpt = Annotated[float | None, typer.Option("--lat", help="Observer latitude, degrees N")]
@@ -592,6 +608,54 @@ def _compass(az: float) -> str:
         "NNW",
     ]
     return points[int((az % 360) / 22.5 + 0.5) % 16]
+
+
+@app.command()
+def showers(
+    date: Annotated[
+        datetime | None,
+        typer.Option("--date", help="UTC date/time (default: now)", formats=TIME_FORMATS),
+    ] = None,
+    lat: LatOpt = None,
+    lon: LonOpt = None,
+    config: ConfigOpt = None,
+    min_members: Annotated[
+        int, typer.Option(help="Only well-observed showers (meteors in the IAU data)")
+    ] = 1000,
+) -> None:
+    """Meteor showers active on a date, and (with --lat/--lon) where their radiants are."""
+    from .astro.frames import icrs_to_enu_matrix, radec_to_vec, vec_to_altaz
+    from .astro.showers import active_showers, solar_longitude
+
+    cfg = load_config(config)
+    when = date or datetime.now(UTC)
+    when = when if when.tzinfo else when.replace(tzinfo=UTC)
+    observer = _observer(cfg, lat, lon, None)
+    lsun = solar_longitude(when)
+    table = Table(
+        title=f"Active meteor showers, {when:%Y-%m-%d %H:%M} UTC (solar longitude {lsun:.2f}°)",
+        header_style="bold cyan",
+    )
+    for col in ("Code", "Shower", "Peak", "Radiant RA / Dec", "Speed"):
+        table.add_column(col, justify="left" if col in ("Code", "Shower") else "right")
+    if observer is not None:
+        table.add_column("Radiant altitude", justify="right")
+    rows = sorted(active_showers(when, min_members), key=lambda s: -s.members)
+    for s in rows:
+        ra, dec = s.radiant(lsun)
+        days = ((s.lsun_peak - lsun + 180) % 360) - 180  # ~1 deg of solar longitude per day
+        peak = (
+            "today" if abs(days) < 1 else (f"in {days:.0f} d" if days > 0 else f"{-days:.0f} d ago")
+        )
+        row = [s.code, s.name, peak, f"{ra:6.1f}° / {dec:+5.1f}°", f"{s.v_inf:.0f} km/s"]
+        if observer is not None:
+            alt = float(
+                vec_to_altaz(radec_to_vec(ra, dec) @ icrs_to_enu_matrix(when, observer).T)[0]
+            )
+            row.append(f"{alt:+.0f}°" + ("" if alt > 0 else " (below horizon)"))
+        table.add_row(*row)
+    console.print(table)
+    console.print("[dim]Source: IAU Meteor Data Center (established showers).[/dim]")
 
 
 @app.command()

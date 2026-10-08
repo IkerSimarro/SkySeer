@@ -81,3 +81,26 @@ satellites:                   # naming satellites from public orbit data (needs 
   candidate_radius_deg: 2.0
   max_candidates: 40
   max_elements_age_days: 10.0 # orbits further than this from the recording date are unusable
+
+showers:                      # meteor shower association (IAU Meteor Data Center list)
+  enabled: true
+  # Tuned by Monte Carlo: ~96% of shower meteors found, ~5% of sporadics matched by chance
+  max_radiant_offset_deg: 2.5 # backward path must pass this close to the radiant (+ error)
+  direction_error_deg: 0.05   # position error at each end of a meteor path
+  max_offset_cap_deg: 6.0
+  min_arc_deg: 1.0            # shorter paths can't be traced back reliably
+  min_radiant_distance_deg: 2.0
+  max_radiant_distance_deg: 90.0
+  min_radiant_elevation_deg: -5.0
+  min_speed_ratio: 0.6        # observed / expected angular speed (needs the location)
+  max_speed_ratio: 1.5
+  min_members: 0              # e.g. 1000 to only use well-observed (major) showers
+
+photometry:
+  fireball_magnitude: -4.0    # this bright or brighter = fireball (Venus is about -4)
+  aperture_px: 4.0            # star photometry radius (captures ~99% of a sharp star)
+
+alerts:                       # fireball alerts; nothing is sent unless configured
+  log_file: data/alerts.jsonl
+  webhook_url: null           # POST a JSON message here
+  ntfy_topic: null            # push to your phone with the free ntfy app

@@ -41,6 +41,8 @@ class Detection:
     max_brightness: float
     contrast: float = 0.0  # peak brightness above the surrounding sky (reveals strobes)
     texture: float = 0.0  # spread of the surrounding sky / frame noise: ~1 clear, >3 cloud
+    flux: float = 0.0  # total brightness above the sky (for magnitudes)
+    saturated: bool = False  # brightest pixel clipped: true brightness is higher
 
     @property
     def aspect_ratio(self) -> float:
@@ -99,6 +101,11 @@ class Event:
     identification: Any = None  # astro.satellites.SatelliteMatch when matched to an orbit
     identification_checked: bool = False  # True if an orbit catalogue was searched
     label_source: str = "rules"  # "rules", "starfield" or "orbit" (matched a known satellite)
+    photometry: Any = None  # astro.photometry.EventPhotometry when the camera is calibrated
+    shower: Any = None  # astro.showers.ShowerMatch for meteors from a known shower
+    shower_checked: bool = False  # True if shower association ran (None => sporadic)
+    periodicity: Any = None  # astro.lightcurve.Periodicity: regular blinking (tumbling)
+    fireball: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         t = self.track
@@ -131,4 +138,12 @@ class Event:
             out["identification"] = self.identification.to_dict()
         elif self.identification_checked:
             out["identification"] = None  # searched the catalogue, nothing matched
+        if self.photometry is not None:
+            out["photometry"] = self.photometry.to_dict()
+        if self.shower_checked:
+            out["shower"] = self.shower.to_dict() if self.shower is not None else "sporadic"
+        if self.periodicity is not None:
+            out["periodicity"] = self.periodicity.to_dict()
+        if self.fireball:
+            out["fireball"] = True
         return out

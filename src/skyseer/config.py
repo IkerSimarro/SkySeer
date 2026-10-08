@@ -159,6 +159,49 @@ class SatelliteConfig(_Section):
     )
 
 
+class ShowerConfig(_Section):
+    """Associating meteors with showers (IAU Meteor Data Center established showers)."""
+
+    enabled: bool = True
+    # Defaults chosen by Monte Carlo (2,000 simulated meteors with realistic radiant and
+    # speed scatter): ~96% of shower meteors found, ~5% of sporadics matched by chance.
+    max_radiant_offset_deg: float = Field(
+        2.5, description="How close the backward path must pass the radiant (+ path error)"
+    )
+    direction_error_deg: float = Field(
+        0.05, description="Typical position error at each end of a meteor path (deg)"
+    )
+    max_offset_cap_deg: float = 6.0
+    min_arc_deg: float = Field(1.0, description="Shorter paths can't be traced back reliably")
+    min_radiant_distance_deg: float = 2.0
+    max_radiant_distance_deg: float = 90.0
+    min_radiant_elevation_deg: float = -5.0
+    min_speed_ratio: float = 0.6
+    max_speed_ratio: float = 1.5
+    min_members: int = Field(
+        0, description="Ignore showers detected with fewer meteors than this (minor showers)"
+    )
+
+
+class PhotometryConfig(_Section):
+    fireball_magnitude: float = Field(
+        -4.0, description="Meteors this bright or brighter are fireballs (Venus is about -4)"
+    )
+    aperture_px: float = 4.0
+
+
+class AlertConfig(_Section):
+    """Where fireball alerts go. Nothing is sent anywhere unless configured here."""
+
+    log_file: str | None = "data/alerts.jsonl"
+    webhook_url: str | None = Field(
+        None, description="POST a JSON message here (e.g. a home-automation webhook)"
+    )
+    ntfy_topic: str | None = Field(
+        None, description="Push to phones via the free ntfy app (https://ntfy.sh/<topic>)"
+    )
+
+
 class PipelineConfig(_Section):
     frame_skip: int = Field(1, ge=1, description="Process every Nth frame")
     disturbance_fraction: float = Field(
@@ -181,6 +224,9 @@ class Config(_Section):
     observer: ObserverConfig = ObserverConfig()
     astro: AstroConfig = AstroConfig()
     satellites: SatelliteConfig = SatelliteConfig()
+    showers: ShowerConfig = ShowerConfig()
+    photometry: PhotometryConfig = PhotometryConfig()
+    alerts: AlertConfig = AlertConfig()
 
 
 def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:

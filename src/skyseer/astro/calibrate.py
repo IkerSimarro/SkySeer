@@ -38,6 +38,7 @@ from .frames import (
     vec_to_altaz,
     vec_to_radec,
 )
+from .photometry import ZeroPoint, fit_zero_point
 
 log = logging.getLogger(__name__)
 
@@ -63,6 +64,7 @@ class Calibration:
     rms_px: float
     solver: dict[str, Any] = field(default_factory=dict)
     matched: list[dict[str, float]] = field(default_factory=list)  # for overlays/debugging
+    zero_point: ZeroPoint | None = None  # magnitude scale, from the matched stars
 
     @property
     def frame(self) -> str:
@@ -157,6 +159,7 @@ class Calibration:
             "n_stars": self.n_stars,
             "rms_px": self.rms_px,
             "solver": self.solver,
+            "zero_point": None if self.zero_point is None else self.zero_point.to_dict(),
             "summary": self.summary(),
         }
 
@@ -167,6 +170,7 @@ class Calibration:
     def load(cls, path: str | Path) -> Calibration:
         d = json.loads(Path(path).read_text(encoding="utf-8"))
         obs = Observer(**d["observer"]) if d["observer"] else None
+        zp = d.get("zero_point")
         return cls(
             CameraModel.from_dict(d["camera"]),
             datetime.fromisoformat(d["time"]),
@@ -174,6 +178,7 @@ class Calibration:
             d["n_stars"],
             d["rms_px"],
             d.get("solver", {}),
+            zero_point=None if zp is None else ZeroPoint(zp["value"], zp["scatter"], zp["n_stars"]),
         )
 
 
@@ -359,14 +364,28 @@ def calibrate(
                 start, stars, cat, frame_vecs, time, observer, {"method": "hint"}, *limits
             )
             log.info("Re-calibrated from previous solution (%d stars)", cal.n_stars)
-            return cal
+            return _with_zero_point(cal, image)
         except CalibrationError as e:
             log.info("Quick re-calibration failed (%s); doing a full solve", e)
 
     model, solver_info = _lost_in_space(
         stars, w, h, frame_vecs, fov_estimate, fov_max_error, database
     )
-    return _refine(model, stars, cat, frame_vecs, time, observer, solver_info, *limits)
+    cal = _refine(model, stars, cat, frame_vecs, time, observer, solver_info, *limits)
+    return _with_zero_point(cal, image)
+
+
+def _with_zero_point(cal: Calibration, image: np.ndarray) -> Calibration:
+    """Measure the magnitude scale from the matched stars (photometric calibration)."""
+    cal.zero_point = fit_zero_point(image, cal.matched)
+    if cal.zero_point is not None:
+        log.info(
+            "Photometric zero point %.2f (+-%.2f mag from %d stars)",
+            cal.zero_point.value,
+            cal.zero_point.scatter,
+            cal.zero_point.n_stars,
+        )
+    return cal
 
 
 def _carry_forward(hint: Calibration, time: datetime, observer: Observer | None) -> CameraModel:

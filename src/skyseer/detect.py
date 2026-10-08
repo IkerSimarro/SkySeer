@@ -17,6 +17,13 @@ class MotionDetector:
     """
 
     @staticmethod
+    def _saturation_level(image: np.ndarray) -> float:
+        """Pixel value at which the sensor/encoding clips (250 for 8-bit video)."""
+        if np.issubdtype(image.dtype, np.integer):
+            return 0.98 * float(np.iinfo(image.dtype).max)
+        return float("inf")
+
+    @staticmethod
     def _sky_noise(gray: np.ndarray) -> float:
         """Robust pixel noise of the frame (high-pass residual, sampled for speed)."""
         g = gray.astype(np.float32)
@@ -109,6 +116,12 @@ class MotionDetector:
             fx, fy = int(x * inv), int(y * inv)
             fw, fh = max(1, int(round(w * inv))), max(1, int(round(h * inv)))
             roi = gray_full[fy : fy + fh, fx : fx + fw]
+            # Total brightness above the local sky in a box 2 px around the blob, at full
+            # resolution, comparable with the star photometry used for the zero point.
+            bx0, by0 = max(0, fx - 2), max(0, fy - 2)
+            box = gray_full[by0 : fy + fh + 2, bx0 : fx + fw + 2].astype(np.float32)
+            flux = float(box.sum() - sky * box.size) if box.size else 0.0
+            peak = float(box.max()) if box.size else 0.0
             detections.append(
                 Detection(
                     frame_index=frame.index,
@@ -121,6 +134,8 @@ class MotionDetector:
                     max_brightness=float(roi.max()) if roi.size else 0.0,
                     contrast=contrast,
                     texture=texture,
+                    flux=flux,
+                    saturated=peak >= self._saturation_level(gray_full),
                 )
             )
         return detections

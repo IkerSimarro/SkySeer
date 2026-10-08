@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
+from .alerts import Alerter
 from .classify import RuleClassifier
 from .config import Config
 from .detect import MotionDetector
@@ -66,6 +67,8 @@ class Pipeline:
         self._pending: list[Track] = []  # finished tracks waiting out the padding
         self._first_index: int | None = None
         self._settle_until = -1
+        self._shower_associator: Any = None
+        self.alerter = Alerter(config.alerts, config.photometry)
 
     def process(self, frame: Frame) -> list[Event]:
         if self.autocal is not None:
@@ -185,6 +188,7 @@ class Pipeline:
                         event.label, event.label_source = ObjectClass.SATELLITE, "orbit"
                         event.confidence = match.confidence
                     log.info("Event %d identified as %s", event.id, match.short_label())
+        self._science(event)
         log.info(
             "Event %d: %s (%.2f, %s) %.1fs, %d detections",
             event.id,
@@ -195,6 +199,40 @@ class Pipeline:
             len(track.detections),
         )
         return event
+
+    def _science(self, event: Event) -> None:
+        """Photometry, shower association, light-curve periodicity and fireball alerts."""
+        from .astro.lightcurve import find_period
+        from .astro.photometry import event_photometry
+
+        dets = event.track.detections
+        cal = self.calibration
+        if cal is not None and cal.zero_point is not None:
+            event.photometry = event_photometry(
+                [d.flux for d in dets], [d.saturated for d in dets], cal.zero_point
+            )
+        if (
+            event.label is ObjectClass.METEOR
+            and event.sky is not None
+            and self.config.showers.enabled
+        ):
+            event.shower_checked = True
+            event.shower = self._associator(cal.observer if cal else None).associate(event.sky)
+        if event.label in (ObjectClass.SATELLITE, ObjectClass.PLANE) and event.track.duration >= 6:
+            t = np.array([(d.timestamp - dets[0].timestamp).total_seconds() for d in dets])
+            if event.photometry is not None:
+                values = np.array([np.nan if m is None else m for m in event.photometry.magnitudes])
+            else:  # relative brightness in magnitude units
+                values = -2.5 * np.log10(np.maximum([d.contrast for d in dets], 1.0))
+            event.periodicity = find_period(t, values)
+        self.alerter.check(event)
+
+    def _associator(self, observer: Any) -> Any:
+        from .astro.showers import ShowerAssociator
+
+        if self._shower_associator is None or self._shower_associator.observer != observer:
+            self._shower_associator = ShowerAssociator(self.config.showers, observer)
+        return self._shower_associator
 
 
 def run(
