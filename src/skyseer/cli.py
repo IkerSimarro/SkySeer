@@ -456,34 +456,20 @@ def bench(
     cache: Annotated[Path, typer.Option(help="Where scenes are stored")] = Path("data/bench"),
 ) -> None:
     """Measure detection recall, classification accuracy and speed on synthetic scenes."""
-    import time
-
-    from .evaluate import EvalResult, evaluate
-    from .synth import GroundTruth, SceneSpec, generate
+    from .evaluate import run_benchmark
 
     _setup_logging(False)
     cfg = _config(config, None, frame_skip)
-    total = EvalResult(0, 0, 0, 0)
-    frames = 0
-    elapsed = 0.0
-    for seed in range(scenes):
-        path = cache / f"scene_{seed:03d}_{int(seconds)}s.mp4"
-        if path.exists() and path.with_suffix(".json").exists():
-            truth = GroundTruth.load(path.with_suffix(".json"))
-        else:
-            with console.status(f"Generating scene {seed}..."):
-                truth = generate(SceneSpec(seconds=seconds, seed=1000 + seed), path)
-        source = FileSource(path)
-        frames += source.frame_count
-        t0 = time.perf_counter()
-        events = list(run(source, cfg))
-        elapsed += time.perf_counter() - t0
-        r = evaluate(events, truth)
-        total.n_truth += r.n_truth
-        total.detected += r.detected
-        total.correct += r.correct
-        total.false_positives += r.false_positives
-        total.confusion.update(r.confusion)
+    with console.status("Running benchmark scenes...") as status:
+        bench_result = run_benchmark(
+            cfg,
+            scenes,
+            seconds,
+            cache,
+            on_scene=lambda s: status.update(f"Scene {s + 1}/{scenes}..."),
+        )
+    total = bench_result.result
+    frames, elapsed = bench_result.frames, bench_result.seconds
 
     classes = sorted({t for t, _ in total.confusion})
     predicted = sorted({p for _, p in total.confusion})

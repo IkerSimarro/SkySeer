@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 from collections import Counter
+from collections.abc import Callable
 from dataclasses import dataclass, field
+from pathlib import Path
 
 import numpy as np
 
+from .config import Config
 from .models import Event, ObjectClass
 from .synth import GroundTruth, TruthObject
 
@@ -63,3 +66,67 @@ def evaluate(
         1 for e in events if e.id not in matched_events and e.label not in _IGNORED
     )
     return result
+
+
+@dataclass
+class BenchmarkResult:
+    result: EvalResult
+    frames: int
+    seconds: float  # processing time
+
+    @property
+    def fps(self) -> float:
+        return self.frames / self.seconds if self.seconds else 0.0
+
+    def to_dict(self) -> dict[str, float | int]:
+        r = self.result
+        return {
+            "objects": r.n_truth,
+            "recall": round(r.recall, 4),
+            "accuracy": round(r.accuracy, 4),
+            "false_positives": r.false_positives,
+            "frames_per_second": round(self.fps, 1),
+        }
+
+
+def run_benchmark(
+    config: Config,
+    scenes: int = 10,
+    seconds: float = 20.0,
+    cache: Path = Path("data/bench"),
+    on_scene: Callable[[int], None] | None = None,
+) -> BenchmarkResult:
+    """Detection and classification accuracy on synthetic scenes with known truth.
+
+    Scenes are generated once (seeds 1000+) and cached, so results are comparable
+    between runs and code versions.
+    """
+    import time
+
+    from .pipeline import run
+    from .sources import FileSource
+    from .synth import SceneSpec, generate
+
+    total = EvalResult(0, 0, 0, 0)
+    frames = 0
+    elapsed = 0.0
+    for seed in range(scenes):
+        if on_scene is not None:
+            on_scene(seed)
+        path = cache / f"scene_{seed:03d}_{int(seconds)}s.mp4"
+        if path.exists() and path.with_suffix(".json").exists():
+            truth = GroundTruth.load(path.with_suffix(".json"))
+        else:
+            truth = generate(SceneSpec(seconds=seconds, seed=1000 + seed), path)
+        source = FileSource(path)
+        frames += source.frame_count
+        t0 = time.perf_counter()
+        events = list(run(source, config))
+        elapsed += time.perf_counter() - t0
+        r = evaluate(events, truth)
+        total.n_truth += r.n_truth
+        total.detected += r.detected
+        total.correct += r.correct
+        total.false_positives += r.false_positives
+        total.confusion.update(r.confusion)
+    return BenchmarkResult(total, frames, elapsed)
