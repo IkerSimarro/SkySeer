@@ -56,6 +56,10 @@ star_filter:                  # tracks drifting in lockstep are background stars
   max_spatial_distance: 500.0
   min_speed: 0.01
 
+classifier:
+  method: rules               # rules = hand-written baseline; model = learned (skyseer train)
+  model_path: data/models/classifier.joblib
+
 rules:                        # heuristic baseline classifier
   # Speeds are in image diagonals per second, so the rules work at any resolution.
   meteor_reference_speed: 0.4       # "fast": crossing ~40% of the frame per second

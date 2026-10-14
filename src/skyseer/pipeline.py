@@ -11,7 +11,7 @@ import cv2
 import numpy as np
 
 from .alerts import Alerter
-from .classify import RuleClassifier
+from .classify import RuleClassifier, make_classifier
 from .config import Config
 from .detect import MotionDetector
 from .features import extract_features
@@ -59,7 +59,7 @@ class Pipeline:
         self.stabiliser = Stabiliser(config.stabilise, fps) if config.stabilise.enabled else None
         self.tracker = Tracker(config.tracker, fps)
         self.star_filter = StarFieldFilter(config.star_filter)
-        self.classifier = RuleClassifier(config.rules)
+        self.classifier = make_classifier(config)
         self._recent: deque[Track] = deque()  # finished tracks kept as star-filter context
         self._context_frames = round(60 * fps)
         self._next_event_id = 1
@@ -174,7 +174,11 @@ class Pipeline:
     def _classify(self, track: Track, context: list[Track]) -> Event:
         rules = self.config.rules
         features = extract_features(
-            track, rules.direction_change_deg, rules.blink_change_threshold, self._diagonal
+            track,
+            rules.direction_change_deg,
+            rules.blink_change_threshold,
+            self._diagonal,
+            self.config.pipeline.frame_skip,
         )
         if self.star_filter.is_star(track, context):
             label, confidence, scores = ObjectClass.STAR, 0.9, {}
@@ -185,6 +189,8 @@ class Pipeline:
         self._next_event_id += 1
         if label is ObjectClass.STAR:
             event.label_source = "starfield"
+        elif not isinstance(self.classifier, RuleClassifier):
+            event.label_source = "model"
         if self.calibration is not None:
             from .astro.sky import sky_path
 

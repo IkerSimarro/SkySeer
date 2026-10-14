@@ -141,6 +141,7 @@ class MotionDetector:
                     texture=texture,
                     flux=flux,
                     saturated=peak >= self._saturation_level(gray_full),
+                    snr=contrast / max(self._noise or 0.0, 0.5),
                 )
             )
         return detections

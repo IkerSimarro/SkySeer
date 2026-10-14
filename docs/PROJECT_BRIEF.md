@@ -29,12 +29,15 @@ aerospace recruiter or engineer will think when they see it on GitHub**. That me
 1. **Input:** a video file or a live camera (OpenCV, later the Raspberry Pi camera).
    Every frame carries a UTC timestamp.
 2. **Detection:** background subtraction (OpenCV MOG2) finds moving blobs, including
-   faint 1-2 px objects. Camera movement and scene changes are detected and ignored.
+   faint 1-2 px objects. Camera shake is measured from the stars, star-tracker style, and
+   cancelled; real camera moves and scene changes are detected and ignored.
 3. **Tracking:** Kalman-filter motion prediction plus optimal (Hungarian) assignment
-   links detections into tracks. It works in streaming mode, so each event is reported as
-   soon as the object leaves the view.
+   links detections into tracks, coasting through moments when two objects overlap. It
+   works in streaming mode, so each event is reported as soon as the object leaves the
+   view, with a zoomed video clip, a trail image and a context image.
 4. **Classification:** rules based on resolution-independent features (speed, straightness,
-   aircraft strobe rhythm, cloud texture). A machine-learning classifier is planned.
+   aircraft strobe rhythm, cloud texture) by default; an optional machine-learning model
+   (gradient-boosted trees, calibrated probabilities) trained on realistic simulations.
 5. **Star calibration (plate solving):** recognises the star pattern to find exactly
    where the camera points. It uses ESA's tetra3 star-tracker algorithm plus a custom
    camera model with lens distortion, and needs no location or time. Every pixel then
@@ -56,7 +59,10 @@ aerospace recruiter or engineer will think when they see it on GitHub**. That me
 | Camera pointing from stars | under 0.004° error; wrong solutions rejected by statistical checks |
 | Satellite identification | 6/6 real satellites named out of 16,078; 0/300 false names |
 | Camera clock error | measured to ±0.15 s |
-| Detection / classification benchmark | 100% detection, 100% classification, 0 false alarms |
+| Detection / classification benchmark (clean scenes) | 100% detection, 100% classification, 0 false alarms |
+| Camera shake (simulated wobble up to 6 px, 5 Hz) | 0 false alarms (416 without correction at 4 px) |
+| Learned classifier, 150 held-out *difficult* simulated nights | 96.7% classified right vs 69.5% for the rules; 1 false alarm vs 59 |
+| Learned classifier, real YouTube footage (224 blind by-eye labels) | behind the rules: 19/31 real objects right vs 25/31 (sim-to-real gap; rules stay default) |
 | Meteor shower identification | ~96% of shower meteors correct; ~5% of random meteors matched by chance |
 | Meteor brightness | ±0.1 magnitude |
 
@@ -83,8 +89,8 @@ used for robustness testing.
 | 1 | Star recognition / camera calibration | done |
 | 2 | Satellite identification | done |
 | 3 | Meteor science (showers, magnitudes, fireballs, light curves) | done |
-| 4 | Smarter detection: ML classifier, one clip per event, camera-shake correction | next |
-| 5 | FastAPI backend + custom "mission control" web dashboard (replacing an old Streamlit UI) | planned |
+| 4 | Smarter detection: ML classifier, one clip per event, camera-shake correction | done |
+| 5 | FastAPI backend + custom "mission control" web dashboard (replacing an old Streamlit UI) | next |
 | 6 | Raspberry Pi station: camera, GPS, auto-start, enclosure, outdoor tests | needs hardware |
 | 7 | Portfolio launch: README with measured results, demo video, v1.0 release | planned |
 

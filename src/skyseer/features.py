@@ -48,6 +48,16 @@ FEATURE_NAMES: tuple[str, ...] = (
     "cloudiness",
     "path_deviation",
     "path_deviation_max",
+    # Scale-free versions, used by the learned classifier (same meaning at any
+    # resolution, frame rate or camera gain):
+    "detection_rate",
+    "speed_cv",
+    "max_speed_ratio",
+    "path_length_frac",
+    "accel_rel",
+    "snr_median",
+    "snr_max",
+    "snr_cv",
 )
 
 
@@ -128,6 +138,7 @@ def extract_features(
     direction_change_deg: float = 30.0,
     blink_change_threshold: float = 0.15,
     frame_diagonal: float | None = None,
+    frame_skip: int = 1,
 ) -> dict[str, float]:
     dets = track.detections
     n = len(dets)
@@ -171,7 +182,17 @@ def extract_features(
     avg_area = float(areas.mean())
     avg_speed = float(speeds.mean()) if speeds.size else 0.0
     diag = frame_diagonal or REFERENCE_DIAGONAL
+    snr = np.array([d.snr for d in dets])
+    processed = (frames[-1] - frames[0]) / frame_skip + 1  # frames the detector looked at
     return {
+        "detection_rate": min(1.0, n / processed),
+        "speed_cv": float(speeds.std() / avg_speed) if avg_speed > 0 else 0.0,
+        "max_speed_ratio": float(speeds.max() / avg_speed) if avg_speed > 0 else 0.0,
+        "path_length_frac": total_distance / diag,
+        "accel_rel": float(accel.mean() / avg_speed) if accel.size and avg_speed > 0 else 0.0,
+        "snr_median": float(np.median(snr)),
+        "snr_max": float(snr.max()),
+        "snr_cv": float(snr.std() / snr.mean()) if snr.mean() > 0 else 0.0,
         **flash_features(track),
         "speed_frac_per_s": avg_speed * track.fps / diag,
         # ~1 on clear sky; well above 3 when the "object" is moving cloud texture.

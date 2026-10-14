@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field
@@ -87,6 +87,15 @@ class StarFilterConfig(_Section):
     min_temporal_overlap: float = 0.5
     max_spatial_distance: float = 500.0
     min_speed: float = 0.01
+
+
+class ClassifierConfig(_Section):
+    method: Literal["rules", "model"] = Field(
+        "rules", description="rules = hand-written baseline; model = learned (skyseer train)"
+    )
+    model_path: str = Field(
+        "data/models/classifier.joblib", description="Trained model used by method: model"
+    )
 
 
 class RulesConfig(_Section):
@@ -283,6 +292,7 @@ class Config(_Section):
     tracker: TrackerConfig = TrackerConfig()
     filter: FilterConfig = FilterConfig()
     star_filter: StarFilterConfig = StarFilterConfig()
+    classifier: ClassifierConfig = ClassifierConfig()
     rules: RulesConfig = RulesConfig()
     observer: ObserverConfig = ObserverConfig()
     astro: AstroConfig = AstroConfig()

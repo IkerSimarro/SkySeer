@@ -520,6 +520,87 @@ def bench(
 
 
 @app.command()
+def train(
+    data: Annotated[
+        list[Path] | None, typer.Option(help="Training CSVs (default: synthetic_train.csv)")
+    ] = None,
+    test: Annotated[
+        list[Path] | None,
+        typer.Option(help="Held-out CSVs (default: synthetic_test.csv, standard_test.csv)"),
+    ] = None,
+    out: Annotated[Path | None, typer.Option(help="Model file (default: from the config)")] = None,
+    config: ConfigOpt = None,
+) -> None:
+    """Train the learned classifier on labelled tracks and compare it with the rules.
+
+    Build the datasets first with tools/build_training_set.py. Results on the held-out
+    sets are printed and saved next to the model (<model>_report.json); select the model
+    with ``classifier: {method: model}`` in a config file.
+    """
+    from .classify.dataset import arrays, load_csv, object_scores
+    from .classify.model import CLASSES, LearnedClassifier
+
+    _setup_logging(False)
+    cfg = load_config(config)
+    folder = Path("data/datasets")
+    train_files = data or [folder / "synthetic_train.csv"]
+    test_files = test or [p for p in (folder / "synthetic_test.csv", folder / "standard_test.csv")]
+    rows = [r for f in train_files for r in load_csv(f) if not int(r["star"])]
+    X, y, groups, _ = arrays(rows)
+    with console.status(f"Training on {len(rows)} tracks from {len(set(groups))} videos..."):
+        info = {"trained_on": [str(f) for f in train_files], "tracks": len(rows)}
+        model = LearnedClassifier.train(X, y, groups, cfg.rules, info)
+
+    report: dict[str, Any] = {"train": dict(info), "tests": {}}
+    for f in test_files:
+        if not f.exists():
+            console.print(f"[yellow]Skipping missing test set {f}[/yellow]")
+            continue
+        all_rows = load_csv(f)
+        tracks = [r for r in all_rows if not int(r["star"])]
+        Xt, yt, _, rule_labels = arrays(tracks)
+        scores = model.evaluate(Xt, yt, rule_labels)
+        Xa, _, _, rule_all = arrays(all_rows)
+        predicted = np.array(CLASSES)[model.probabilities(Xa).argmax(axis=1)]
+        scores["objects"] = {
+            "model": object_scores(all_rows, predicted),
+            "rules": object_scores(all_rows, rule_all),
+        }
+        report["tests"][f.stem] = scores
+        console.print(_training_table(f.stem, scores))
+
+    path = out or Path(cfg.classifier.model_path)
+    model.info["report"] = report
+    model.save(path)
+    report_path = path.with_name(path.stem + "_report.json")
+    report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
+    console.print(f"Model saved to [bold]{path}[/bold]; report in {report_path}")
+
+
+def _training_table(name: str, scores: dict[str, Any]) -> Table:
+    table = Table(title=f"Held-out: {name}", header_style="bold cyan")
+    table.add_column("Measure")
+    table.add_column("Rules", justify="right")
+    table.add_column("Model", justify="right")
+    m, r = scores["model"], scores["rules"]
+    om, orr = scores["objects"]["model"], scores["objects"]["rules"]
+    table.add_row("Objects found (recall)", f"{orr['recall']:.1%}", f"{om['recall']:.1%}")
+    table.add_row("Objects classified right", f"{orr['accuracy']:.1%}", f"{om['accuracy']:.1%}")
+    table.add_row("False alarms", str(orr["false_positives"]), str(om["false_positives"]))
+    table.add_row("Track accuracy", f"{r['accuracy']:.1%}", f"{m['accuracy']:.1%}")
+    table.add_row("Track macro-F1", f"{r['macro_f1']:.3f}", f"{m['macro_f1']:.3f}")
+    for c in m["per_class"]:
+        table.add_row(
+            f"  F1 {c} (n={m['per_class'][c]['support']})",
+            f"{r['per_class'][c]['f1']:.3f}",
+            f"{m['per_class'][c]['f1']:.3f}",
+        )
+    table.add_row("Calibration error (ECE)", "-", f"{m['ece']:.3f}")
+    table.add_row("Brier score", "-", f"{m['brier']:.3f}")
+    return table
+
+
+@app.command()
 def calibrate(
     source: Annotated[
         Path, typer.Argument(exists=True, dir_okay=False, help="Night-sky video or photo")

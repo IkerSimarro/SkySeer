@@ -48,9 +48,13 @@ def _match_score(event: Event, obj: TruthObject, tolerance: float) -> float:
 def evaluate(
     events: list[Event], truth: GroundTruth, tolerance: float = 15.0, min_match: float = 0.5
 ) -> EvalResult:
-    result = EvalResult(len(truth.objects), 0, 0, 0)
+    """Recall and accuracy over the real objects; any other event not labelled Junk or
+    Star is a false positive (including distractors such as insects that the truth file
+    lists as Junk)."""
+    real = [o for o in truth.objects if o.label != str(ObjectClass.JUNK)]
+    result = EvalResult(len(real), 0, 0, 0)
     matched_events: set[int] = set()
-    for obj in truth.objects:
+    for obj in real:
         scored = [(_match_score(e, obj, tolerance), e) for e in events]
         scored = [(s, e) for s, e in scored if s >= min_match]
         if not scored:

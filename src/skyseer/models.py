@@ -43,6 +43,7 @@ class Detection:
     texture: float = 0.0  # spread of the surrounding sky / frame noise: ~1 clear, >3 cloud
     flux: float = 0.0  # total brightness above the sky (for magnitudes)
     saturated: bool = False  # brightest pixel clipped: true brightness is higher
+    snr: float = 0.0  # contrast in units of the frame's noise: comparable across cameras
 
     @property
     def aspect_ratio(self) -> float:
@@ -100,7 +101,7 @@ class Event:
     sky: Any = None  # astro.sky.SkyPath when the camera is calibrated
     identification: Any = None  # astro.satellites.SatelliteMatch when matched to an orbit
     identification_checked: bool = False  # True if an orbit catalogue was searched
-    label_source: str = "rules"  # "rules", "starfield" or "orbit" (matched a known satellite)
+    label_source: str = "rules"  # "rules", "model", "starfield" or "orbit" (matched an orbit)
     photometry: Any = None  # astro.photometry.EventPhotometry when the camera is calibrated
     shower: Any = None  # astro.showers.ShowerMatch for meteors from a known shower
     shower_checked: bool = False  # True if shower association ran (None => sporadic)
