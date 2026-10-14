@@ -82,7 +82,20 @@ def test_a_big_jump_is_reported_as_a_camera_move(sky):
     shifts = np.zeros((120, 2))
     shifts[60:] = (30.0, 12.0)
     _, moved = corrections(sky, shifts)
-    assert moved[60] and moved.sum() == 1
+    # Confirmed once the stars stay lost for 0.3 s (a glitch would have recovered).
+    assert moved.sum() == 1 and 60 <= int(np.argmax(moved)) <= 60 + round(0.3 * FPS)
+
+
+def test_a_momentary_glitch_is_not_a_camera_move(sky):
+    """A single garbled frame (e.g. a compression keyframe) loses the stars briefly."""
+    stab = Stabiliser(StabiliseConfig(), FPS)
+    moved = []
+    for i, img in enumerate(frames(sky, np.zeros((90, 2)))):
+        if i in (40, 41):
+            img = np.roll(img, (17, 23), axis=(0, 1))  # stars elsewhere for two frames
+        stab.apply(img)
+        moved.append(stab.moved)
+    assert not any(moved)
 
 
 def test_no_stars_means_no_correction():

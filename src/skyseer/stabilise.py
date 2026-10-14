@@ -27,9 +27,12 @@ A knock that leaves the camera pointing slightly differently shows up as a sudde
 in the shift. Its size is known exactly, so it is simply kept corrected: the picture
 stays aligned with the original view, objects are tracked straight through it and the
 star calibration stays valid. Only when the camera really moved, beyond what can be
-corrected (``max_shift_px``, or all the tracked stars vanishing at once), is ``moved``
-set; the pipeline then handles it as a disturbance. This is more reliable than counting
-changed pixels, which missed a 25-pixel knock in a sparse star field.
+corrected (``max_shift_px``, or the tracked stars vanishing at once and staying lost
+for ``confirm_s``), is ``moved`` set; the pipeline then handles it as a disturbance. This
+is more reliable than counting changed pixels, which missed a 25-pixel knock in a sparse
+star field. (The wait matters on real video: in a YouTube recording the faint stars
+"jumped" at every compression keyframe, every 5 s, and recovered a frame later; treating
+those as camera moves threw away good tracks.)
 """
 
 from __future__ import annotations
@@ -65,6 +68,8 @@ class Stabiliser:
         self._knocks = np.zeros(2)  # sudden jumps so far, kept corrected
         self._frames_since_ref = 0
         self._retry_in = 0
+        self._lost = 0  # frames the reference stars have been suddenly lost for
+        self._move_confirmed = False
         self._noise = 1.0
         self.correction = (0.0, 0.0)  # shift applied to the last frame (px)
         self.border = 0  # pixels at each edge invalid after that shift
@@ -74,12 +79,11 @@ class Stabiliser:
     def apply(self, gray: np.ndarray, frame_skip: int = 1) -> np.ndarray:
         """Return ``gray`` shifted to cancel the camera's jitter (or unchanged)."""
         self.correction, self.border, self.moved = (0.0, 0.0), 0, False
-        tracking = self._ref is not None and self.stars >= 0.8 * len(self._ref)
         previous = self._offset.copy()
+        self._move_confirmed = False
         offset = self._measure(gray, frame_skip)
         if offset is None:
-            # Nearly all reference stars tracked last frame, most lost now: the view jumped.
-            self.moved = tracking and self._ref is None
+            self.moved = self._move_confirmed
             return gray
         step = offset - previous
         jump = float(np.hypot(*step))
@@ -110,6 +114,7 @@ class Stabiliser:
     def _measure(self, gray: np.ndarray, frame_skip: int) -> np.ndarray | None:
         cfg = self.config
         if self._ref is None:
+            self._lost = 0
             if self._retry_in > 0:
                 self._retry_in -= 1
                 return None
@@ -119,6 +124,9 @@ class Stabiliser:
                 return None
             self._set_reference(stars, self._offset)  # (re)acquire: continue from last offset
         assert self._ref is not None
+        # Nearly all reference stars agreed last frame (or they were just lost): a failure
+        # now is sudden, unlike clouds, which take the stars away gradually.
+        sudden = self._lost > 0 or self.stars >= 0.8 * len(self._ref)
         # Coarse-to-fine, as star trackers do: each star's brightest pixel in a wide window
         # around where it was last frame gives a rough shift (the median, robust to a
         # satellite or a brighter neighbour in a window), then sub-pixel centroids refine it.
@@ -127,14 +135,27 @@ class Stabiliser:
         pos, ok = self._centroids(gray, last + rough)
         shifts = pos - self._ref
         # Most reference stars must agree on the shift. After a jump beyond the search
-        # window the search lands on *other* stars, which disagree: that is "lost", never
-        # a confident wrong shift.
-        agree = ok & (np.hypot(*(shifts - np.median(shifts[ok], axis=0)).T) < 1.0)
+        # window the search lands on *other* stars, which disagree (by chance only ~3% fall
+        # within agree_px of each other): that is "lost", never a confident wrong shift.
+        # The tolerance allows for low-resolution, compressed video, where the same stars'
+        # centres scatter by a pixel or two from frame to frame.
+        spread = np.hypot(*(shifts - np.median(shifts[ok], axis=0)).T)
+        agree = ok & (spread < cfg.agree_px)
         self.stars = int(agree.sum()) if ok.any() else 0
         if self.stars < max(cfg.min_stars, 0.5 * len(self._ref)):
-            log.debug("Only %d stars agree; re-picking reference stars", self.stars)
+            if sudden:
+                # Lost all at once: a camera move, or a glitch such as a compression
+                # keyframe. Keep the reference and wait: a glitch recovers within frames.
+                self._lost += 1
+                if self._lost * frame_skip < cfg.confirm_s * self.fps:
+                    return None
+                self._move_confirmed = True
+                log.debug("Stars lost for %d frames: the camera moved", self._lost)
+            else:
+                log.debug("Only %d stars agree; re-picking reference stars", self.stars)
             self._ref = None
             return None
+        self._lost = 0
         offset = self._ref_offset + np.median(shifts[agree], axis=0)
         self._offset = offset
         self._frames_since_ref += 1

@@ -218,12 +218,18 @@ class StabiliseConfig(_Section):
         15, ge=2, description="Coarse search radius: the most a star may move between frames"
     )
     window_px: int = Field(5, ge=2, description="Window for each star's sub-pixel centre")
+    agree_px: float = Field(
+        2.5, gt=0, description="Stars agreeing on the shift within this are still tracked"
+    )
     keyframe_s: float = Field(10.0, gt=0, description="Pick fresh reference stars this often")
     trend_s: float = Field(
         3.0, gt=0, description="Motion slower than this is drift, left to the background model"
     )
     step_px: float = Field(
         3.0, gt=0, description="A sudden jump this big (beyond the shaking) is a knock: corrected"
+    )
+    confirm_s: float = Field(
+        0.3, ge=0, description="Stars suddenly lost this long: the camera moved (glitches recover)"
     )
     min_shift_px: float = Field(0.25, ge=0, description="Smaller jitter is harmless: not corrected")
     max_shift_px: float = Field(

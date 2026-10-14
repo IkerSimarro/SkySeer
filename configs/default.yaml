@@ -16,9 +16,11 @@ stabilise:                    # camera-shake correction, measured from the stars
   min_star_snr: 6.0           # star peak above the sky, in units of the pixel noise
   search_px: 15               # coarse search radius: most a star may move between frames
   window_px: 5                # window for each star's sub-pixel centre
+  agree_px: 2.5               # stars agreeing on the shift within this are still tracked
   keyframe_s: 10.0            # pick fresh reference stars this often (the sky drifts)
   trend_s: 3.0                # slower motion is drift, left to the background model
   step_px: 3.0                # a sudden jump this big (beyond the shaking) is a knock: kept corrected
+  confirm_s: 0.3              # stars suddenly lost this long = camera moved (glitches recover)
   min_shift_px: 0.25          # smaller jitter is harmless and not corrected
   max_shift_px: 15.0          # bigger jumps are real camera moves (handled as disturbances)
 
