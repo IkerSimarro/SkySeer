@@ -64,6 +64,11 @@ class TrackerConfig(_Section):
     gate_velocity_floor: float = Field(0.3, description="Allowed speed error, px/frame")
     process_noise: float = 1.0
     measurement_noise: float = 2.0
+    merge_area_ratio: float = Field(
+        1.4,
+        description="A blob inside two tracks' windows and this many times bigger than their "
+        "usual size is the two objects overlapping: neither track uses it (0 = off)",
+    )
 
 
 class FilterConfig(_Section):

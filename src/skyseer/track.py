@@ -50,6 +50,9 @@ class _ActiveTrack:
     def hits(self) -> int:
         return len(self.track.detections)
 
+    def typical_area(self) -> float:
+        return float(np.median([d.area for d in self.track.detections[-10:]]))
+
     def predicted_position(self, frame_index: int) -> np.ndarray:
         state, _ = self.kf.predict(frame_index - self.last_frame)
         return state[:2]
@@ -130,6 +133,9 @@ class Tracker:
             for i, active in enumerate(self._active):
                 dist = np.linalg.norm(det_xy - active.predicted_position(frame_index), axis=1)
                 cost[i] = np.where(dist <= self._gate(active, frame_index), dist, _UNMATCHABLE)
+            for c in self._merged(detections, cost):
+                cost[:, c] = _UNMATCHABLE  # neither object's position: both coast past it
+                unmatched.discard(c)
             rows, cols = linear_sum_assignment(cost)
             for r, c in zip(rows, cols, strict=True):
                 if cost[r, c] < _UNMATCHABLE:
@@ -139,3 +145,24 @@ class Tracker:
             track = Track(id=self._next_id, fps=self.fps)
             self._next_id += 1
             self._active.append(_ActiveTrack(track, detections[c], self.config))
+
+    def _merged(self, detections: list[Detection], cost: np.ndarray) -> list[int]:
+        """Blobs that are two tracked objects overlapping as they pass each other.
+
+        Such a blob sits inside the windows of two established tracks and is clearly
+        bigger than either object usually is. Its centre lies *between* the two objects,
+        so giving it to either track would kink that track's path; instead both tracks
+        coast on their predicted motion for those few frames (as when an object fades).
+        """
+        ratio = self.config.merge_area_ratio
+        if ratio <= 0:
+            return []
+        established = [i for i, a in enumerate(self._active) if a.hits >= 3]
+        merged = []
+        for c, det in enumerate(detections):
+            near = [i for i in established if cost[i, c] < _UNMATCHABLE]
+            if len(near) >= 2 and det.area > ratio * max(
+                self._active[i].typical_area() for i in near
+            ):
+                merged.append(c)
+        return merged

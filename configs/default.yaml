@@ -38,6 +38,7 @@ tracker:
   max_missed_seconds: 3.0     # a track ends after this long unseen (bridges faint gaps)
   process_noise: 1.0          # Kalman: how much objects may accelerate
   measurement_noise: 2.0      # Kalman: centroid jitter in px
+  merge_area_ratio: 1.4       # overlapping objects: a blob this much bigger is skipped
 
 filter:
   min_duration: 0.3           # seconds
