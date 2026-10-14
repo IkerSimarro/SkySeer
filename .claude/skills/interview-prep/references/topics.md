@@ -16,6 +16,7 @@ doubt (it evolves). Paths are relative to the repository root.
 10. Photometry and light curves
 11. Testing and validation strategy
 12. Honest limitations and what's next
+13. Phase 4: clips, shake correction, crossings, learned classifier
 
 ## 1. Big picture and architecture
 - **What it is:** video in → detect → track → classify → calibrate from stars →
@@ -188,9 +189,37 @@ doubt (it evolves). Paths are relative to the repository root.
 
 ## 12. Honest limitations and what's next
 - **Real-footage validation** is still limited; most numbers come from simulation.
-- **Short satellite tracks** in noisy video are a mix of real fragments and junk (Phase 4
-  machine learning).
+- **Short satellite tracks** in noisy video are a mix of real fragments and junk; the
+  Phase 4 learned model did not fix this on real footage (sim-to-real gap, see 13).
 - **No extinction or colour terms** in photometry yet.
 - **Single-station shower association** has ~5% chance matches; two stations would fix it.
-- **Next phases:** Phase 4 (ML classifier, per-event clips, shake correction), Phase 5
-  (FastAPI + dashboard), Phase 6 (Pi station), Phase 7 (portfolio launch).
+- **Next phases:** Phase 5 (FastAPI + dashboard), Phase 6 (Pi station), Phase 7
+  (portfolio launch).
+
+## 13. Phase 4: clips, shake correction, crossings, learned classifier
+- **Clips** (`clips.py`): memory-bounded frame buffer (full rate for 8 s, older frames
+  thinned by powers of two: memory grows with the log of time covered). Per event: zoomed
+  H.264 clip (PyAV), trail image masked to the event's own path, context image. Measured:
+  CRF 26 erased a 3-sigma faint object (peak 0.4 of 12); CRF 22 + grain tuning kept it.
+- **Shake correction** (`stabilise.py`), star-tracker style: coarse search (brightest
+  pixel within 15 px) then sub-pixel centroids of ~60 stars; median shift. 0.05 px error,
+  0.7 ms/frame; FFT phase correlation was 19 ms/frame (rejected). Holt smoothing leaves
+  sidereal drift alone (max lag 0.55 px); sudden knocks are kept corrected. Results:
+  4 px wobble 416 false positives -> 0; 25 px knock missed by pixel counting, now caught.
+  Bug story: OpenCV 5.0 `phaseCorrelate` windows its input in place. Real-footage story:
+  time-lapse stills made star centroids scatter 1-2 px, causing 16 false "camera moved"
+  events in 15 min; fixed with a 2.5 px agreement tolerance and a 0.3 s confirmation.
+- **Crossing objects** (`track.py` `_merged`): a blob inside two tracks' gates and 1.4x
+  their usual size is skipped; both coast. No ID swaps before or after; path deviation
+  at a crossing 0.68% -> 0.09%.
+- **Learned classifier** (`classify/model.py`, `docs/classifier.md`): gradient-boosted
+  trees + isotonic calibration, 24 scale-free features + rule shares, grouped CV, trained
+  on 500 domain-randomised simulated nights. Held-out simulation: 69.5% -> 96.7% objects
+  right, 59 -> 1 false alarms, ECE 0.015. Real footage (224 blind labels): 19/31 vs rules
+  25/31 -> rules stay default. Diagnosis: real objects slower on screen than 95% of
+  simulated ones (wide lens), repeated frames, zero sky noise from compression. Ablation:
+  rule features add nothing. Top feature: detection rate. Next: orbit-matched satellites
+  as automatic real labels (weak supervision).
+- **Interview angle:** the most valuable result is the honest negative one: measuring the
+  sim-to-real gap, diagnosing it with feature distributions, and not shipping a model that
+  only looks good in simulation.
