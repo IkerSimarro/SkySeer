@@ -62,7 +62,9 @@ class MotionDetector:
         self.last_mask: np.ndarray | None = None
         self._noise: float | None = None
 
-    def detect(self, frame: Frame) -> list[Detection]:
+    def detect(self, frame: Frame, border: int = 0) -> list[Detection]:
+        """Moving blobs in ``frame``. ``border`` px at each edge are ignored (after
+        stabilisation shifted the picture, the edge strip holds repeated pixels)."""
         image = frame.image
         gray_full = image if image.ndim == 2 else cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
         gray = (
@@ -77,6 +79,9 @@ class MotionDetector:
         if self.config.morph_kernel > 1:
             mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, self._kernel)
             mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, self._kernel)
+        if border > 0:
+            b = int(np.ceil(border * self.scale)) + 1
+            mask[:b], mask[-b:], mask[:, :b], mask[:, -b:] = 0, 0, 0, 0
         self.last_mask = mask
 
         # Connected components give the true pixel count of each blob (an outline's

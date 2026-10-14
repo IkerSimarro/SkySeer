@@ -9,6 +9,19 @@ pipeline:
                               # scene changed (normal sky, even cloudy, stays < 0.3%)
   disturbance_padding_s: 1.0  # tracks this close to a disturbance are discarded
 
+stabilise:                    # camera-shake correction, measured from the stars like a star tracker
+  enabled: true
+  max_stars: 60               # reference stars whose centres are measured every frame
+  min_stars: 8                # fewer measurable stars (clouds, twilight): no correction
+  min_star_snr: 6.0           # star peak above the sky, in units of the pixel noise
+  search_px: 15               # coarse search radius: most a star may move between frames
+  window_px: 5                # window for each star's sub-pixel centre
+  keyframe_s: 10.0            # pick fresh reference stars this often (the sky drifts)
+  trend_s: 3.0                # slower motion is drift, left to the background model
+  step_px: 3.0                # a sudden jump this big (beyond the shaking) is a knock: kept corrected
+  min_shift_px: 0.25          # smaller jitter is harmless and not corrected
+  max_shift_px: 15.0          # bigger jumps are real camera moves (handled as disturbances)
+
 detector:
   sensitivity: 5              # 1-10; higher finds fainter, smaller blobs (and more noise)
   process_scale: 1.0          # downscale before detection, e.g. 0.5 on a Raspberry Pi

@@ -202,6 +202,30 @@ class AlertConfig(_Section):
     )
 
 
+class StabiliseConfig(_Section):
+    """Camera-shake correction measured from the stars (see stabilise.py)."""
+
+    enabled: bool = True
+    max_stars: int = Field(60, ge=3, description="Reference stars measured every frame")
+    min_stars: int = Field(8, ge=3, description="Fewer measurable stars: no correction")
+    min_star_snr: float = Field(6.0, gt=0, description="Star peak above the sky, in noise units")
+    search_px: int = Field(
+        15, ge=2, description="Coarse search radius: the most a star may move between frames"
+    )
+    window_px: int = Field(5, ge=2, description="Window for each star's sub-pixel centre")
+    keyframe_s: float = Field(10.0, gt=0, description="Pick fresh reference stars this often")
+    trend_s: float = Field(
+        3.0, gt=0, description="Motion slower than this is drift, left to the background model"
+    )
+    step_px: float = Field(
+        3.0, gt=0, description="A sudden jump this big (beyond the shaking) is a knock: corrected"
+    )
+    min_shift_px: float = Field(0.25, ge=0, description="Smaller jitter is harmless: not corrected")
+    max_shift_px: float = Field(
+        15.0, gt=0, description="Bigger jumps are real camera moves, handled as disturbances"
+    )
+
+
 class ClipConfig(_Section):
     """Short video clip, trail image and context image written for every event."""
 
@@ -243,6 +267,7 @@ class PipelineConfig(_Section):
 
 class Config(_Section):
     pipeline: PipelineConfig = PipelineConfig()
+    stabilise: StabiliseConfig = StabiliseConfig()
     detector: DetectorConfig = DetectorConfig()
     tracker: TrackerConfig = TrackerConfig()
     filter: FilterConfig = FilterConfig()

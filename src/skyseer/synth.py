@@ -31,6 +31,8 @@ class SceneSpec:
     n_planes: int = 1
     noise_sigma: float = 3.0
     warmup_seconds: float = 1.5  # objects appear after the background model settles
+    shake_px: float = 0.0  # camera wobble amplitude (wind on a mast), 0 = rock steady
+    shake_hz: float = 2.0  # typical wobble frequency
 
 
 @dataclass
@@ -155,6 +157,20 @@ def build_scene(spec: SceneSpec) -> list[_Mover]:
     return movers
 
 
+def _shake_path(spec: SceneSpec) -> np.ndarray | None:
+    """Per-frame (dx, dy) camera wobble: two swaying motions per axis, like wind on a mast."""
+    if spec.shake_px <= 0:
+        return None
+    rng = np.random.default_rng(spec.seed + 2)
+    t = np.arange(int(spec.seconds * spec.fps)) / spec.fps
+    out = np.zeros((t.size, 2))
+    for axis in range(2):
+        for weight in (0.7, 0.3):
+            freq = spec.shake_hz * rng.uniform(0.6, 1.6)
+            out[:, axis] += weight * np.sin(2 * math.pi * freq * t + rng.uniform(0, 2 * math.pi))
+    return spec.shake_px * out
+
+
 def generate(spec: SceneSpec, out_path: str | Path) -> GroundTruth:
     """Render the scene to ``out_path`` (mp4) and save ground truth next to it (.json)."""
     out_path = Path(out_path)
@@ -172,12 +188,21 @@ def generate(spec: SceneSpec, out_path: str | Path) -> GroundTruth:
         _stamp(stars, x, y, float(min(a, 230)), 1.0)
 
     movers = build_scene(spec)
+    shake = _shake_path(spec)
     writer = cv2.VideoWriter(str(out_path), cv2.VideoWriter.fourcc(*"mp4v"), spec.fps, (w, h))
     for f in range(int(spec.seconds * spec.fps)):
         twinkle = 1.0 + rng.normal(0, 0.04)
-        img = sky + stars * twinkle + rng.normal(0, spec.noise_sigma, (h, w)).astype(np.float32)
-        for m in movers:
-            m.draw(img, f, spec.fps)
+        noise = rng.normal(0, spec.noise_sigma, (h, w)).astype(np.float32)
+        if shake is None:
+            img = sky + stars * twinkle + noise
+            for m in movers:
+                m.draw(img, f, spec.fps)
+        else:  # the whole scene wobbles; the sensor noise does not
+            img = sky + stars * twinkle
+            for m in movers:
+                m.draw(img, f, spec.fps)
+            shift = np.array([[1, 0, shake[f, 0]], [0, 1, shake[f, 1]]], np.float32)
+            img = cv2.warpAffine(img, shift, (w, h), borderMode=cv2.BORDER_REFLECT) + noise
         gray = np.clip(img, 0, 255).astype(np.uint8)
         writer.write(cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR))
     writer.release()

@@ -7,6 +7,7 @@ from collections import deque
 from collections.abc import Callable, Iterator
 from typing import TYPE_CHECKING, Any
 
+import cv2
 import numpy as np
 
 from .alerts import Alerter
@@ -16,6 +17,7 @@ from .detect import MotionDetector
 from .features import extract_features
 from .models import Detection, Event, Frame, ObjectClass, Track
 from .sources import FrameSource
+from .stabilise import Stabiliser
 from .starfield import StarFieldFilter
 from .track import Tracker
 
@@ -54,6 +56,7 @@ class Pipeline:
         self.identifier = identifier
         self.fps = fps
         self.detector = MotionDetector(config.detector, frame_size)
+        self.stabiliser = Stabiliser(config.stabilise, fps) if config.stabilise.enabled else None
         self.tracker = Tracker(config.tracker, fps)
         self.star_filter = StarFieldFilter(config.star_filter)
         self.classifier = RuleClassifier(config.rules)
@@ -79,7 +82,14 @@ class Pipeline:
             return []
         if self._first_index is None:
             self._first_index = frame.index
-        detections = self.detector.detect(frame)
+        border = 0
+        if self.stabiliser is not None:  # cancel camera shake before looking for motion
+            image = frame.image
+            gray = image if image.ndim == 2 else cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+            steady = self.stabiliser.apply(gray, self.config.pipeline.frame_skip)
+            frame = Frame(steady, frame.index, frame.timestamp)
+            border = self.stabiliser.border
+        detections = self.detector.detect(frame, border)
         if self._is_disturbed(frame.index):
             detections = []
         self.last_detections = detections
@@ -99,8 +109,10 @@ class Pipeline:
             # ignore detections while it settles, without counting a new disturbance.
             return True
         warming_up = index - (self._first_index or 0) < self.fps * 0.5  # background forming
-        if warming_up or self.detector.changed_fraction <= (
-            self.config.pipeline.disturbance_fraction
+        moved = self.stabiliser is not None and self.stabiliser.moved
+        if not moved and (
+            warming_up
+            or self.detector.changed_fraction <= self.config.pipeline.disturbance_fraction
         ):
             return False
         gap = 3 * self.config.pipeline.frame_skip
@@ -111,6 +123,8 @@ class Pipeline:
             log.info("Camera moved or scene changed at frame %d; ignoring it", index)
             self._camera_moved()
         self.detector.reset()  # learn the new view quickly instead of over ~15 s
+        if self.stabiliser is not None:
+            self.stabiliser.reset()
         self._settle_until = index + max(2, round(0.3 * self.fps))
         return True
 
