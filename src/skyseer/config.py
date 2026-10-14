@@ -202,6 +202,33 @@ class AlertConfig(_Section):
     )
 
 
+class ClipConfig(_Section):
+    """Short video clip, trail image and context image written for every event."""
+
+    enabled: bool = True
+    pre_roll_s: float = Field(1.0, ge=0, description="Clip starts this long before the object")
+    post_roll_s: float = Field(
+        1.0, ge=0, description="...and ends this long after (up to the disturbance padding)"
+    )
+    max_frames: int = Field(300, ge=10, description="Longer events become time-lapses")
+    recent_seconds: float = Field(
+        8.0, gt=0, description="Frames this recent are all buffered; older ones are thinned"
+    )
+    buffer_seconds: float = Field(
+        120.0, gt=0, description="Oldest frame buffered: longer events lose their start"
+    )
+    buffer_mb: float = Field(
+        1024.0, gt=0, description="Memory budget: frames are stored smaller beyond it"
+    )
+    color: bool = Field(False, description="Keep colour (3x the memory of grey frames)")
+    width: int = Field(640, ge=64, description="Width of clips and images in pixels")
+    margin_px: float = Field(40.0, ge=0, description="Space around the path in the zoomed clip")
+    min_crop_px: float = Field(200.0, ge=16, description="Smallest region a clip zooms into")
+    crf: int = Field(
+        22, ge=0, le=51, description="H.264 quality (lower = better); 26 erased faint objects"
+    )
+
+
 class PipelineConfig(_Section):
     frame_skip: int = Field(1, ge=1, description="Process every Nth frame")
     disturbance_fraction: float = Field(
@@ -227,6 +254,7 @@ class Config(_Section):
     showers: ShowerConfig = ShowerConfig()
     photometry: PhotometryConfig = PhotometryConfig()
     alerts: AlertConfig = AlertConfig()
+    clips: ClipConfig = ClipConfig()
 
 
 def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:

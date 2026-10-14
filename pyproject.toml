@@ -17,6 +17,7 @@ dependencies = [
     "rich>=13",
     "skyfield>=1.49",
     "pillow>=10",  # used by the vendored tetra3 solver
+    "av>=12",
 ]
 
 [project.scripts]

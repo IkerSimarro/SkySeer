@@ -104,3 +104,17 @@ alerts:                       # fireball alerts; nothing is sent unless configur
   log_file: data/alerts.jsonl
   webhook_url: null           # POST a JSON message here
   ntfy_topic: null            # push to your phone with the free ntfy app
+
+clips:                        # a short video clip + trail image + context image per event
+  enabled: true
+  pre_roll_s: 1.0             # clip starts this long before the object appears
+  post_roll_s: 1.0            # ...and ends this long after (up to disturbance_padding_s)
+  max_frames: 300             # longer events become time-lapses (x2, x4, ...)
+  recent_seconds: 8.0         # frames this recent are all kept in memory...
+  buffer_seconds: 120.0       # ...older ones are thinned out; none older than this
+  buffer_mb: 1024.0           # memory budget: frames are stored smaller beyond it
+  color: false                # colour clips need 3x the memory
+  width: 640                  # pixel width of clips and images
+  margin_px: 40.0             # space around the path in the zoomed clip
+  min_crop_px: 200.0          # smallest region a clip zooms into
+  crf: 22                     # H.264 quality, lower = better (26 erased faint objects)

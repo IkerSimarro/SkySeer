@@ -23,6 +23,7 @@ if TYPE_CHECKING:
     from .astro.autocal import AutoCalibrator
     from .astro.calibrate import Calibration
     from .astro.satellites import SatelliteIdentifier
+    from .clips import ClipRecorder
 
 log = logging.getLogger(__name__)
 
@@ -243,23 +244,35 @@ def run(
     autocal: AutoCalibrator | None = None,
     identifier: SatelliteIdentifier | None = None,
     stats: dict[str, Any] | None = None,
+    clips: ClipRecorder | None = None,
 ) -> Iterator[Event]:
     """Run the pipeline over a whole source, yielding events as they complete.
 
     If ``stats`` is given it is filled at the end with the disturbances that were ignored
-    (camera moved / scene changed) and how many tracks they invalidated.
+    (camera moved / scene changed) and how many tracks they invalidated. If ``clips`` is
+    given, every frame is buffered and each event gets a clip and images (``Event.media``).
     """
     pipeline = Pipeline(
         config, source.fps, (source.width, source.height), calibration, autocal, identifier
     )
     try:
         for frame in source:
-            yield from pipeline.process(frame)
+            if clips is not None:
+                clips.feed(frame)
+            for event in pipeline.process(frame):
+                if clips is not None:
+                    clips.save(event)
+                yield event
             if progress and frame.index % 100 == 0:
                 progress(frame.index)
-        yield from pipeline.finish()
+        for event in pipeline.finish():
+            if clips is not None:
+                clips.save(event)
+            yield event
     finally:
         source.close()
+        if clips is not None:
+            clips.close()
         if stats is not None:
             stats["disturbances"] = [
                 (s / source.fps, e / source.fps) for s, e in pipeline.disturbances

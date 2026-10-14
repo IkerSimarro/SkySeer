@@ -106,6 +106,7 @@ class Event:
     shower_checked: bool = False  # True if shower association ran (None => sporadic)
     periodicity: Any = None  # astro.lightcurve.Periodicity: regular blinking (tumbling)
     fireball: bool = False
+    media: dict[str, Any] | None = None  # clip / thumbnail / context image paths (clips.py)
 
     def to_dict(self) -> dict[str, Any]:
         t = self.track
@@ -146,4 +147,6 @@ class Event:
             out["periodicity"] = self.periodicity.to_dict()
         if self.fireball:
             out["fireball"] = True
+        if self.media is not None:
+            out["media"] = self.media
         return out

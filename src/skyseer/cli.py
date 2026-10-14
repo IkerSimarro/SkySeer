@@ -28,6 +28,7 @@ if TYPE_CHECKING:  # the astronomy stack is imported lazily to keep the CLI quic
     from .astro.calibrate import Calibration
     from .astro.frames import Observer
     from .astro.satellites import SatelliteIdentifier
+    from .clips import ClipRecorder
 
 app = typer.Typer(
     help="SkySeer: satellite and meteor detection for night-sky video.", no_args_is_help=True
@@ -294,12 +295,16 @@ def analyze(
     video_out: Annotated[
         bool, typer.Option("--video/--no-video", help="Render annotated video")
     ] = True,
+    clips: Annotated[
+        bool, typer.Option("--clips/--no-clips", help="Write a clip and images per event")
+    ] = True,
     include_junk: Annotated[bool, typer.Option(help="Also report Junk and Star events")] = False,
     verbose: VerboseOpt = False,
 ) -> None:
     """Analyse a recorded video: detect, calibrate from the stars, name satellites.
 
-    Writes events.json, events.csv, calibration.json and an annotated video.
+    Writes events.json, events.csv, calibration.json, an annotated video and, in clips/,
+    a short clip, trail image and context image for each event.
     """
     _setup_logging(verbose)
     cfg = _config(config, sensitivity, frame_skip)
@@ -321,6 +326,7 @@ def analyze(
     identifier = _identifier(cfg, cal.observer, tle, clock_tolerance) if cal is not None else None
 
     source = FileSource(video, when)
+    recorder = _recorder(cfg, clips, out_dir, source.fps, include_junk)
     stats: dict[str, Any] = {}
     with Progress(
         TextColumn("[cyan]Analysing"),
@@ -338,6 +344,7 @@ def analyze(
                 calibration=cal,
                 identifier=identifier,
                 stats=stats,
+                clips=recorder,
             )
         )
         progress.update(task, completed=source.frame_count)
@@ -372,6 +379,16 @@ def analyze(
     console.print(f"Results written to [bold]{out_dir}[/bold]")
 
 
+def _recorder(
+    cfg: Config, wanted: bool, out_dir: Path, fps: float, include_junk: bool = False
+) -> ClipRecorder | None:
+    if not (wanted and cfg.clips.enabled):
+        return None
+    from .clips import DEFAULT_SKIP, ClipRecorder
+
+    return ClipRecorder(out_dir, cfg.clips, fps, frozenset() if include_junk else DEFAULT_SKIP)
+
+
 def _mmss(seconds: float) -> str:
     return f"{int(seconds // 60)}:{int(seconds % 60):02d}"
 
@@ -388,13 +405,26 @@ def live(
     ] = True,
     tle: TleOpt = None,
     clock_tolerance: ClockOpt = None,
+    out: Annotated[
+        Path | None, typer.Option("--out", "-o", help="Folder for events.jsonl and clips")
+    ] = None,
+    clips: Annotated[
+        bool, typer.Option("--clips/--no-clips", help="Write a clip and images per event")
+    ] = True,
     verbose: VerboseOpt = False,
 ) -> None:
-    """Run detection on a live camera and print events as they happen (Ctrl+C to stop)."""
+    """Run detection on a live camera and print events as they happen (Ctrl+C to stop).
+
+    Events are appended to events.jsonl in the output folder (default data/live/<date>),
+    with a clip and images per event in its clips/ folder.
+    """
     _setup_logging(verbose)
     cfg = load_config(config)
     device: int | str = int(camera) if camera.isdigit() else camera
     source = CameraSource(device)
+    out_dir = out or Path("data/live") / f"{datetime.now():%Y%m%d_%H%M%S}"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    recorder = _recorder(cfg, clips, out_dir, source.fps)
     console.print(
         f"Watching camera {camera} at {source.width}x{source.height}, {source.fps:.0f} fps"
     )
@@ -411,8 +441,10 @@ def live(
         )
         identifier = _identifier(cfg, observer, tle, clock_tolerance)
     try:
-        for e in run(source, cfg, autocal=autocal, identifier=identifier):
+        for e in run(source, cfg, autocal=autocal, identifier=identifier, clips=recorder):
             if e.label not in ("Junk", "Star"):
+                with open(out_dir / "events.jsonl", "a", encoding="utf-8") as fh:
+                    fh.write(json.dumps(e.to_dict()) + "\n")
                 where = f", {e.sky.angular_speed:.2f}°/s" if e.sky is not None else ""
                 name = f" = {e.identification.short_label()}" if e.identification else ""
                 console.print(
