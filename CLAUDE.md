@@ -26,7 +26,14 @@ techniques, clean tested code.
   small star database in `data/astro` on first run)
 - `.venv\Scripts\python.exe tools\validate.py`: lint + format + mypy + tests + benchmark
   against `tools/baseline.json` (use `--quick` for lint/types only)
-- `.venv\Scripts\skyseer.exe analyze|calibrate|live|synth|bench|orbits|showers ...`: CLI
+- `.venv\Scripts\skyseer.exe analyze|calibrate|live|serve|train|synth|bench|orbits|showers ...`: CLI
+- Dashboard: `skyseer serve` (http://localhost:8000, API docs at /api/docs). Frontend source in
+  `web/` (React + TypeScript + Vite): `cd web; npm run build` compiles it into
+  `src/skyseer/api/static/` (git-ignored); `npm run dev` for live reload against a running
+  `skyseer serve`. Station database: `data/skyseer.db` (override with `SKYSEER_DATABASE`).
+  Live station: `skyseer serve --camera 0`, or without a camera
+  `skyseer serve --replay VIDEO --start-time ... --lat ... --lon ...` (plays a recording as
+  if live). `.claude/launch.json` has both for the preview browser.
 - `uv sync` installs/updates the environment. If `uv` isn't on PATH in a fresh shell,
   refresh PATH from the registry or call the venv's python directly.
 

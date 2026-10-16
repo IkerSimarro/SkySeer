@@ -1,0 +1,21 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "skyseer-dashboard",
+      "runtimeExecutable": ".venv/Scripts/skyseer.exe",
+      "runtimeArgs": ["serve", "--port", "8000"],
+      "port": 8000
+    },
+    {
+      "name": "skyseer-live-demo",
+      "runtimeExecutable": ".venv/Scripts/skyseer.exe",
+      "runtimeArgs": [
+        "serve", "--port", "8001",
+        "--replay", "data/sim/demo_sats.mp4", "--start-time", "2026-10-09T19:45:00",
+        "--lat", "40.42", "--lon", "-3.70", "--elevation", "650"
+      ],
+      "port": 8001
+    }
+  ]
+}

@@ -49,8 +49,12 @@ aerospace recruiter or engineer will think when they see it on GitHub**. That me
    (radiant geometry plus entry-speed check), brightness in real magnitudes calibrated
    against catalogue stars, fireball alerts, and periodic-brightness ("tumbling satellite")
    detection.
-8. **Output (today):** a command-line tool producing JSON/CSV reports, an annotated video
-   with satellite names and predicted orbit lines, and calibration overlays.
+8. **Output:** a web dashboard (FastAPI backend + React/TypeScript frontend, served by
+   SkySeer itself): event cards with trail images and clips, an all-sky map of where each
+   object crossed, night reports with CSV/JSON export, a live page that shows the camera
+   and new detections the moment they happen, browser uploads, and "is this right?"
+   review buttons whose answers become real training data. Also a command-line tool,
+   JSON/CSV reports and an annotated video.
 
 ## Measured results so far (simulations built from real star/orbit/shower data)
 
@@ -90,7 +94,7 @@ used for robustness testing.
 | 2 | Satellite identification | done |
 | 3 | Meteor science (showers, magnitudes, fireballs, light curves) | done |
 | 4 | Smarter detection: ML classifier, one clip per event, camera-shake correction | done |
-| 5 | FastAPI backend + custom "mission control" web dashboard (replacing an old Streamlit UI) | next |
+| 5 | FastAPI backend + custom "mission control" web dashboard (replacing an old Streamlit UI) | done |
 | 6 | Raspberry Pi station: camera, GPS, auto-start, enclosure, outdoor tests | needs hardware |
 | 7 | Portfolio launch: README with measured results, demo video, v1.0 release | planned |
 
