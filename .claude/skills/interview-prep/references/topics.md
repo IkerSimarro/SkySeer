@@ -17,6 +17,7 @@ doubt (it evolves). Paths are relative to the repository root.
 11. Testing and validation strategy
 12. Honest limitations and what's next
 13. Phase 4: clips, shake correction, crossings, learned classifier
+14. Phase 5: database, web API, live station, dashboard
 
 ## 1. Big picture and architecture
 - **What it is:** video in → detect → track → classify → calibrate from stars →
@@ -193,8 +194,9 @@ doubt (it evolves). Paths are relative to the repository root.
   Phase 4 learned model did not fix this on real footage (sim-to-real gap, see 13).
 - **No extinction or colour terms** in photometry yet.
 - **Single-station shower association** has ~5% chance matches; two stations would fix it.
-- **Next phases:** Phase 5 (FastAPI + dashboard), Phase 6 (Pi station), Phase 7
-  (portfolio launch).
+- **Next phases:** Phase 6 (Pi station), Phase 7 (portfolio launch).
+- **Dashboard has no login:** it listens on 127.0.0.1 unless told otherwise; fine on a home
+  network, would need authentication before exposing it to the internet.
 
 ## 13. Phase 4: clips, shake correction, crossings, learned classifier
 - **Clips** (`clips.py`): memory-bounded frame buffer (full rate for 8 s, older frames
@@ -223,3 +225,28 @@ doubt (it evolves). Paths are relative to the repository root.
 - **Interview angle:** the most valuable result is the honest negative one: measuring the
   sim-to-real gap, diagnosing it with feature distributions, and not shipping a model that
   only looks good in simulation.
+
+## 14. Phase 5: database, web API, live station, dashboard
+- **Why not keep Streamlit:** a headless Pi station needs an API anyway; Streamlit re-runs
+  the whole script on every click and can't push live events. FastAPI + a React/TypeScript
+  dashboard served by SkySeer itself (no extra server on the Pi).
+- **Storage** (`storage.py`): SQLite (one file, no server), WAL mode so the live thread
+  writes while the dashboard reads. Run folders are self-describing (events.json, run.json,
+  clips) and importable anywhere.
+- **API** (`api/app.py`): sessions, filtered events, reviews, night report, CSV/JSON export,
+  media confined to the run folder (path-traversal test), health, uploads as background
+  jobs (`api/jobs.py`, one at a time so a Pi stays responsive), MJPEG preview, WebSocket feed.
+- **Live station** (`live.py`): pipeline in a thread; each event stored, logged to
+  events.jsonl (crash-safe) and pushed to dashboards via asyncio queues
+  (`call_soon_threadsafe`). `ReplaySource` plays a video in real time as if live: demos and
+  tests without hardware.
+- **Closing the ML loop:** dashboard reviews and orbit-matched satellites from real sessions
+  become training rows for `skyseer train` (`classify/dataset.station_rows`); simulated
+  sessions are flagged and excluded.
+- **Bugs found by testing in a real browser/server:** missing `websockets` package (the test
+  client hid it; now a real-uvicorn test), cp1252 console crash under a service/pipe, a
+  cached index.html showing an old build (now no-cache + hashed assets), a test leaking into
+  the real database (fixture scope).
+- **Design choices to defend:** hand-drawn SVG charts (small, fast on a Pi, on-brand) instead
+  of a chart library; hash routing (no router dependency); SIMULATION tags everywhere for
+  honesty.
