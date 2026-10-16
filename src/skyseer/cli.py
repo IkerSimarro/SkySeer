@@ -345,15 +345,13 @@ def live(
             f"({e.confidence:.2f}, {e.track.duration:.1f}s{where})"
         )
 
-    station = _station(
+    station = _live_station(
         cfg,
         camera,
         replay,
         start_time,
         speed,
-        lat,
-        lon,
-        elevation,
+        _observer(cfg, lat, lon, elevation),
         sky,
         tle,
         clock_tolerance,
@@ -374,15 +372,13 @@ def live(
     console.print(f"Session saved in [bold]{station.folder}[/bold]")
 
 
-def _station(
+def _live_station(
     cfg: Config,
     camera: str | None,
     replay: Path | None,
     start_time: datetime | None,
     speed: float,
-    lat: float | None,
-    lon: float | None,
-    elevation: float | None,
+    observer: Observer | None,
     sky: bool,
     tle: list[Path] | None,
     clock_tolerance: float | None,
@@ -405,7 +401,6 @@ def _station(
         device: int | str = int(camera) if camera and camera.isdigit() else (camera or 0)
         source = CameraSource(device)
         label, kind = f"camera {camera}", "live"
-    observer = _observer(cfg, lat, lon, elevation)
     autocal = identifier = None
     if sky:
         from .astro.autocal import AutoCalibrator
@@ -467,15 +462,13 @@ def serve(
     cfg = load_config(config)
     station = None
     if camera is not None or replay is not None:
-        station = _station(
+        station = _live_station(
             cfg,
             camera,
             replay,
             start_time,
             speed,
-            lat,
-            lon,
-            elevation,
+            _observer(cfg, lat, lon, elevation),
             sky,
             tle,
             clock_tolerance,
@@ -499,6 +492,75 @@ def serve(
     finally:
         if station is not None:
             station.stop()
+
+
+@app.command()
+def station(
+    host: Annotated[
+        str,
+        typer.Option(help="127.0.0.1 = this computer only; 0.0.0.0 = your whole network"),
+    ] = "127.0.0.1",
+    port: int = 8000,
+    camera: Annotated[
+        str | None, typer.Option(help="Camera index, stream URL or picamera (default: config)")
+    ] = None,
+    lat: LatOpt = None,
+    lon: LonOpt = None,
+    elevation: ElevOpt = None,
+    sky: Annotated[
+        bool, typer.Option("--sky/--no-sky", help="Keep the camera calibrated from the stars")
+    ] = True,
+    tle: TleOpt = None,
+    clock_tolerance: ClockOpt = None,
+    gps: Annotated[
+        str | None,
+        typer.Option(help="GPS: gpsd, a device such as /dev/ttyACM0, or none (default: config)"),
+    ] = None,
+    config: ConfigOpt = None,
+    verbose: VerboseOpt = False,
+) -> None:
+    """Run the unattended station: observe every night from dusk to dawn, with the
+    dashboard always available (this is what the Raspberry Pi service runs)."""
+    import uvicorn
+
+    from .api import create_app
+    from .gps import GpsMonitor
+    from .station import Station
+
+    _setup_logging(verbose)
+    cfg = load_config(config)
+    cam = camera or cfg.station.camera
+    observer = _observer(cfg, lat, lon, elevation)
+    source = gps or cfg.gps.source
+    monitor = None
+    if source != "none":
+        g = cfg.gps
+        monitor = GpsMonitor(source, g.cache_file, g.gpsd_host, g.gpsd_port, g.min_satellites)
+    if observer is None and monitor is None and not cfg.station.always_on:
+        console.print(
+            "[yellow]No location given: SkySeer can't tell when it's dark, so it observes "
+            "around the clock. Add --lat/--lon, a GPS (--gps gpsd) or observer: in the "
+            "config.[/yellow]"
+        )
+    store = _store(cfg)
+    store.import_runs(cfg.storage.runs_dir, cfg.storage.live_dir)
+    st: Station
+
+    def make_night() -> LiveStation:  # each night uses the station's latest location
+        return _live_station(
+            cfg, cam, None, None, 1.0, st.observer, sky, tle, clock_tolerance, True
+        )
+
+    st = Station(cfg, store, make_night, observer, gps=monitor)
+    st.start()
+    console.print(
+        f"Station running on camera {cam}; observing while the Sun is below "
+        f"{cfg.station.dark_sun_altitude:.0f}°. Dashboard: [bold]http://localhost:{port}[/bold]"
+    )
+    try:
+        uvicorn.run(create_app(cfg, store, st), host=host, port=port, log_level="warning")
+    finally:
+        st.stop()
 
 
 @app.command()

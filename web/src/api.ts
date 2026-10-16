@@ -132,6 +132,21 @@ export interface LiveStatus {
   started?: string | null
   counts?: Record<string, number>
   error?: string | null
+  // Present when the unattended station (`skyseer station`) is running:
+  mode?: 'observing' | 'waiting'
+  sun_altitude?: number | null
+  dark_below?: number
+  next_change?: string | null
+  nights?: number
+  station_error?: string | null
+  location?: { lat: number; lon: number } | null
+  gps?: {
+    source: string
+    fix: { mode: number; satellites: number; clock_offset_s: number | null } | null
+    using_cached_location: boolean
+    error: string | null
+  } | null
+  clock_warning?: string | null
 }
 
 async function get<T>(url: string): Promise<T> {

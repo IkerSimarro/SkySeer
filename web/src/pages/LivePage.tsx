@@ -41,6 +41,13 @@ function useLiveFeed(): Feed {
   return feed
 }
 
+function gpsText(gps: NonNullable<LiveStatus['gps']>): string {
+  const fix = gps.fix
+  if (!fix || fix.mode < 2) return gps.using_cached_location ? 'no fix yet (using the saved location)' : gps.error ?? 'searching for satellites…'
+  const clock = fix.clock_offset_s === null ? '' : `, clock ${fix.clock_offset_s >= 0 ? '+' : ''}${fix.clock_offset_s.toFixed(2)} s`
+  return `${fix.mode === 3 ? '3-D' : '2-D'} fix, ${fix.satellites} satellites${clock}`
+}
+
 export default function LivePage() {
   const feed = useLiveFeed()
   const now = useUtcNow()
@@ -64,6 +71,19 @@ export default function LivePage() {
         <pre className="mono">skyseer serve --replay data/sim/demo_sats.mp4 --start-time 2026-10-09T19:45:00 --lat 40.42 --lon -3.70</pre>
       </div>
     )
+  if (s.mode === 'waiting' && !s.running)
+    return (
+      <div className="empty" style={{ textAlign: 'left' }}>
+        <h2 style={{ marginBottom: 8 }}>Waiting for darkness</h2>
+        <p>
+          The Sun is at <span className="mono">{s.sun_altitude?.toFixed(1)}°</span>; the station observes once it is below{' '}
+          <span className="mono">{s.dark_below?.toFixed(0)}°</span>
+          {s.next_change ? <> — tonight from <span className="mono">{utcTime(s.next_change)} UTC</span>.</> : '.'}
+        </p>
+        <p className="muted">{s.nights ? `${s.nights} night${s.nights === 1 ? '' : 's'} observed since the station started.` : ''}</p>
+        {s.station_error && <p className="error">{s.station_error}</p>}
+      </div>
+    )
   const counts = s.counts ?? {}
   const started = s.started ? (now.getTime() - Date.parse(s.started)) / 1000 : 0
   return (
@@ -78,6 +98,7 @@ export default function LivePage() {
         {s.session_id && <a className="btn" href={href(`report/${s.session_id}`)}>Tonight's report</a>}
       </div>
       {s.error && <div className="panel error">The station stopped: {s.error}</div>}
+      {s.clock_warning && <div className="panel error">{s.clock_warning}</div>}
       <div className="grid detail-grid">
         <section className="panel media-panel">
           {s.running ? (
@@ -96,6 +117,7 @@ export default function LivePage() {
               <dt>Star calibration</dt>
               <dd>{s.calibrated ? (s.pointing ? `pointing alt ${s.pointing.alt.toFixed(1)}°, az ${s.pointing.az.toFixed(1)}°` : 'solved (sky coordinates only)') : 'waiting for enough stars…'}</dd>
               <dt>Location</dt><dd>{s.observer ? `${s.observer.lat.toFixed(3)}°, ${s.observer.lon.toFixed(3)}°` : 'not set: satellites cannot be named'}</dd>
+              {s.gps && <><dt>GPS</dt><dd>{gpsText(s.gps)}</dd></>}
               <dt>Tonight</dt>
               <dd>
                 <span className="c-Satellite">{counts.Satellite ?? 0} satellites</span> ·{' '}

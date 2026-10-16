@@ -35,7 +35,7 @@ function StationStatus() {
     <>
       <span className="chip">
         <span className={`dot ${live ? 'ok' : 'off'}`} />
-        {live ? `Live · ${h.live?.fps.toFixed(0)} fps` : 'Camera idle'}
+        {live ? `Live · ${h.live?.fps.toFixed(0)} fps` : h.live?.mode === 'waiting' ? 'Waiting for dusk' : 'Camera idle'}
       </span>
       <span className="chip">CPU <span className="num">{h.cpu_percent.toFixed(0)}%</span></span>
       {h.temperature_c !== null && (

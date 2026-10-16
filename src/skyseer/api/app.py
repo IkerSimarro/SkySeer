@@ -68,6 +68,14 @@ def _with_urls(e: dict[str, Any]) -> dict[str, Any]:
     return {**e, "media": _media(e)}
 
 
+def _flagged(e: dict[str, Any], session_meta: dict[str, Any]) -> dict[str, Any]:
+    """Mark simulated data, and drop media whose clips were deleted to save space."""
+    out = {**e, "simulated": bool(session_meta.get("simulated"))}
+    if session_meta.get("clips_deleted"):
+        out["media"] = None
+    return out
+
+
 def health(config: Config, started: float, station: Station | None) -> dict[str, Any]:
     import psutil
 
@@ -168,11 +176,8 @@ def create_app(
     ) -> list[dict[str, Any]]:
         labels = label or (None if include_junk else list(REAL))
         events = store.events(session_id, labels, reviewed, since, until, limit, offset)
-        simulated = {x["id"]: bool(x["meta"].get("simulated")) for x in store.sessions()}
-        return [
-            {**_with_urls(summary(e)), "simulated": simulated.get(e["session_id"], False)}
-            for e in events
-        ]
+        flags = {x["id"]: x["meta"] for x in store.sessions()}
+        return [_flagged(_with_urls(summary(e)), flags.get(e["session_id"], {})) for e in events]
 
     @app.get("/api/events/{event_id}")
     def get_event(event_id: int) -> dict[str, Any]:
@@ -180,7 +185,7 @@ def create_app(
         if e is None:
             raise HTTPException(404, f"No event {event_id}")
         s = store.session(e["session_id"]) or {"meta": {}}
-        return {**_with_urls(e), "simulated": bool(s["meta"].get("simulated"))}
+        return _flagged(_with_urls(e), s["meta"])
 
     @app.put("/api/events/{event_id}/review")
     def put_review(event_id: int, review: Review) -> dict[str, Any]:

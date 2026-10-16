@@ -16,7 +16,7 @@ import logging
 import threading
 import time
 from collections import deque
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncGenerator, Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -155,7 +155,7 @@ class LiveStation:
     def preview_jpeg(self) -> bytes | None:
         return self._preview
 
-    async def updates(self) -> AsyncIterator[dict[str, Any]]:
+    async def updates(self) -> AsyncGenerator[dict[str, Any], None]:
         """Status now and every 2 s, plus every new event as it happens."""
         queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=200)
         entry = (asyncio.get_running_loop(), queue)

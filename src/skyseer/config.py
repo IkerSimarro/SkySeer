@@ -281,6 +281,43 @@ class StorageConfig(_Section):
     live_dir: str = Field("data/live", description="Live camera nights (one folder each)")
 
 
+class GpsConfig(_Section):
+    """Where the station is and the true time, from a GPS receiver (see gps.py)."""
+
+    source: str = Field(
+        "none", description="none, gpsd (the Linux GPS service) or a device like /dev/ttyACM0"
+    )
+    gpsd_host: str = "127.0.0.1"
+    gpsd_port: int = 2947
+    cache_file: str = Field(
+        "data/station_location.json", description="Last good position, used until a new fix"
+    )
+    min_satellites: int = Field(4, ge=3, description="Satellites needed to trust a fix")
+    max_clock_error_s: float = Field(
+        2.0, gt=0, description="Warn when the system clock is this far from GPS time"
+    )
+
+
+class StationConfig(_Section):
+    """The unattended station (`skyseer station`): when to observe, how to keep the disk."""
+
+    camera: str = Field("0", description="Camera index, stream URL, or 'picamera' on a Pi")
+    dark_sun_altitude: float = Field(
+        -12.0,
+        le=0,
+        description="Observe while the Sun is below this (-6 civil, -12 nautical, -18 astro)",
+    )
+    always_on: bool = Field(False, description="Observe around the clock (e.g. for testing)")
+    keep_clips_days: float = Field(
+        30.0, gt=0, description="Clips of live nights older than this are deleted"
+    )
+    min_free_gb: float = Field(
+        5.0, ge=0, description="Below this much free disk, the oldest clips are deleted first"
+    )
+    check_interval_s: float = Field(60.0, gt=0, description="How often to check the Sun")
+    retry_s: float = Field(60.0, gt=0, description="Wait before retrying a failed camera")
+
+
 class PipelineConfig(_Section):
     frame_skip: int = Field(1, ge=1, description="Process every Nth frame")
     disturbance_fraction: float = Field(
@@ -310,6 +347,8 @@ class Config(_Section):
     alerts: AlertConfig = AlertConfig()
     clips: ClipConfig = ClipConfig()
     storage: StorageConfig = StorageConfig()
+    station: StationConfig = StationConfig()
+    gps: GpsConfig = GpsConfig()
 
 
 def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:

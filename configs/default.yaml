@@ -143,3 +143,20 @@ storage:                      # the station's record of every night
   database: data/skyseer.db   # SQLite file: sessions, events and human reviews
   runs_dir: data/runs         # analysed recordings, one folder each
   live_dir: data/live         # live camera nights, one folder each
+
+station:                      # the unattended station (`skyseer station`)
+  camera: "0"                 # camera index, stream URL, or picamera on a Raspberry Pi
+  dark_sun_altitude: -12.0    # observe while the Sun is below this (nautical twilight)
+  always_on: false            # observe around the clock (testing)
+  keep_clips_days: 30.0       # clips of live nights older than this are deleted
+  min_free_gb: 5.0            # below this much free disk the oldest clips go first
+  check_interval_s: 60.0      # how often to check the Sun
+  retry_s: 60.0               # wait before retrying a camera that failed
+
+gps:                          # where the station is, and the true time
+  source: none                # none, gpsd (Linux GPS service) or a device like /dev/ttyACM0
+  gpsd_host: 127.0.0.1
+  gpsd_port: 2947
+  cache_file: data/station_location.json  # last good position, used until a new fix
+  min_satellites: 4           # satellites needed to trust a fix
+  max_clock_error_s: 2.0      # warn if the system clock is this far from GPS time
