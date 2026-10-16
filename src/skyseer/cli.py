@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import csv
 import json
 import logging
 from collections import Counter
@@ -20,19 +19,32 @@ from rich.table import Table
 from . import __version__
 from .config import Config, load_config
 from .models import Event
-from .pipeline import run
 from .render import render_annotated_video
-from .sources import CameraSource, FileSource
+from .sources import CameraSource
 
 if TYPE_CHECKING:  # the astronomy stack is imported lazily to keep the CLI quick to start
-    from .astro.calibrate import Calibration
     from .astro.frames import Observer
     from .astro.satellites import SatelliteIdentifier
-    from .clips import ClipRecorder
+    from .live import LiveStation
+    from .storage import Store
 
 app = typer.Typer(
     help="SkySeer: satellite and meteor detection for night-sky video.", no_args_is_help=True
 )
+
+
+def _utf8_output() -> None:
+    """Write UTF-8 even when output goes to a file, pipe or service log: on Windows those
+    default to an old code page that can't encode the progress spinner (it crashed)."""
+    import sys
+
+    for stream in (sys.stdout, sys.stderr):
+        encoding = (getattr(stream, "encoding", None) or "").lower().replace("-", "")
+        if encoding != "utf8" and hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
+
+
+_utf8_output()
 console = Console()
 
 # Accepted time formats: seconds may have decimals; an explicit offset (+02:00) overrides UTC.
@@ -63,55 +75,6 @@ def _config(path: Path | None, sensitivity: int | None, frame_skip: int | None) 
     if frame_skip is not None:
         overrides["pipeline"] = {"frame_skip": frame_skip}
     return load_config(path, **overrides)
-
-
-def write_reports(events: list[Event], out_dir: Path) -> None:
-    out_dir.mkdir(parents=True, exist_ok=True)
-    (out_dir / "events.json").write_text(
-        json.dumps([e.to_dict() for e in events], indent=2), encoding="utf-8"
-    )
-    with open(out_dir / "events.csv", "w", newline="", encoding="utf-8") as fh:
-        rows = [e.to_dict() for e in events]
-        feature_keys = list(rows[0]["features"]) if rows else []
-        base = [
-            "id",
-            "label",
-            "confidence",
-            "start_time",
-            "end_time",
-            "duration_s",
-            "first_frame",
-            "last_frame",
-        ]
-        sky_cols = [
-            "angular_speed_deg_s",
-            "arc_deg",
-            "start_alt",
-            "start_az",
-            "end_alt",
-            "end_az",
-            "satellite",
-            "norad_id",
-            "clock_offset_s",
-        ]
-        writer = csv.writer(fh)
-        writer.writerow(base + sky_cols + feature_keys)
-        for r in rows:
-            sky = r.get("sky") or {}
-            ident = r.get("identification") or {}
-            start, end = sky.get("start", {}), sky.get("end", {})
-            extra = [
-                sky.get("angular_speed_deg_s", ""),
-                sky.get("arc_deg", ""),
-                start.get("alt", ""),
-                start.get("az", ""),
-                end.get("alt", ""),
-                end.get("az", ""),
-                ident.get("name", "").strip(),
-                ident.get("norad_id", ""),
-                ident.get("clock_offset_s", ""),
-            ]
-            writer.writerow([r[k] for k in base] + extra + [r["features"][k] for k in feature_keys])
 
 
 def _summary(events: list[Event]) -> Table:
@@ -170,6 +133,19 @@ def _identity(e: Event) -> str:
 LatOpt = Annotated[float | None, typer.Option("--lat", help="Observer latitude, degrees N")]
 LonOpt = Annotated[float | None, typer.Option("--lon", help="Observer longitude, degrees E")]
 ElevOpt = Annotated[float | None, typer.Option("--elevation", help="Observer elevation, m")]
+ReplayOpt = Annotated[
+    Path | None,
+    typer.Option(exists=True, dir_okay=False, help="Play this video as if it were the live camera"),
+]
+SpeedOpt = Annotated[
+    float, typer.Option(help="Replay speed (1 = real time, 0 = as fast as possible)")
+]
+RecordedOpt = Annotated[
+    datetime | None,
+    typer.Option(
+        "--start-time", help="Replay only: when the video was recorded (UTC)", formats=TIME_FORMATS
+    ),
+]
 
 
 def _observer(
@@ -186,45 +162,10 @@ def _observer(
     return Observer(lat, lon, o.elevation_m if elevation is None else elevation)
 
 
-def _calibrate_recording(
-    video: Path, cfg: Config, observer: Observer | None, start_time: datetime | None
-) -> Calibration | None:
-    """Calibrate from the first seconds of a recording; None (with a warning) on failure."""
-    from .astro.calibrate import CalibrationError, calibrate, load_sky_image
-    from .astro.catalog import build_database
-
-    a = cfg.astro
-    try:
-        with console.status("Preparing star database (first run downloads and builds it)..."):
-            db = build_database(
-                a.database_min_fov, a.database_max_fov, a.database_max_mag, Path(a.data_dir)
-            )
-        with console.status("Recognising stars to calibrate the camera..."):
-            image, when = load_sky_image(video, start_time, 0.0, a.calibration_seconds)
-            cal = calibrate(
-                image,
-                when,
-                observer,
-                fov_estimate=a.fov_estimate,
-                fov_max_error=a.fov_tolerance if a.fov_estimate else None,
-                database=db,
-            )
-    except CalibrationError as e:
-        console.print(
-            f"[yellow]Camera calibration failed ({e}); continuing without sky coordinates.[/yellow]"
-        )
-        return None
-    s = cal.summary()
-    where = (
-        f"az {s['pointing_az']:.1f}°, alt {s['pointing_alt']:.1f}°"
-        if observer is not None
-        else f"RA {s['center_ra']:.1f}°, Dec {s['center_dec']:+.1f}°"
-    )
-    console.print(
-        f"[green]Camera calibrated[/green] from {cal.n_stars} stars: pointing {where}, "
-        f"field {s['fov_h']:.1f}° x {s['fov_v']:.1f}°"
-    )
-    return cal
+def _say(message: str) -> None:
+    """Status lines from the shared analysis code; problems in yellow."""
+    bad = ("failed", "unavailable", "No location", "will not")
+    console.print(f"[yellow]{message}[/yellow]" if any(b in message for b in bad) else message)
 
 
 TleOpt = Annotated[
@@ -240,31 +181,9 @@ ClockOpt = Annotated[
 def _identifier(
     cfg: Config, observer: Observer | None, tle: list[Path] | None, clock: float | None
 ) -> SatelliteIdentifier | None:
-    """Satellite identifier from the orbit catalogue, or None if it can't be used."""
-    if observer is None or not cfg.satellites.enabled:
-        if cfg.satellites.enabled:
-            console.print(
-                "[yellow]No location given: satellites will not be named "
-                "(add --lat/--lon).[/yellow]"
-            )
-        return None
-    from .astro.orbits import load_catalog
-    from .astro.satellites import SatelliteIdentifier
+    from .analysis import make_identifier
 
-    s = cfg.satellites
-    if clock is not None:
-        s = s.model_copy(update={"max_clock_offset_s": clock})
-    extra = [Path(p) for p in s.extra_tle_files] + list(tle or [])
-    try:
-        with console.status("Loading satellite orbits (downloads from CelesTrak if stale)..."):
-            orbits = load_catalog(s.groups, Path(cfg.astro.data_dir), extra, s.max_age_hours)
-    except RuntimeError as e:
-        console.print(
-            f"[yellow]Satellite orbits unavailable ({e}); satellites will not be named.[/yellow]"
-        )
-        return None
-    console.print(f"Loaded orbits of {len(orbits):,} satellites")
-    return SatelliteIdentifier(orbits, observer, s)
+    return make_identifier(cfg, observer, tle, clock, _say)
 
 
 @app.command()
@@ -316,43 +235,40 @@ def analyze(
     )
     observer = _observer(cfg, lat, lon, elevation)
 
+    from .analysis import analyze_video
+
     cal = None
     if calibration is not None:
         from .astro.calibrate import Calibration
 
         cal = Calibration.load(calibration)
-    elif sky:
-        cal = _calibrate_recording(video, cfg, observer, when)
-    identifier = _identifier(cfg, cal.observer, tle, clock_tolerance) if cal is not None else None
-
-    source = FileSource(video, when)
-    recorder = _recorder(cfg, clips, out_dir, source.fps, include_junk)
-    stats: dict[str, Any] = {}
     with Progress(
         TextColumn("[cyan]Analysing"),
         BarColumn(),
         TextColumn("{task.percentage:>3.0f}%"),
         TimeRemainingColumn(),
         console=console,
+        transient=True,
     ) as progress:
-        task = progress.add_task("", total=source.frame_count or None)
-        events = list(
-            run(
-                source,
-                cfg,
-                lambda i: progress.update(task, completed=i),
-                calibration=cal,
-                identifier=identifier,
-                stats=stats,
-                clips=recorder,
-            )
+        task = progress.add_task("", total=None)
+        result = analyze_video(
+            video,
+            cfg,
+            out_dir,
+            when,
+            observer,
+            cal,
+            sky,
+            tle,
+            clock_tolerance,
+            clips,
+            include_junk,
+            store=_store(cfg),
+            progress=lambda i, n: progress.update(task, completed=i, total=n or None),
+            notify=_say,
         )
-        progress.update(task, completed=source.frame_count)
-
-    reported = events if include_junk else [e for e in events if e.label not in ("Junk", "Star")]
-    write_reports(reported, out_dir)
-    if cal is not None:
-        cal.save(out_dir / "calibration.json")
+    events, reported, stats = result.events, result.reported, result.stats
+    cal, identifier = result.calibration, result.identifier
     if video_out and reported:
         predictions = {}
         if identifier is not None and cal is not None:
@@ -379,14 +295,13 @@ def analyze(
     console.print(f"Results written to [bold]{out_dir}[/bold]")
 
 
-def _recorder(
-    cfg: Config, wanted: bool, out_dir: Path, fps: float, include_junk: bool = False
-) -> ClipRecorder | None:
-    if not (wanted and cfg.clips.enabled):
-        return None
-    from .clips import DEFAULT_SKIP, ClipRecorder
+def _store(cfg: Config) -> Store:
+    """The station database (the SKYSEER_DATABASE environment variable overrides the config)."""
+    import os
 
-    return ClipRecorder(out_dir, cfg.clips, fps, frozenset() if include_junk else DEFAULT_SKIP)
+    from .storage import Store
+
+    return Store(os.environ.get("SKYSEER_DATABASE") or cfg.storage.database)
 
 
 def _mmss(seconds: float) -> str:
@@ -396,6 +311,9 @@ def _mmss(seconds: float) -> str:
 @app.command()
 def live(
     camera: Annotated[str, typer.Option(help="Camera index or stream URL")] = "0",
+    replay: ReplayOpt = None,
+    start_time: RecordedOpt = None,
+    speed: SpeedOpt = 1.0,
     config: ConfigOpt = None,
     lat: LatOpt = None,
     lon: LonOpt = None,
@@ -405,57 +323,182 @@ def live(
     ] = True,
     tle: TleOpt = None,
     clock_tolerance: ClockOpt = None,
-    out: Annotated[
-        Path | None, typer.Option("--out", "-o", help="Folder for events.jsonl and clips")
-    ] = None,
     clips: Annotated[
         bool, typer.Option("--clips/--no-clips", help="Write a clip and images per event")
     ] = True,
     verbose: VerboseOpt = False,
 ) -> None:
-    """Run detection on a live camera and print events as they happen (Ctrl+C to stop).
+    """Run the station on a live camera and print events as they happen (Ctrl+C to stop).
 
-    Events are appended to events.jsonl in the output folder (default data/live/<date>),
-    with a clip and images per event in its clips/ folder.
+    Everything is stored as with `skyseer serve --camera` (the database, plus
+    data/live/<night>/ with clips, events.jsonl and events.json), so the dashboard
+    shows it afterwards.
     """
     _setup_logging(verbose)
     cfg = load_config(config)
-    device: int | str = int(camera) if camera.isdigit() else camera
-    source = CameraSource(device)
-    out_dir = out or Path("data/live") / f"{datetime.now():%Y%m%d_%H%M%S}"
-    out_dir.mkdir(parents=True, exist_ok=True)
-    recorder = _recorder(cfg, clips, out_dir, source.fps)
-    console.print(
-        f"Watching camera {camera} at {source.width}x{source.height}, {source.fps:.0f} fps"
+
+    def show(e: Event) -> None:
+        where = f", {e.sky.angular_speed:.2f}°/s" if e.sky is not None else ""
+        name = f" = {e.identification.short_label()}" if e.identification else ""
+        console.print(
+            f"[bold]{e.track.start_time:%H:%M:%S}[/bold] #{e.id} {e.label}{name} "
+            f"({e.confidence:.2f}, {e.track.duration:.1f}s{where})"
+        )
+
+    station = _station(
+        cfg,
+        camera,
+        replay,
+        start_time,
+        speed,
+        lat,
+        lon,
+        elevation,
+        sky,
+        tle,
+        clock_tolerance,
+        clips,
+        show,
     )
+    station.start()
+    console.print(
+        f"Watching {station.camera} at {station.source.width}x{station.source.height}, "
+        f"{station.source.fps:.0f} fps (Ctrl+C to stop)"
+    )
+    try:
+        station.wait()
+    except KeyboardInterrupt:
+        console.print("Stopping...")
+    finally:
+        station.stop()
+    console.print(f"Session saved in [bold]{station.folder}[/bold]")
+
+
+def _station(
+    cfg: Config,
+    camera: str | None,
+    replay: Path | None,
+    start_time: datetime | None,
+    speed: float,
+    lat: float | None,
+    lon: float | None,
+    elevation: float | None,
+    sky: bool,
+    tle: list[Path] | None,
+    clock_tolerance: float | None,
+    clips: bool,
+    on_event: Any = None,
+) -> LiveStation:
+    """A live station on a camera, or on a replayed video (for demos and testing)."""
+    from .analysis import is_simulation
+    from .live import LiveStation
+    from .sources import ReplaySource
+
+    source: Any
+    if replay is not None:
+        when = start_time
+        if when is not None and when.tzinfo is None:
+            when = when.replace(tzinfo=UTC)
+        source = ReplaySource(replay, when, speed)
+        label, kind = f"replay of {replay.name}", "replay"
+    else:
+        device: int | str = int(camera) if camera and camera.isdigit() else (camera or 0)
+        source = CameraSource(device)
+        label, kind = f"camera {camera}", "live"
+    observer = _observer(cfg, lat, lon, elevation)
     autocal = identifier = None
     if sky:
         from .astro.autocal import AutoCalibrator
 
-        observer = _observer(cfg, lat, lon, elevation)
-        autocal = AutoCalibrator(
-            cfg.astro,
-            observer,
-            source.fps,
-            cache_path=Path(cfg.astro.data_dir) / "live_calibration.json",
-        )
+        # A fixed camera keeps its calibration between nights; a replay must not reuse it.
+        cache = None if replay else Path(cfg.astro.data_dir) / "live_calibration.json"
+        autocal = AutoCalibrator(cfg.astro, observer, source.fps, cache_path=cache)
         identifier = _identifier(cfg, observer, tle, clock_tolerance)
+    folder = Path(cfg.storage.live_dir) / f"{kind}_{datetime.now():%Y%m%d_%H%M%S}"
+    return LiveStation(
+        source,
+        cfg,
+        _store(cfg),
+        label,
+        folder,
+        observer,
+        autocal,
+        identifier,
+        clips,
+        on_event,
+        simulated=replay is not None and is_simulation(str(replay)),
+    )
+
+
+@app.command()
+def serve(
+    host: Annotated[
+        str,
+        typer.Option(help="127.0.0.1 = this computer only; 0.0.0.0 = your whole network"),
+    ] = "127.0.0.1",
+    port: int = 8000,
+    camera: Annotated[
+        str | None, typer.Option(help="Also run the live station on this camera (index or URL)")
+    ] = None,
+    replay: ReplayOpt = None,
+    start_time: RecordedOpt = None,
+    speed: SpeedOpt = 1.0,
+    lat: LatOpt = None,
+    lon: LonOpt = None,
+    elevation: ElevOpt = None,
+    sky: Annotated[
+        bool, typer.Option("--sky/--no-sky", help="Keep the camera calibrated from the stars")
+    ] = True,
+    tle: TleOpt = None,
+    clock_tolerance: ClockOpt = None,
+    config: ConfigOpt = None,
+    verbose: VerboseOpt = False,
+) -> None:
+    """Start the dashboard and its API (then open http://localhost:8000).
+
+    With --camera (or --replay VIDEO, to demonstrate without a camera) the live station
+    runs too, and the dashboard's Live page shows it as it happens.
+    """
+    import uvicorn
+
+    from .api import create_app
+
+    _setup_logging(verbose)
+    cfg = load_config(config)
+    station = None
+    if camera is not None or replay is not None:
+        station = _station(
+            cfg,
+            camera,
+            replay,
+            start_time,
+            speed,
+            lat,
+            lon,
+            elevation,
+            sky,
+            tle,
+            clock_tolerance,
+            clips=True,
+        )
+    store = _store(cfg)
+    added = store.import_runs(cfg.storage.runs_dir, cfg.storage.live_dir)
+    if added:
+        console.print(f"Imported {added} earlier run(s) from {cfg.storage.runs_dir}")
+    if host not in ("127.0.0.1", "localhost"):
+        console.print(
+            "[yellow]Listening on the network: anyone on it can open the dashboard "
+            "(there is no login).[/yellow]"
+        )
+    console.print(f"Dashboard: [bold]http://localhost:{port}[/bold]  (API docs at /api/docs)")
+    if station is not None:
+        station.start()
+        console.print(f"Live station running on {station.camera}")
     try:
-        for e in run(source, cfg, autocal=autocal, identifier=identifier, clips=recorder):
-            if e.label not in ("Junk", "Star"):
-                with open(out_dir / "events.jsonl", "a", encoding="utf-8") as fh:
-                    fh.write(json.dumps(e.to_dict()) + "\n")
-                where = f", {e.sky.angular_speed:.2f}°/s" if e.sky is not None else ""
-                name = f" = {e.identification.short_label()}" if e.identification else ""
-                console.print(
-                    f"[bold]{e.track.start_time:%H:%M:%S}[/bold] #{e.id} {e.label}{name} "
-                    f"({e.confidence:.2f}, {e.track.duration:.1f}s{where})"
-                )
-    except KeyboardInterrupt:
-        console.print("Stopped.")
+        uvicorn.run(create_app(cfg, store, station), host=host, port=port, log_level="warning")
     finally:
-        if autocal is not None:
-            autocal.close()
+        if station is not None:
+            station.stop()
 
 
 @app.command()
@@ -529,15 +572,23 @@ def train(
         typer.Option(help="Held-out CSVs (default: synthetic_test.csv, standard_test.csv)"),
     ] = None,
     out: Annotated[Path | None, typer.Option(help="Model file (default: from the config)")] = None,
+    station: Annotated[
+        bool,
+        typer.Option(
+            "--station/--no-station",
+            help="Also learn from dashboard reviews and orbit-matched satellites",
+        ),
+    ] = True,
     config: ConfigOpt = None,
 ) -> None:
     """Train the learned classifier on labelled tracks and compare it with the rules.
 
-    Build the datasets first with tools/build_training_set.py. Results on the held-out
-    sets are printed and saved next to the model (<model>_report.json); select the model
-    with ``classifier: {method: model}`` in a config file.
+    Build the datasets first with tools/build_training_set.py. Real labelled tracks from
+    the station database (dashboard reviews, orbit-matched satellites) are added too.
+    Results on the held-out sets are printed and saved next to the model
+    (<model>_report.json); select the model with ``classifier: {method: model}``.
     """
-    from .classify.dataset import arrays, load_csv, object_scores
+    from .classify.dataset import arrays, load_csv, object_scores, station_rows
     from .classify.model import CLASSES, LearnedClassifier
 
     _setup_logging(False)
@@ -546,9 +597,18 @@ def train(
     train_files = data or [folder / "synthetic_train.csv"]
     test_files = test or [p for p in (folder / "synthetic_test.csv", folder / "standard_test.csv")]
     rows = [r for f in train_files for r in load_csv(f) if not int(r["star"])]
+    real = station_rows(_store(cfg), cfg) if station else []
+    if real:
+        kinds = Counter(r["kind"] for r in real)
+        console.print(f"Adding {len(real)} real tracks from the station database: {dict(kinds)}")
+    rows += real
     X, y, groups, _ = arrays(rows)
     with console.status(f"Training on {len(rows)} tracks from {len(set(groups))} videos..."):
-        info = {"trained_on": [str(f) for f in train_files], "tracks": len(rows)}
+        info = {
+            "trained_on": [str(f) for f in train_files],
+            "tracks": len(rows),
+            "real_tracks": len(real),
+        }
         model = LearnedClassifier.train(X, y, groups, cfg.rules, info)
 
     report: dict[str, Any] = {"train": dict(info), "tests": {}}

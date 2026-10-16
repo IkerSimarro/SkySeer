@@ -273,6 +273,14 @@ class ClipConfig(_Section):
     )
 
 
+class StorageConfig(_Section):
+    """Where the station keeps its record of every night (see storage.py)."""
+
+    database: str = Field("data/skyseer.db", description="SQLite file: sessions, events, reviews")
+    runs_dir: str = Field("data/runs", description="Analysed recordings (one folder each)")
+    live_dir: str = Field("data/live", description="Live camera nights (one folder each)")
+
+
 class PipelineConfig(_Section):
     frame_skip: int = Field(1, ge=1, description="Process every Nth frame")
     disturbance_fraction: float = Field(
@@ -301,6 +309,7 @@ class Config(_Section):
     photometry: PhotometryConfig = PhotometryConfig()
     alerts: AlertConfig = AlertConfig()
     clips: ClipConfig = ClipConfig()
+    storage: StorageConfig = StorageConfig()
 
 
 def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:

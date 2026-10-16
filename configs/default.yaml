@@ -138,3 +138,8 @@ clips:                        # a short video clip + trail image + context image
   margin_px: 40.0             # space around the path in the zoomed clip
   min_crop_px: 200.0          # smallest region a clip zooms into
   crf: 22                     # H.264 quality, lower = better (26 erased faint objects)
+
+storage:                      # the station's record of every night
+  database: data/skyseer.db   # SQLite file: sessions, events and human reviews
+  runs_dir: data/runs         # analysed recordings, one folder each
+  live_dir: data/live         # live camera nights, one folder each

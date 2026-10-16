@@ -104,3 +104,52 @@ class CameraSource:
 
     def close(self) -> None:
         self._cap.release()
+
+
+class ReplaySource:
+    """Plays a video file as if it were a live camera: paced in real time (``speed`` times
+    faster), so the live station and dashboard can be run and demonstrated without a
+    camera. Timestamps start at ``start_time`` (the recording's real start, so satellites
+    can be named) or, if not given, now.
+    """
+
+    def __init__(
+        self,
+        path: str | Path,
+        start_time: datetime | None = None,
+        speed: float = 1.0,
+        loop: bool = False,
+    ):
+        self.path = Path(path)
+        self.speed, self.loop = speed, loop
+        self._cap = cv2.VideoCapture(str(self.path))
+        if not self._cap.isOpened():
+            raise ValueError(f"Could not open video file: {self.path}")
+        self.fps = float(self._cap.get(cv2.CAP_PROP_FPS)) or 30.0
+        self.width = int(self._cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        self.height = int(self._cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        start = start_time or datetime.now(UTC)
+        self.start_time = (start if start.tzinfo else start.replace(tzinfo=UTC)).astimezone(UTC)
+
+    def __iter__(self) -> Iterator[Frame]:
+        import time
+
+        index = 0
+        began = time.perf_counter()
+        while True:
+            ok, image = self._cap.read()
+            if not ok:
+                if not self.loop:
+                    break
+                self._cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                continue
+            if self.speed > 0:  # wait until this frame's moment comes
+                due = began + index / (self.fps * self.speed)
+                delay = due - time.perf_counter()
+                if delay > 0:
+                    time.sleep(delay)
+            yield Frame(image, index, self.start_time + timedelta(seconds=index / self.fps))
+            index += 1
+
+    def close(self) -> None:
+        self._cap.release()

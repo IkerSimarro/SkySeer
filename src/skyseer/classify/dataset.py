@@ -29,6 +29,7 @@ import numpy as np
 from ..config import Config
 from ..features import FEATURE_NAMES
 from ..models import ObjectClass
+from ..storage import Store
 from .model import CLASSES, MODEL_FEATURES, RULE_FEATURES, rule_shares
 from .rules import RuleClassifier
 
@@ -124,6 +125,37 @@ def run_rows(
         rows.append(
             _row(e["features"], rules, label=label, kind=kind, group=group, event_id=e["id"])
         )
+    return rows
+
+
+def station_rows(store: Store, config: Config) -> list[dict[str, Any]]:
+    """Real labelled tracks from the station database: events a person reviewed in the
+    dashboard (their verdict is the label) and satellites matched to a known orbit."""
+    rules = RuleClassifier(config.rules)
+    rows = []
+    for session in store.sessions():
+        if session["meta"].get("simulated"):
+            continue  # only real skies here; simulations have their own datasets
+        group = f"station-{session['name']}"
+        for e in store.events(session_id=session["id"], limit=1_000_000):
+            if e.get("review") in CLASSES:
+                label, kind = e["review"], "review"
+            elif e.get("label_source") == "orbit" and e.get("review") is None:
+                label, kind = str(ObjectClass.SATELLITE), "orbit"
+            else:
+                continue
+            meta = {"truth_id": -1, "real_objects": 0, "star": 0}
+            rows.append(
+                _row(
+                    e["features"],
+                    rules,
+                    label=label,
+                    kind=kind,
+                    group=group,
+                    event_id=e["event_id"],
+                    **meta,
+                )
+            )
     return rows
 
 

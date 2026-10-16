@@ -80,6 +80,9 @@ class SkyPath:
         if self.alt is not None and self.az is not None:
             out["start"].update(alt=round(float(self.alt[0]), 3), az=round(float(self.az[0]), 3))
             out["end"].update(alt=round(float(self.alt[-1]), 3), az=round(float(self.az[-1]), 3))
+            # Up to 16 points along the path (alt, az), for drawing it on a sky map.
+            k = np.unique(np.linspace(0, len(self.alt) - 1, min(16, len(self.alt))).astype(int))
+            out["path"] = [[round(float(self.alt[i]), 2), round(float(self.az[i]), 2)] for i in k]
         return out
 
 

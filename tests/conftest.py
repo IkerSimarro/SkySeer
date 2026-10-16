@@ -45,6 +45,16 @@ def linear_points(
 ASTRO_DATA = Path("data/astro")
 
 
+@pytest.fixture(autouse=True, scope="session")
+def _private_database(tmp_path_factory):
+    """Tests never write into the real station database (session scope, so it is in
+    place before any module-scoped fixture runs the CLI)."""
+    patch = pytest.MonkeyPatch()
+    patch.setenv("SKYSEER_DATABASE", str(tmp_path_factory.mktemp("db") / "test.db"))
+    yield
+    patch.undo()
+
+
 @pytest.fixture(scope="session")
 def catalog():
     from skyseer.astro.catalog import load_stars
