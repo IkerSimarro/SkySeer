@@ -18,6 +18,7 @@ doubt (it evolves). Paths are relative to the repository root.
 12. Honest limitations and what's next
 13. Phase 4: clips, shake correction, crossings, learned classifier
 14. Phase 5: database, web API, live station, dashboard
+15. Phase 6: the unattended Raspberry Pi station
 
 ## 1. Big picture and architecture
 - **What it is:** video in → detect → track → classify → calibrate from stars →
@@ -194,7 +195,7 @@ doubt (it evolves). Paths are relative to the repository root.
   Phase 4 learned model did not fix this on real footage (sim-to-real gap, see 13).
 - **No extinction or colour terms** in photometry yet.
 - **Single-station shower association** has ~5% chance matches; two stations would fix it.
-- **Next phases:** Phase 6 (Pi station), Phase 7 (portfolio launch).
+- **Next phases:** build the Pi station (Nov 2026) and measure it; Phase 7 (portfolio launch).
 - **Dashboard has no login:** it listens on 127.0.0.1 unless told otherwise; fine on a home
   network, would need authentication before exposing it to the internet.
 
@@ -250,3 +251,24 @@ doubt (it evolves). Paths are relative to the repository root.
 - **Design choices to defend:** hand-drawn SVG charts (small, fast on a Pi, on-brand) instead
   of a chart library; hash routing (no router dependency); SIMULATION tags everywhere for
   honesty.
+
+## 15. Phase 6: the unattended Raspberry Pi station
+- **Night schedule** (`astro/sun.py`, `station.py`): observes while the Sun is below -12°
+  (nautical twilight). Offline Sun formula vs NASA JPL DE421: median 0.003°, max 0.012°
+  over 500 random cases; dusk in Madrid on 21 Oct 2026 within 1.5 s of JPL. Tested with a
+  fake clock (a day and night in seconds).
+- **Disk housekeeping:** deletes clips of old live nights (> 30 days, or oldest first below
+  5 GB free); keeps records; never touches analysed recordings.
+- **GPS** (`gps.py`): gpsd or raw NMEA (GGA/RMC, checksums), no extra libraries; cached last
+  fix for instant start after reboot; warns when the system clock is > 2 s off GPS time
+  (the Pi has no clock battery). Bug story: two-digit NMEA years (94 -> 1994 not 2094).
+- **Camera** (`pi_camera.py`): auto-exposure/white balance/noise reduction off; exposure
+  fills the frame; Y plane only; sensor timestamps at mid-exposure. Tested against a
+  stand-in for picamera2.
+- **Deployment** (`deploy/pi/`): install script, venv with system site-packages (picamera2
+  comes from apt), systemd service with Restart=always, chrony for GPS time.
+- **Performance** (`docs/performance.md`): i7-7700 at 2028x1520, whole live station 23.8 fps
+  full / 41.5 fps half resolution, same objects found. Meteor vs faint-satellite frame-rate
+  trade-off: a 0.3 s meteor spans 4 frames at 10 fps (missed), so the profile uses 15 fps.
+  Pi numbers are estimates until measured.
+- **Why no tilt sensor:** plate solving already gives exact pointing every night.
