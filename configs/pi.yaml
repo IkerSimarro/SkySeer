@@ -1,0 +1,29 @@
+# SkySeer on the Raspberry Pi 5 station (deploy/pi/README.md).
+# Only the differences from configs/default.yaml are here; everything else keeps its
+# default. The service runs: skyseer station --config configs/pi.yaml --host 0.0.0.0
+
+observer:                     # your location; leave null when a GPS is connected
+  latitude: null
+  longitude: null
+  elevation_m: 0.0
+
+station:
+  camera: picamera            # the Raspberry Pi HQ camera
+  dark_sun_altitude: -12.0    # observe from nautical dusk to nautical dawn
+
+gps:
+  source: gpsd                # set up by install.sh --gps; none without a receiver
+
+camera:                       # HQ camera (IMX477), 2x2 binned: full field, less noise
+  width: 2028
+  height: 1520
+  fps: 15.0                   # ~63 ms exposures; meteor vs faint-satellite trade-off:
+                              # docs/performance.md
+  gain: 8.0
+
+detector:
+  process_scale: 0.5          # detect on a half-size image: ~2x faster, same objects in
+                              # the test night (docs/performance.md)
+
+clips:
+  buffer_mb: 768              # leaves memory for everything else on an 8 GB Pi

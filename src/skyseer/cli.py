@@ -397,9 +397,25 @@ def _live_station(
             when = when.replace(tzinfo=UTC)
         source = ReplaySource(replay, when, speed)
         label, kind = f"replay of {replay.name}", "replay"
+    elif camera and camera.startswith("picamera"):  # picamera or picamera:1
+        from .pi_camera import PiCameraSettings, PiCameraSource
+
+        c = cfg.camera
+        number = int(camera.split(":")[1]) if ":" in camera else 0
+        settings = PiCameraSettings(
+            width=c.width or 2028,
+            height=c.height or 1520,
+            fps=c.fps,
+            exposure_us=round(c.exposure_ms * 1000) if c.exposure_ms else None,
+            gain=c.gain,
+            colour_gains=c.colour_gains,
+            camera_num=number,
+        )
+        source = PiCameraSource(settings)
+        label, kind = f"Pi camera {number}", "live"
     else:
         device: int | str = int(camera) if camera and camera.isdigit() else (camera or 0)
-        source = CameraSource(device)
+        source = CameraSource(device, cfg.camera.width, cfg.camera.height)
         label, kind = f"camera {camera}", "live"
     autocal = identifier = None
     if sky:

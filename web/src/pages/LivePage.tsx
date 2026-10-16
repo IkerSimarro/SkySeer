@@ -99,6 +99,13 @@ export default function LivePage() {
       </div>
       {s.error && <div className="panel error">The station stopped: {s.error}</div>}
       {s.clock_warning && <div className="panel error">{s.clock_warning}</div>}
+      {s.running && s.camera_fps && s.frames > 20 * s.camera_fps && s.fps < 0.9 * s.camera_fps && (
+        <div className="panel error">
+          Falling behind: processing {s.fps.toFixed(1)} frames/s but the camera delivers {s.camera_fps.toFixed(0)}, so
+          frames are being dropped. Lower <span className="mono">camera.fps</span> or{' '}
+          <span className="mono">detector.process_scale</span> in the config.
+        </div>
+      )}
       <div className="grid detail-grid">
         <section className="panel media-panel">
           {s.running ? (

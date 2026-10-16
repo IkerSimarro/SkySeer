@@ -281,6 +281,21 @@ class StorageConfig(_Section):
     live_dir: str = Field("data/live", description="Live camera nights (one folder each)")
 
 
+class CameraConfig(_Section):
+    """The live camera. Exposure, gain and colour apply to the Raspberry Pi camera."""
+
+    width: int | None = Field(None, description="Frame width (None = the camera's default)")
+    height: int | None = Field(None, description="Frame height (None = the camera's default)")
+    fps: float = Field(10.0, gt=0, description="Frames per second; exposure fills each frame")
+    exposure_ms: float | None = Field(
+        None, gt=0, description="Exposure per frame (None = 95% of the frame time)"
+    )
+    gain: float = Field(8.0, ge=1, description="Sensor gain: higher = brighter, noisier")
+    colour_gains: tuple[float, float] = Field(
+        (2.0, 1.8), description="Fixed white balance (red, blue)"
+    )
+
+
 class GpsConfig(_Section):
     """Where the station is and the true time, from a GPS receiver (see gps.py)."""
 
@@ -349,6 +364,7 @@ class Config(_Section):
     storage: StorageConfig = StorageConfig()
     station: StationConfig = StationConfig()
     gps: GpsConfig = GpsConfig()
+    camera: CameraConfig = CameraConfig()
 
 
 def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:

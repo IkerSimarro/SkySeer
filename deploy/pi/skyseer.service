@@ -1,0 +1,23 @@
+# SkySeer station: starts at boot, restarts after crashes or power cuts.
+# install.sh fills in @USER@ and @DIR@ and copies this to /etc/systemd/system/.
+#   sudo systemctl status skyseer     # is it running?
+#   journalctl -u skyseer -f          # its log, live
+[Unit]
+Description=SkySeer night-sky monitoring station
+# Start after the network and (if used) the GPS service, and once the clock is synced.
+After=network-online.target gpsd.service time-sync.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=@USER@
+WorkingDirectory=@DIR@
+ExecStart=@DIR@/.venv/bin/skyseer station --config configs/pi.yaml --host 0.0.0.0
+Restart=always
+RestartSec=15
+Environment=PYTHONUNBUFFERED=1
+# Give the camera thread time to close the night's files cleanly on shutdown.
+TimeoutStopSec=60
+
+[Install]
+WantedBy=multi-user.target

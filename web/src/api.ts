@@ -123,7 +123,8 @@ export interface Health {
 export interface LiveStatus {
   running: boolean
   camera: string
-  fps: number
+  fps: number // frames processed per second
+  camera_fps?: number // frames the camera delivers per second
   frames: number
   session_id: number | null
   calibrated: boolean

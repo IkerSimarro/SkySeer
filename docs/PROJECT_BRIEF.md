@@ -95,7 +95,7 @@ used for robustness testing.
 | 3 | Meteor science (showers, magnitudes, fireballs, light curves) | done |
 | 4 | Smarter detection: ML classifier, one clip per event, camera-shake correction | done |
 | 5 | FastAPI backend + custom "mission control" web dashboard (replacing an old Streamlit UI) | done |
-| 6 | Raspberry Pi station: camera, GPS, auto-start, enclosure, outdoor tests | needs hardware |
+| 6 | Raspberry Pi station: camera, GPS, auto-start, enclosure, outdoor tests | software done; hardware build Nov 2026 |
 | 7 | Portfolio launch: README with measured results, demo video, v1.0 release | planned |
 
 About 85% of the remaining work can be done before the hardware arrives.

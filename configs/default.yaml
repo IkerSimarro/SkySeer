@@ -160,3 +160,11 @@ gps:                          # where the station is, and the true time
   cache_file: data/station_location.json  # last good position, used until a new fix
   min_satellites: 4           # satellites needed to trust a fix
   max_clock_error_s: 2.0      # warn if the system clock is this far from GPS time
+
+camera:                       # the live camera (exposure/gain/colour: Raspberry Pi camera)
+  width: null                 # null = the camera's default size
+  height: null
+  fps: 10.0                   # frames per second; each frame's exposure fills it
+  exposure_ms: null           # null = 95% of the frame time
+  gain: 8.0                   # higher = brighter but noisier
+  colour_gains: [2.0, 1.8]    # fixed white balance (red, blue)

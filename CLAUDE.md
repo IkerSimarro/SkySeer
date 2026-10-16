@@ -34,6 +34,10 @@ techniques, clean tested code.
   Live station: `skyseer serve --camera 0`, or without a camera
   `skyseer serve --replay VIDEO --start-time ... --lat ... --lon ...` (plays a recording as
   if live). `.claude/launch.json` has both for the preview browser.
+- Unattended station (what the Pi runs): `skyseer station [--gps gpsd] [--lat --lon]`
+  observes from dusk to dawn. Pi profile `configs/pi.yaml`; install kit and guide in
+  `deploy/pi/`; parts in `docs/hardware.md`; throughput in `docs/performance.md`
+  (`tools/perf_station.py`).
 - `uv sync` installs/updates the environment. If `uv` isn't on PATH in a fresh shell,
   refresh PATH from the registry or call the venv's python directly.
 

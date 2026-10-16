@@ -138,6 +138,7 @@ class LiveStation:
             "running": self.running,
             "camera": self.camera,
             "fps": round(self._fps, 1),
+            "camera_fps": self.source.fps,
             "frames": self.frames,
             "session_id": self.session_id,
             "started": self.started_at.isoformat() if self.started_at else None,
