@@ -9,9 +9,9 @@ SkySeer is an automated night-sky monitoring system. A camera watches the sky. S
 detects anything that moves, tells **satellites, meteors and aircraft** apart, works out
 exactly **where in the sky** each one was, and **identifies** it: it names the specific
 satellite from public orbit data (e.g. "STARLINK-4012, 550 km up") and the meteor
-shower a meteor belongs to (e.g. "Perseid"). It works on recorded video today. Next month
-it becomes a **physical station**: a Raspberry Pi 5 with a camera that runs all night,
-on its own, outdoors.
+shower a meteor belongs to (e.g. "Perseid"). It works on recorded video today, and its
+station software is ready: in December 2026 it becomes a **physical station**, a
+Raspberry Pi 5 with a camera that runs all night, on its own, outdoors.
 
 ## Why it exists (the real goal)
 
@@ -69,6 +69,8 @@ aerospace recruiter or engineer will think when they see it on GitHub**. That me
 | Learned classifier, real YouTube footage (224 blind by-eye labels) | behind the rules: 19/31 real objects right vs 25/31 (sim-to-real gap; rules stay default) |
 | Meteor shower identification | ~96% of shower meteors correct; ~5% of random meteors matched by chance |
 | Meteor brightness | ±0.1 magnitude |
+| Sun position for the night schedule (vs NASA JPL DE421) | median 0.003°, max 0.012° |
+| Live station throughput at 2028×1520 (Intel i7-7700) | 23.8 fps full, 41.5 fps half resolution (Pi 5 not yet measured) |
 
 All tested against real data so far: ESA's tetra3 sample sky images, the user's own
 footage (the sky position was solved), and an hour-long YouTube night-sky compilation
@@ -95,10 +97,9 @@ used for robustness testing.
 | 3 | Meteor science (showers, magnitudes, fireballs, light curves) | done |
 | 4 | Smarter detection: ML classifier, one clip per event, camera-shake correction | done |
 | 5 | FastAPI backend + custom "mission control" web dashboard (replacing an old Streamlit UI) | done |
-| 6 | Raspberry Pi station: camera, GPS, auto-start, enclosure, outdoor tests | software done; hardware build Nov 2026 |
-| 7 | Portfolio launch: README with measured results, demo video, v1.0 release | planned |
-
-About 85% of the remaining work can be done before the hardware arrives.
+| 6 | Station software: night schedule, GPS, Pi camera driver, install kit, auto-start | done |
+| 7 | v1.0 software release: README with measured results, demo, CHANGELOG | done (Oct 2026) |
+| 8 | Station build: Pi 5 + HQ camera outdoors, enclosure, first-light results, real throughput | Dec 2026 |
 
 ## Working preferences
 
@@ -108,9 +109,3 @@ About 85% of the remaining work can be done before the hardware arrives.
 - **Measured claims only.** Every capability is validated with tests or simulations.
 - **Safety first:** never give a confident wrong answer (wrong satellite name, false
   sky position). Refusing is better than guessing.
-
-## What I'm looking for
-
-Claude Code **skills** that would help with this project: repeatable workflows for
-development, testing and validation, documentation and portfolio presentation, preparing
-for interviews about the project, and later deploying to a Raspberry Pi.

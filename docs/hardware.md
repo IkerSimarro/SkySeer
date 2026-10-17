@@ -1,6 +1,6 @@
 # Station hardware (planned build)
 
-**Status:** not built yet (planned for November 2026). The software side is ready and
+**Status:** not built yet (planned for December 2026). The software side is ready and
 tested without the hardware (camera driver against a stand-in, GPS against recorded
 messages, the scheduler with a simulated clock). Prices are rough October 2026 figures;
 check current ones.

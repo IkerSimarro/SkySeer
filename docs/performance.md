@@ -1,7 +1,7 @@
 # Performance at the station's camera settings
 
 **Status:** measured on a development PC; the Raspberry Pi 5 figures are estimates until
-the station is built (November 2026). Re-measure on the Pi with:
+the station is built (December 2026). Re-measure on the Pi with:
 
 ```
 python tools/perf_station.py --fps 15

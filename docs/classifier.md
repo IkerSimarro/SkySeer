@@ -37,6 +37,11 @@ and why it is **not** the default yet.
 | ...satellites (24) | **21** | 13 |
 | ...junk called a real object | 15 | **11** |
 
+After a later detector fix (pieces of one faint blob are now one detection, v1.0) the
+same labels give: rules 27/31 real objects right (23/24 satellites) with 13 junk tracks
+called real; model 19/31 with 11 (`tools/score_labels.py --labelled-run`). The rules
+still win.
+
 Real-footage labels: a random sample of 200 tracks plus every track either classifier
 called a real object, labelled **blind** (from trail images, without seeing either
 answer); 21 tracks too ambiguous to call were left out. Score with

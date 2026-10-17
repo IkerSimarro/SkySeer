@@ -19,6 +19,7 @@ doubt (it evolves). Paths are relative to the repository root.
 13. Phase 4: clips, shake correction, crossings, learned classifier
 14. Phase 5: database, web API, live station, dashboard
 15. Phase 6: the unattended Raspberry Pi station
+16. Phase 7: v1.0 release, and what using it revealed
 
 ## 1. Big picture and architecture
 - **What it is:** video in → detect → track → classify → calibrate from stars →
@@ -195,7 +196,7 @@ doubt (it evolves). Paths are relative to the repository root.
   Phase 4 learned model did not fix this on real footage (sim-to-real gap, see 13).
 - **No extinction or colour terms** in photometry yet.
 - **Single-station shower association** has ~5% chance matches; two stations would fix it.
-- **Next phases:** build the Pi station (Nov 2026) and measure it; Phase 7 (portfolio launch).
+- **Next phases:** Phase 7 is the v1.0 software release (Oct 2026); Phase 8 builds the Pi station (Dec 2026) and measures it.
 - **Dashboard has no login:** it listens on 127.0.0.1 unless told otherwise; fine on a home
   network, would need authentication before exposing it to the internet.
 
@@ -272,3 +273,26 @@ doubt (it evolves). Paths are relative to the repository root.
   trade-off: a 0.3 s meteor spans 4 frames at 10 fps (missed), so the profile uses 15 fps.
   Pi numbers are estimates until measured.
 - **Why no tilt sensor:** plate solving already gives exact pointing every night.
+
+## 16. Phase 7: v1.0 release, and what using it revealed
+- **Release material:** README with a results table (each number says how it was measured),
+  CHANGELOG, MIT licence, screenshots from a separate showcase database (simulated nights
+  only, tagged SIMULATION; no third-party footage shown), hero GIF made from SkySeer's own
+  annotated output of a simulated sky built from real stars and real orbits.
+- **Bugs found by using the product as a stranger would** (making screenshots, following
+  the quick start), each now with a test:
+  - The event page never drew brightness curves: the frontend read `magnitudes`, the
+    backend saves `light_curve`. A contract mismatch between TypeScript types and Python
+    output that no single-side test could catch.
+  - Live cards showed broken images: events were pushed to the WebSocket before the
+    background clip writer had finished. Fix: publish from the write job's completion
+    callback (a race between two threads).
+  - The same satellite reported twice: noise split a faint blob into two pieces ~2 px
+    apart and the tracker started a second track. Fix: group components on a dilated mask,
+    measure on the real pixels (`detector.group_px`). Quick-start scene: 6 events -> 5 for
+    5 satellites. Real YouTube footage: 620 -> 531 tracks; blind labels: rules 25 -> 27/31
+    real objects right, junk called real 15 -> 13/193 (model unchanged at 19/31).
+  - A fresh clone answered "Not Found" (the built dashboard is git-ignored): now a page
+    says how to build it.
+- **Interview angle:** dogfooding and the "stranger's first five minutes" are part of
+  engineering; integration seams (frontend/backend, thread/thread) are where bugs hide.
