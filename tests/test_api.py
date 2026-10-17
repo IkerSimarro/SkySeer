@@ -2,6 +2,7 @@
 
 import csv
 import io
+import json
 
 import pytest
 from fastapi.testclient import TestClient
@@ -174,3 +175,52 @@ def test_an_unbuilt_dashboard_explains_how_to_build_it(tmp_path):
     r = client.get("/")
     assert r.status_code == 200 and "npm run build" in r.text
     assert client.get("/api/health").status_code == 200
+
+
+def test_clips_without_markings(client, analysed, tmp_path):
+    """Meteors have one at once; for any other event of an analysed recording it is made
+    on request from the original video; a live night can't make one afterwards."""
+    from skyseer.clips import clean_path
+
+    from .test_clips import coloured_pixels
+
+    folder, _ = analysed
+    events = client.get("/api/events").json()
+    meteor = next(e for e in events if e["label"] == "Meteor")
+    other = next(e for e in events if e["label"] != "Meteor")
+    media = client.get(f"/api/events/{meteor['id']}").json()["media"]
+    assert media["clean_status"] == "ready" and media["clean"].endswith("_clean.mp4")
+    assert client.get(media["clean"]).status_code == 200
+
+    media = client.get(f"/api/events/{other['id']}").json()["media"]
+    assert media["clean_status"] == "on_request" and "clean" not in media
+    made = client.post(f"/api/events/{other['id']}/clean-clip").json()
+    assert made["clean_status"] == "ready"
+    clean_file = folder / made["clean"].split("/", 3)[3]
+    n_clean, coloured = coloured_pixels(clean_file)
+    n_marked, _ = coloured_pixels(folder / made["clip"].split("/", 3)[3])
+    assert n_clean == n_marked and coloured == 0
+    stamp = clean_file.stat().st_mtime_ns
+    assert client.post(f"/api/events/{other['id']}/clean-clip").status_code == 200
+    assert clean_file.stat().st_mtime_ns == stamp  # made once, then reused
+
+    # A live night, or a recording whose video has gone: refused with the reason.
+    store = Store(tmp_path / "other.db")
+    run_events = json.loads((folder / "events.json").read_text())
+    why = {}
+    for kind, source, reason in (("live", None, "Live nights"), ("file", "gone.mp4", "no longer")):
+        sid = store.add_session(f"{kind}-night", kind, folder, source, None, {})
+        store.add_events(sid, run_events)
+        why[sid] = reason
+    other_client = TestClient(create_app(load_config(), store, static_dir=None))
+    refused = 0
+    for e in other_client.get("/api/events").json():
+        detail = other_client.get(f"/api/events/{e['id']}").json()["media"]
+        if (folder / clean_path(detail["clip"].split("/", 3)[3])).exists():
+            continue  # a clean copy already exists (meteors, and the one made above)
+        assert detail["clean_status"] == "unavailable"
+        assert why[e["session_id"]] in detail["clean_reason"]
+        r = other_client.post(f"/api/events/{e['id']}/clean-clip")
+        assert r.status_code == 409 and r.json()["detail"] == detail["clean_reason"]
+        refused += 1
+    assert refused >= 2

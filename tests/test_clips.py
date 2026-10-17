@@ -1,5 +1,6 @@
 import json
 
+import av
 import cv2
 import numpy as np
 from typer.testing import CliRunner
@@ -87,3 +88,32 @@ def test_cli_analyze_writes_clips(synth_clip, tmp_path):
     assert result.exit_code == 0, result.output
     events = json.loads((tmp_path / "events.json").read_text())
     assert all((tmp_path / e["media"]["clip"]).exists() for e in events)
+
+
+def coloured_pixels(clip) -> tuple[int, int]:
+    """(frames, pixels in colour) of a clip. The sky is grey; markings are coloured."""
+    with av.open(str(clip)) as c:
+        frames = np.stack([f.to_ndarray(format="bgr24") for f in c.decode(video=0)])
+    spread = frames.max(axis=3).astype(int) - frames.min(axis=3)
+    return len(frames), int((spread > 40).sum())
+
+
+def test_meteors_also_get_a_clip_without_markings(synth_clip, tmp_path):
+    """A clean copy is saved at once for the classes in clips.clean_copy (meteors by
+    default): on a live night the frames are gone once the clip is written."""
+    path, _ = synth_clip
+    cfg = load_config()
+    recorder = ClipRecorder(tmp_path, cfg.clips, 30.0)
+    events = [e for e in run(FileSource(path), cfg, clips=recorder) if e.media]
+    recorder.close()
+    meteors = [e for e in events if e.label == "Meteor"]
+    assert meteors and any(e.label != "Meteor" for e in events)
+    for e in events:
+        clean = e.media.get("clean")
+        assert (clean is not None) == (e.label == "Meteor")
+        if clean is None:
+            continue
+        n_clean, coloured = coloured_pixels(tmp_path / clean)
+        n_marked, marked = coloured_pixels(tmp_path / e.media["clip"])
+        assert n_clean == n_marked  # the same frames, so the page can switch between them
+        assert coloured == 0 and marked > 1000  # no brackets, trail or title

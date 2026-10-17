@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { ALL_CLASSES, api, duration, mag, type EventDetail, type ObjectClass, utcDate, utcTime } from '../api'
+import { useRef, useState } from 'react'
+import { ALL_CLASSES, api, duration, mag, type EventDetail, type Media, type ObjectClass, utcDate, utcTime } from '../api'
 import { LightCurve } from '../components/charts'
 import { ClassBadge, Failed, Loading, SimTag } from '../components/common'
 import { BackIcon } from '../components/Icons'
@@ -37,6 +37,72 @@ function ReviewPanel({ e, onChange }: { e: EventDetail; onChange: (label: Object
         ))}
         {e.review && <button className="btn small" disabled={saving} onClick={() => set(null)}>Clear</button>}
       </div>
+    </section>
+  )
+}
+
+/** The zoomed clip, with a switch to hide the box and trail so the object itself can be
+ * seen. The clean clip shows the same frames, so playback carries on where it was. */
+function ClipPanel({ id, initial }: { id: number; initial: Media }) {
+  const [media, setMedia] = useState(initial)
+  const [clean, setClean] = useState(false)
+  const [making, setMaking] = useState(false)
+  const [note, setNote] = useState<string | null>(null)
+  const video = useRef<HTMLVideoElement>(null)
+  const resumeAt = useRef(0)
+  const showClean = clean && !!media.clean
+
+  const choose = async (wantClean: boolean) => {
+    setNote(null)
+    resumeAt.current = video.current?.currentTime ?? 0
+    if (!wantClean || media.clean) {
+      setClean(wantClean)
+      return
+    }
+    if (media.clean_status === 'unavailable') {
+      setNote(media.clean_reason ?? 'A clip without markings is not available for this event.')
+      return
+    }
+    setMaking(true)
+    try {
+      setMedia(await api.cleanClip(id))
+      setClean(true)
+    } catch (err) {
+      setNote(err instanceof Error ? err.message : String(err))
+    } finally {
+      setMaking(false)
+    }
+  }
+
+  return (
+    <section className="panel media-panel">
+      <video
+        key={showClean ? 'clean' : 'marked'}
+        ref={video}
+        src={showClean ? media.clean : media.clip}
+        onLoadedMetadata={(ev) => { ev.currentTarget.currentTime = resumeAt.current }}
+        controls autoPlay loop muted playsInline
+      />
+      <div className="media-bar">
+        <div className="muted media-note">
+          Zoomed clip{media.speedup > 1 ? `, ${media.speedup}× faster than real time` : ', real time'}
+          {showClean ? ', without markings' : ''}
+          {media.partial ? ' (its start was too long ago to keep)' : ''}
+        </div>
+        <div className="btn-group" role="group" aria-label="Markings on the clip">
+          <button className="btn small" aria-pressed={!showClean} onClick={() => choose(false)}>Markings</button>
+          <button
+            className="btn small"
+            aria-pressed={showClean}
+            disabled={making}
+            title="Hide the box and trail to see the object itself"
+            onClick={() => choose(true)}
+          >
+            {making ? 'Preparing…' : 'Clean'}
+          </button>
+        </div>
+      </div>
+      {note && <div className="muted media-note">{note}</div>}
     </section>
   )
 }
@@ -88,17 +154,11 @@ export default function EventPage({ id }: { id: number }) {
 
       <div className="grid detail-grid">
         <div>
-          <section className="panel media-panel">
-            {e.media ? (
-              <>
-                <video src={e.media.clip} controls autoPlay loop muted playsInline />
-                <div className="muted media-note">
-                  Zoomed clip{e.media.speedup > 1 ? `, ${e.media.speedup}× faster than real time` : ', real time'}
-                  {e.media.partial ? ' (its start was too long ago to keep)' : ''}
-                </div>
-              </>
-            ) : <div className="empty">No clip was recorded for this event.</div>}
-          </section>
+          {e.media ? (
+            <ClipPanel key={e.id} id={e.id} initial={e.media} />
+          ) : (
+            <section className="panel media-panel"><div className="empty">No clip was recorded for this event.</div></section>
+          )}
           {e.media && (
             <section className="panel">
               <h3>Where in the view</h3>

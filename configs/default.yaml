@@ -139,6 +139,7 @@ clips:                        # a short video clip + trail image + context image
   margin_px: 40.0             # space around the path in the zoomed clip
   min_crop_px: 200.0          # smallest region a clip zooms into
   crf: 22                     # H.264 quality, lower = better (26 erased faint objects)
+  clean_copy: [Meteor]        # also save a clip without markings (live nights can't later)
 
 storage:                      # the station's record of every night
   database: data/skyseer.db   # SQLite file: sessions, events and human reviews

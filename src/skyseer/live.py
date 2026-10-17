@@ -243,7 +243,7 @@ class LiveStation:
         if item.get("media"):
             base = f"/media/{self.session_id}/"
             item["media"] = {
-                k: base + v if k in ("clip", "thumbnail", "context") else v
+                k: base + v if k in ("clip", "thumbnail", "context", "clean") else v
                 for k, v in item["media"].items()
             }
         if written is None:

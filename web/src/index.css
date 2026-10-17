@@ -191,6 +191,8 @@ table.data td.num, table.data th.num { text-align: right; }
 .detail-grid > div > .panel + .panel { margin-top: 16px; }
 .media-panel video { width: 100%; border-radius: 8px; background: #000; display: block; }
 .media-note { font-size: 12px; margin-top: 8px; }
+.media-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.media-bar .btn-group { margin-top: 8px; }
 .context-img { width: 100%; border-radius: 8px; margin-top: 10px; display: block; }
 .bars { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
 .bar-row { display: grid; grid-template-columns: 76px 1fr 44px; gap: 10px; align-items: center; font-size: 13px; }

@@ -41,6 +41,10 @@ export interface Media {
   context: string
   speedup: number
   partial: boolean
+  // The same clip without the box, trail and title (event detail only):
+  clean?: string
+  clean_status?: 'ready' | 'on_request' | 'unavailable'
+  clean_reason?: string | null
 }
 
 export interface EventSummary {
@@ -188,6 +192,15 @@ export const api = {
     })
     if (!r.ok) throw new Error(`Review failed: ${r.status}`)
     return (await r.json()) as { id: number; review: ObjectClass | null }
+  },
+  /** Make the event's clip without markings (from the original recording) if needed. */
+  cleanClip: async (id: number) => {
+    const r = await fetch(`/api/events/${id}/clean-clip`, { method: 'POST' })
+    if (!r.ok) {
+      const body = (await r.json().catch(() => null)) as { detail?: string } | null
+      throw new Error(body?.detail ?? `Could not make the clip: ${r.status}`)
+    }
+    return (await r.json()) as Media
   },
   exportUrl: (id: number, format: 'csv' | 'json') => `/api/sessions/${id}/export.${format}`,
 }

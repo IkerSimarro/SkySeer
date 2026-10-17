@@ -296,3 +296,10 @@ doubt (it evolves). Paths are relative to the repository root.
     says how to build it.
 - **Interview angle:** dogfooding and the "stranger's first five minutes" are part of
   engineering; integration seams (frontend/backend, thread/thread) are where bugs hide.
+- **Clips without markings** (`clips.py` `write_clean_clip`, `clips.clean_copy`): a user
+  asked to hide the box and trail on a fine meteor. Design constraint that decided it: a
+  live night is never recorded (only ~2 min of frames in memory), so a clean clip must be
+  saved at event time, while a recording can make one later from the original video.
+  Result: clean copies saved at once only for meteors (rare, the ones worth sharing); any
+  other event of a recording made on request (<1 s) and cached. Refactor kept the marked
+  clips pixel-identical (checked by decoding before/after).

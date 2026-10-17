@@ -12,6 +12,7 @@ Listening on the home network is a deliberate choice (``skyseer serve --host 0.0
 from __future__ import annotations
 
 import shutil
+import threading
 import time
 from collections.abc import AsyncIterator
 from pathlib import Path
@@ -36,6 +37,7 @@ from fastapi.responses import (
 from pydantic import BaseModel
 
 from .. import __version__
+from ..clips import clean_path, write_clean_clip
 from ..config import Config
 from ..reports import REAL, events_csv, night_report, summary
 from ..storage import LABELS, Store
@@ -67,11 +69,42 @@ def _media(e: dict[str, Any]) -> dict[str, Any] | None:
     if not media:
         return None
     base = f"/media/{e['session_id']}/"
-    return {k: base + v if k in ("clip", "thumbnail", "context") else v for k, v in media.items()}
+    urls = ("clip", "thumbnail", "context", "clean")
+    return {k: base + v if k in urls else v for k, v in media.items()}
 
 
 def _with_urls(e: dict[str, Any]) -> dict[str, Any]:
     return {**e, "media": _media(e)}
+
+
+def _source_video(session: dict[str, Any]) -> Path | None:
+    """The analysed recording's original video, if it is still where it was analysed."""
+    source = session.get("source") or session["meta"].get("source")
+    if session["kind"] != "file" or not source:
+        return None
+    video = Path(source)
+    return video if video.is_file() else None
+
+
+def _clean_clip(e: dict[str, Any], session: dict[str, Any], config: Config) -> dict[str, Any]:
+    """Can the event's clip be shown without markings? ``ready`` (with its URL),
+    ``on_request`` (made from the original recording when asked) or ``unavailable``
+    (with the reason)."""
+    media = e.get("media") or {}
+    if not media.get("clip") or session["meta"].get("clips_deleted"):
+        return {"clean_status": "unavailable", "clean_reason": "This event has no clip."}
+    rel = clean_path(media["clip"])
+    if (Path(session["folder"]) / rel).is_file():
+        url = f"/media/{e['session_id']}/{rel}"
+        return {"clean": url, "clean_status": "ready", "clean_reason": None}
+    if session["kind"] != "file":
+        kept = " and ".join(f"{c.lower()}s" for c in config.clips.clean_copy) or "no events"
+        why = f"Live nights aren't recorded, so a clip without markings is saved only for {kept}."
+        return {"clean_status": "unavailable", "clean_reason": why}
+    if _source_video(session) is None:
+        why = "The original video is no longer where it was analysed, so this can't be made."
+        return {"clean_status": "unavailable", "clean_reason": why}
+    return {"clean_status": "on_request", "clean_reason": None}
 
 
 def _flagged(e: dict[str, Any], session_meta: dict[str, Any]) -> dict[str, Any]:
@@ -116,6 +149,7 @@ def create_app(
     app = FastAPI(title="SkySeer", version=__version__, docs_url="/api/docs")
     started = time.time()
     jobs = Jobs(config, store)
+    clean_lock = threading.Lock()  # one clean clip made at a time (and never twice)
     uploads = Path(config.storage.database).parent / "uploads"
 
     def session_or_404(session_id: int) -> dict[str, Any]:
@@ -190,8 +224,33 @@ def create_app(
         e = store.event(event_id)
         if e is None:
             raise HTTPException(404, f"No event {event_id}")
-        s = store.session(e["session_id"]) or {"meta": {}}
-        return _flagged(_with_urls(e), s["meta"])
+        s = session_or_404(e["session_id"])
+        out = _flagged(_with_urls(e), s["meta"])
+        if out["media"]:
+            out["media"] = {**out["media"], **_clean_clip(e, s, config)}
+        return out
+
+    @app.post("/api/events/{event_id}/clean-clip")
+    def make_clean_clip(event_id: int) -> dict[str, Any]:
+        """Make the event's clip without markings (from the original recording) if it
+        doesn't exist yet. Returns the event's media, now with the ``clean`` URL."""
+        e = store.event(event_id)
+        if e is None:
+            raise HTTPException(404, f"No event {event_id}")
+        s = session_or_404(e["session_id"])
+        state = _clean_clip(e, s, config)
+        if state["clean_status"] == "unavailable":
+            raise HTTPException(409, state["clean_reason"])
+        if state["clean_status"] == "on_request":
+            video = _source_video(s)
+            assert video is not None  # checked by _clean_clip
+            with clean_lock:
+                try:
+                    write_clean_clip(e, video, Path(s["folder"]), config.clips)
+                except ValueError as exc:
+                    raise HTTPException(409, str(exc)) from exc
+        media: dict[str, Any] = get_event(event_id)["media"]
+        return media
 
     @app.put("/api/events/{event_id}/review")
     def put_review(event_id: int, review: Review) -> dict[str, Any]:

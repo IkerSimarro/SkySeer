@@ -58,7 +58,7 @@ data is tagged SIMULATION everywhere in the dashboard.</sub>
 | A satellite | A meteor |
 |:---:|:---:|
 | <img src="docs/images/dashboard-satellite.png" alt="Event page for STARLINK-38056: clip, position in the view, NORAD ID, altitude 469 km, speed 7.64 km/s, match error and brightness curve"> | <img src="docs/images/dashboard-meteor.png" alt="Event page for an Orionid meteor: clip, position, shower Orionids with radiant offset 0.3 degrees, measurements and brightness curve"> |
-| Named from its orbit: NORAD ID, height, range, speed, how well the path matched, and the camera's clock error. | Matched to the Orionid shower's radiant, with its calibrated brightness through the flight. |
+| Named from its orbit: NORAD ID, height, range, speed, how well the path matched, and the camera's clock error. | Matched to the Orionid shower's radiant, with its calibrated brightness through the flight. A **Clean** switch hides the box and trail. |
 
 <details>
 <summary>More: night report and overview</summary>

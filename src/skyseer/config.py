@@ -277,6 +277,11 @@ class ClipConfig(_Section):
     crf: int = Field(
         22, ge=0, le=51, description="H.264 quality (lower = better); 26 erased faint objects"
     )
+    clean_copy: list[str] = Field(
+        ["Meteor"],
+        description="Classes that also get a clip without markings, saved at once. Live "
+        "nights need this (they aren't recorded); recordings can make one on request",
+    )
 
 
 class StorageConfig(_Section):

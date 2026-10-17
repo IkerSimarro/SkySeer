@@ -32,6 +32,12 @@ unattended Raspberry Pi station.
   - A fresh clone has no built dashboard (the build is git-ignored), and the start page
     answered "Not Found". It now explains how to build it.
 - The Live page lists detections under the camera view instead of below the whole page.
+- **Clips without markings:** a Markings / Clean switch on event pages hides the box,
+  trail and title so a fine meteor can be watched unobstructed. Meteors get the clean copy
+  at once (`clips.clean_copy`), because a live night isn't recorded and the frames are gone
+  once the clip is written. For an analysed recording any event's clean clip is made on
+  request from the original video (under a second for a meteor here), then kept. Marked
+  clips, trail and context images are pixel-identical to before.
 
 ### Phase 6: the unattended station (2026-10-16)
 - `skyseer station` observes from nautical dusk to dawn, every night, unattended. It
