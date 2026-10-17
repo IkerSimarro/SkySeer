@@ -146,8 +146,9 @@ Real footage has tested, and led to fixes in, several stages:
 
 - **Plate solving on the author's footage:** solved from the stars alone (80 stars,
   1.14 px residual). Combined with the horizon and two planets, the same astronomy code
-  recovered the date (from Venus and Saturn), the local time and the latitude (~42°N).
-  That last step was a one-off experiment, not a SkySeer command.
+  recovered the date (from Venus and Saturn), the local time and the latitude (~42°N)
+  ([image](docs/images/where-and-when-real.jpg)). That last step was a one-off
+  experiment, not a SkySeer command.
 - **An hour-long YouTube compilation** (640×360, heavily compressed, unknown place and
   time) exposed weaknesses that simulations didn't:
   - Measuring blob size by outline gave 0 for 1–2 px objects, so faint satellites were
