@@ -107,8 +107,8 @@ export default function EventPage({ id }: { id: number }) {
           )}
           <section className="panel">
             <h3>Brightness over time</h3>
-            {e.photometry?.magnitudes?.some((m) => m !== null) ? (
-              <LightCurve magnitudes={e.photometry.magnitudes} track={e.track} seconds={e.duration_s} />
+            {e.photometry?.light_curve?.some((m) => m !== null) ? (
+              <LightCurve magnitudes={e.photometry.light_curve} track={e.track} seconds={e.duration_s} />
             ) : (
               <p className="muted">Needs a star calibration (stars, location and time) to measure magnitudes.</p>
             )}

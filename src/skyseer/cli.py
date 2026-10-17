@@ -162,6 +162,16 @@ def _observer(
     return Observer(lat, lon, o.elevation_m if elevation is None else elevation)
 
 
+def _warn_if_no_dashboard() -> None:
+    from .api.app import STATIC_DIR
+
+    if not (STATIC_DIR / "index.html").exists():
+        console.print(
+            "[yellow]The dashboard page isn't built yet (the API works): "
+            "cd web; npm ci; npm run build[/yellow]"
+        )
+
+
 def _say(message: str) -> None:
     """Status lines from the shared analysis code; problems in yellow."""
     bad = ("failed", "unavailable", "No location", "will not")
@@ -500,6 +510,7 @@ def serve(
             "(there is no login).[/yellow]"
         )
     console.print(f"Dashboard: [bold]http://localhost:{port}[/bold]  (API docs at /api/docs)")
+    _warn_if_no_dashboard()
     if station is not None:
         station.start()
         console.print(f"Live station running on {station.camera}")
@@ -573,6 +584,7 @@ def station(
         f"Station running on camera {cam}; observing while the Sun is below "
         f"{cfg.station.dark_sun_altitude:.0f}°. Dashboard: [bold]http://localhost:{port}[/bold]"
     )
+    _warn_if_no_dashboard()
     try:
         uvicorn.run(create_app(cfg, store, st), host=host, port=port, log_level="warning")
     finally:

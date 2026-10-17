@@ -107,14 +107,24 @@ export default function LivePage() {
         </div>
       )}
       <div className="grid detail-grid">
-        <section className="panel media-panel">
-          {s.running ? (
-            <img className="live-view" src="/api/live/preview.mjpg" alt="Live camera view" />
-          ) : (
-            <div className="empty">The camera is not running.</div>
-          )}
-          <div className="muted media-note">Tracked objects are bracketed; finished events are drawn in their class colour.</div>
-        </section>
+        <div>
+          <section className="panel media-panel">
+            {s.running ? (
+              <img className="live-view" src="/api/live/preview.mjpg" alt="Live camera view" />
+            ) : (
+              <div className="empty">The camera is not running.</div>
+            )}
+            <div className="muted media-note">Tracked objects are bracketed; finished events are drawn in their class colour.</div>
+          </section>
+          <section className="panel">
+            <h2 style={{ marginBottom: 10 }}>Detections {events.length > 0 && <span className="muted">· latest {utcTime(events[0].start_time)} UTC</span>}</h2>
+            {events.length ? (
+              <div className="card-grid">{events.map((e) => <EventCard key={e.id} e={e} />)}</div>
+            ) : (
+              <div className="empty">Watching… detections appear here the moment each object leaves the view.</div>
+            )}
+          </section>
+        </div>
         <div>
           <section className="panel">
             <h3>Station</h3>
@@ -140,14 +150,6 @@ export default function LivePage() {
           </section>
         </div>
       </div>
-      <section className="panel">
-        <h2 style={{ marginBottom: 10 }}>Detections {events.length > 0 && <span className="muted">· latest {utcTime(events[0].start_time)} UTC</span>}</h2>
-        {events.length ? (
-          <div className="card-grid">{events.map((e) => <EventCard key={e.id} e={e} />)}</div>
-        ) : (
-          <div className="empty">Watching… detections appear here the moment each object leaves the view.</div>
-        )}
-      </section>
     </>
   )
 }

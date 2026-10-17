@@ -31,6 +31,7 @@ detector:
   mog2_var_threshold: 35.0    # lower = more sensitive to dim changes
   blur_kernel: 3              # 1 = none; more blur dims tiny satellites
   morph_kernel: 1             # mask clean-up; >1 erases objects smaller than the kernel
+  group_px: 1                 # blob pieces up to 2x this apart are one object (0 = off)
   min_area_px: null           # override the minimum blob size that sensitivity implies
   max_area_fraction: 0.01     # ignore blobs bigger than 1% of the frame (clouds, headlights)
 

@@ -24,6 +24,12 @@ class DetectorConfig(_Section):
     morph_kernel: int = Field(
         1, description="Mask clean-up kernel; >1 erases objects smaller than the kernel"
     )
+    group_px: int = Field(
+        1,
+        ge=0,
+        description="Blob pieces up to 2x this many px apart count as one object (noise can "
+        "break a faint object up); 0 = off",
+    )
     max_area_fraction: float = Field(
         0.01,
         description="Blobs larger than this fraction of the frame are ignored (clouds, lights)",

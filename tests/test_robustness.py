@@ -4,6 +4,7 @@ from datetime import timedelta
 
 import cv2
 import numpy as np
+import pytest
 
 from skyseer.config import load_config
 from skyseer.detect import MotionDetector
@@ -63,6 +64,30 @@ def test_tiny_objects_are_detected():
     found = _detect_tiny(2, sensitivity=5)  # default sensitivity: 2 px and up
     assert len(found) == 1 and abs(found[0].x - (50 + 2 * 39 + 0.5)) < 1.0
     assert len(_detect_tiny(1, sensitivity=10)) == 1  # maximum sensitivity: even 1 px
+
+
+def test_a_faint_object_broken_into_pieces_is_one_detection():
+    """Noise can split a faint object's blob in two, 1-2 px apart; the tracker then started
+    a second track and the same satellite was reported twice (found in the README demo)."""
+
+    def detect(group_px: int) -> list[Detection]:
+        cfg = load_config(detector={"group_px": group_px}).detector
+        det = MotionDetector(cfg, (200, 120))
+        rng = np.random.default_rng(0)
+        found: list[Detection] = []
+        for i in range(25):
+            img = np.clip(15 + rng.normal(0, 1.5, (120, 200)), 0, 255)
+            if i == 24:
+                img[60:62, 100:102] = 70  # one object split by a 2 px dark gap (a
+                img[60:62, 104:106] = 70  # 1 px gap is bridged by the blur alone)
+            frame = cv2.cvtColor(img.astype(np.uint8), cv2.COLOR_GRAY2BGR)
+            found = det.detect(Frame(frame, i, T0))
+        return found
+
+    assert len(detect(group_px=0)) == 2  # the old behaviour
+    (one,) = detect(group_px=1)
+    assert one.x == pytest.approx(102.5, abs=0.3)
+    assert one.area < one.bbox[2] * one.bbox[3]  # measured on the real pixels, not the gap
 
 
 def test_camera_bump_does_not_create_fake_objects(synth_clip, tmp_path):

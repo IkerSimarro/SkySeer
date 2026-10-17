@@ -26,7 +26,13 @@ from fastapi import (
     WebSocket,
     WebSocketDisconnect,
 )
-from fastapi.responses import FileResponse, PlainTextResponse, Response, StreamingResponse
+from fastapi.responses import (
+    FileResponse,
+    HTMLResponse,
+    PlainTextResponse,
+    Response,
+    StreamingResponse,
+)
 from pydantic import BaseModel
 
 from .. import __version__
@@ -268,7 +274,25 @@ def create_app(
 
     if static_dir is not None and (static_dir / "index.html").exists():
         _serve_dashboard(app, static_dir)
+    elif static_dir is not None:
+
+        @app.get("/", include_in_schema=False)
+        def dashboard_missing() -> HTMLResponse:
+            return HTMLResponse(NO_DASHBOARD)
+
     return app
+
+
+NO_DASHBOARD = """<!doctype html><meta charset="utf-8"><title>SkySeer</title>
+<body style="font-family:system-ui;background:#070b14;color:#e6edf6;max-width:40em;margin:4em auto">
+<h1>SkySeer is running, but the dashboard hasn't been built</h1>
+<p>The dashboard's web page is compiled from <code>web/</code> (it needs Node.js):</p>
+<pre style="background:#111a2b;padding:1em">cd web
+npm ci
+npm run build</pre>
+<p>Then reload this page. The API works already:
+<a style="color:#5ec8ff" href="/api/docs">/api/docs</a>.</p>
+</body>"""
 
 
 def _session_events(store: Store, session_id: int, include_junk: bool) -> list[dict[str, Any]]:

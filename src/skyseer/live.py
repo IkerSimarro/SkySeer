@@ -17,6 +17,7 @@ import threading
 import time
 from collections import deque
 from collections.abc import AsyncGenerator, Callable
+from concurrent.futures import Future
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -227,8 +228,7 @@ class LiveStation:
             self._publish({"type": "status", "live": self.status()})
 
     def _emit(self, event: Event, recorder: Any) -> None:
-        if recorder is not None:
-            recorder.save(event)  # sets event.media
+        written = recorder.save(event) if recorder is not None else None  # sets event.media
         report = event.to_dict()
         assert self.session_id is not None
         db_id = self.store.add_event(self.session_id, report)
@@ -246,9 +246,19 @@ class LiveStation:
                 k: base + v if k in ("clip", "thumbnail", "context") else v
                 for k, v in item["media"].items()
             }
-        self._publish({"type": "event", "event": item})
+        if written is None:
+            self._publish({"type": "event", "event": item})
+        else:
+            # The clip and images are written in the background: tell dashboards once they
+            # exist, so a new card never shows a missing image.
+            written.add_done_callback(lambda job: self._publish_event(item, job))
         if self.on_event is not None:
             self.on_event(event)
+
+    def _publish_event(self, item: dict[str, Any], job: Future[None]) -> None:
+        if job.exception() is not None:
+            item = {**item, "media": None}
+        self._publish({"type": "event", "event": item})
 
     def _finish(self, pipeline: Pipeline) -> None:
         """Close the session: events.json and run.json make the folder self-contained."""

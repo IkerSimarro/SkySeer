@@ -86,7 +86,7 @@ export interface EventDetail extends EventSummary {
     runner_up?: string | null
   } | null
   shower?: { code: string; name: string; radiant_offset_deg: number; confidence: number } | 'sporadic'
-  photometry?: { peak_magnitude: number | null; saturated: boolean; magnitudes: (number | null)[] }
+  photometry?: { peak_magnitude: number | null; saturated: boolean; light_curve: (number | null)[] }
   periodicity?: { period_s: number; amplitude: number; false_alarm: number }
 }
 

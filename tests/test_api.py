@@ -164,3 +164,13 @@ def test_uploads_must_be_videos(client):
         data={"start_time": "yesterday"},
     )
     assert r.status_code == 400
+
+
+def test_an_unbuilt_dashboard_explains_how_to_build_it(tmp_path):
+    """A fresh clone has no compiled dashboard (it is git-ignored): say how to build it
+    instead of answering 404."""
+    store = Store(tmp_path / "db.sqlite")
+    client = TestClient(create_app(load_config(), store, static_dir=tmp_path / "missing"))
+    r = client.get("/")
+    assert r.status_code == 200 and "npm run build" in r.text
+    assert client.get("/api/health").status_code == 200

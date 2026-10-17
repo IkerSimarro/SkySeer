@@ -161,16 +161,17 @@ class ClipRecorder:
         )
         return scale
 
-    def save(self, event: Event) -> None:
-        """Queue the media for ``event`` and record the file names in ``event.media``."""
+    def save(self, event: Event) -> Future[None] | None:
+        """Queue the media for ``event`` and record the file names in ``event.media``.
+        Returns the job writing them (None if no media will be written)."""
         if event.label in self.skip or self._scale is None:
-            return
+            return None
         pre = round(self.config.pre_roll_s * self.fps)
         post = round(self.config.post_roll_s * self.fps)
         window = self.buffer.window(event.track.first_frame - pre, event.track.last_frame + post)
         if not window:
             log.warning("Event %d: its frames are no longer buffered; no clip", event.id)
-            return
+            return None
         frames, stride = pick_frames(window, self.config.max_frames)
         self.out_dir.mkdir(parents=True, exist_ok=True)
         stem = self.out_dir / f"{event.id:04d}"
@@ -186,6 +187,7 @@ class ClipRecorder:
         future = self._executor.submit(_write_media, job, self.config)
         future.add_done_callback(self._report)
         self._pending.append(future)
+        return future
 
     def _report(self, future: Future[None]) -> None:
         if future.exception() is not None:

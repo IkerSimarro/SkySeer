@@ -91,14 +91,16 @@ export function Timeline({ timeline }: { timeline: Report['timeline'] }) {
   const W = 760, H = 180, padL = 30, padB = 24
   const max = Math.max(1, ...bins.map((b) => classes.reduce((t, c) => t + (b[c] ?? 0), 0)))
   const bw = (W - padL) / bins.length
-  const y = (v: number) => (H - padB) * (1 - v / max)
+  const padT = 10
+  const y = (v: number) => padT + (H - padB - padT) * (1 - v / max)
+  const ticks = [...new Set([0, Math.round(max / 2), max])]
   const every = Math.ceil(bins.length / 8)
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="chart" role="img" aria-label="Detections over time">
-      {[0, 0.5, 1].map((f) => (
-        <g key={f}>
-          <line x1={padL} x2={W} y1={y(f * max)} y2={y(f * max)} stroke="var(--line)" />
-          <text x={padL - 6} y={y(f * max) + 4} className="axis" textAnchor="end">{Math.round(f * max)}</text>
+      {ticks.map((v) => (
+        <g key={v}>
+          <line x1={padL} x2={W} y1={y(v)} y2={y(v)} stroke="var(--line)" />
+          <text x={padL - 6} y={y(v) + 4} className="axis" textAnchor="end">{v}</text>
         </g>
       ))}
       {bins.map((b, i) => {
@@ -121,6 +123,22 @@ export function Timeline({ timeline }: { timeline: Report['timeline'] }) {
   )
 }
 
+const MAX_POINTS = 200
+
+/** Long tracks have thousands of measurements: draw the median of each time bin instead,
+ * so the curve shows real changes rather than frame-to-frame noise. */
+function binMedians(pts: { t: number; m: number }[], n: number): { t: number; m: number }[] {
+  if (pts.length <= n) return pts
+  const out: { t: number; m: number }[] = []
+  for (let b = 0; b < n; b++) {
+    const chunk = pts.slice(Math.floor((b * pts.length) / n), Math.floor(((b + 1) * pts.length) / n))
+    if (!chunk.length) continue
+    const ms = chunk.map((p) => p.m).sort((a, c) => a - c)
+    out.push({ t: chunk[Math.floor(chunk.length / 2)].t, m: ms[Math.floor(ms.length / 2)] })
+  }
+  return out
+}
+
 /** Magnitude against time; brighter (smaller magnitude) is drawn higher. */
 export function LightCurve({
   magnitudes,
@@ -134,9 +152,10 @@ export function LightCurve({
   const W = 520, H = 160, pad = 32
   const f0 = track[0]?.frame ?? 0
   const f1 = track[track.length - 1]?.frame ?? 1
-  const pts = magnitudes
+  const raw = magnitudes
     .map((m, i) => (m === null ? null : { t: ((track[i]?.frame - f0) / Math.max(f1 - f0, 1)) * seconds, m }))
     .filter((p): p is { t: number; m: number } => p !== null)
+  const pts = binMedians(raw, MAX_POINTS)
   if (pts.length < 2) return <p className="muted">Too few measurements.</p>
   const lo = Math.min(...pts.map((p) => p.m)), hi = Math.max(...pts.map((p) => p.m))
   const span = Math.max(hi - lo, 0.5)

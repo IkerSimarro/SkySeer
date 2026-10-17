@@ -56,6 +56,8 @@ class MotionDetector:
             detectShadows=False,
         )
         self._kernel = np.ones((config.morph_kernel, config.morph_kernel), np.uint8)
+        g = 2 * config.group_px + 1
+        self._group_kernel = np.ones((g, g), np.uint8) if config.group_px > 0 else None
         area_factor = self.scale**2
         self._min_area = config.min_area * area_factor
         self._max_area = config.max_area_fraction * width * height * area_factor
@@ -86,17 +88,27 @@ class MotionDetector:
 
         # Connected components give the true pixel count of each blob (an outline's
         # enclosed area is 0 for a 1-2 px object, which used to hide faint satellites).
-        n, labels, stats, _ = cv2.connectedComponentsWithStats(mask, connectivity=8)
+        # Noise can break a faint object into pieces a pixel or two apart, which the tracker
+        # would follow as two objects: pieces are grouped on a slightly widened mask, but
+        # measured on the real one.
+        grouped = mask if self._group_kernel is None else cv2.dilate(mask, self._group_kernel)
+        n, labels, stats, _ = cv2.connectedComponentsWithStats(grouped, connectivity=8)
         inv = 1.0 / self.scale
         detections: list[Detection] = []
         if n > 1 and (self._noise is None or frame.index % 15 == 0):
             self._noise = self._sky_noise(gray)
         for i in range(1, n):
-            x, y, w, h, area = (int(v) for v in stats[i])
+            gx, gy, gw, gh, _ = (int(v) for v in stats[i])
+            group = labels[gy : gy + gh, gx : gx + gw] == i
+            group &= mask[gy : gy + gh, gx : gx + gw] > 0
+            area = int(np.count_nonzero(group))
             if not (self._min_area <= area < self._max_area):
                 continue
+            rows, cols = np.flatnonzero(group.any(axis=1)), np.flatnonzero(group.any(axis=0))
+            x, y = gx + int(cols[0]), gy + int(rows[0])
+            w, h = int(cols[-1] - cols[0]) + 1, int(rows[-1] - rows[0]) + 1
             # Brightness-weighted centroid: sub-pixel positions for the astrometry.
-            comp = labels[y : y + h, x : x + w] == i
+            comp = group[rows[0] : rows[-1] + 1, cols[0] : cols[-1] + 1]
             roi_w = gray[y : y + h, x : x + w].astype(np.float32)
             weights = np.where(comp, roi_w - roi_w[comp].min() + 1.0, 0.0)
             yy, xx = np.mgrid[0:h, 0:w]

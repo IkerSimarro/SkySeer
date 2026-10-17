@@ -48,8 +48,11 @@ def test_dashboards_receive_events_as_they_happen(synth_clip, tmp_path):
     path, truth = synth_clip
     station, _ = _station(path, tmp_path, speed=8.0)  # 16 s of video in ~2 s
 
+    def on_disk(url):  # /media/<session>/clips/0001.jpg -> the file in the night's folder
+        return (tmp_path / "night" / url.split("/", 3)[3]).exists()
+
     async def listen():
-        got = []
+        got, ready = [], []
         updates = station.updates()
         first = await updates.__anext__()
         station.start()
@@ -57,16 +60,21 @@ def test_dashboards_receive_events_as_they_happen(synth_clip, tmp_path):
             msg = await asyncio.wait_for(updates.__anext__(), timeout=10)
             if msg["type"] == "event":
                 got.append(msg["event"])
+                media = msg["event"]["media"]
+                ready.append(on_disk(media["thumbnail"]) and on_disk(media["clip"]))
             if len(got) == len(truth.objects):
                 break
         await updates.aclose()
-        return first, got
+        return first, got, ready
 
-    first, got = asyncio.run(listen())
+    first, got, ready = asyncio.run(listen())
     station.wait()
     assert first["type"] == "status"
     assert len(got) == len(truth.objects)
     assert all(e["media"]["clip"].startswith("/media/") for e in got)
+    # Each event is announced only once its clip and trail image exist, so a dashboard
+    # never shows a broken image (found while recording the README demo).
+    assert all(ready)
 
 
 def test_replay_runs_in_real_time(synth_clip):
