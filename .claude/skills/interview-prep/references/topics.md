@@ -92,6 +92,17 @@ doubt (it evolves). Paths are relative to the repository root.
   NumPy 2 / SciPy patches in `astro/_vendor/`) matches 4-star patterns against a database
   built from the **Hipparcos** catalogue (118k stars) for 20-70° fields of view. It needs
   no location, time or pointing hint, the same idea as a spacecraft star tracker.
+- **The recognised pattern** (tetra3 patch 5, `return_pattern`; `Calibration.pattern`):
+  tetra3 tries groups of 4 of the brightest stars (8 -> 70 groups in the fast search, 14
+  -> 1,001 widened). Each group's 6 distances, divided by the longest, give 5 ratios that
+  don't change with zoom or rotation: its hash code. A catalogue pattern with the same
+  code is paired star by star (both sorted by distance from the pattern's centre), the
+  pointing follows, and it is accepted only if the whole catalogue then lines up beyond
+  chance (false-match probability < 1e-3, corrected for database size). The first pattern
+  that passes wins, not necessarily the "best". Madrid test sky: HIP 84345, 86032
+  (Rasalhague), 86742, 80816, recognised on try 16 of 70. Test: each pattern star agrees
+  with SkySeer's independent full-catalogue match (same HIP, < 0.5 px); option off gives
+  identical results to the original code (12/12 solves).
 - **Camera model:** rectilinear projection + radial distortion (k1, k2). Initial attitude
   from **Wahba's problem** solved with SVD (classic spacecraft attitude determination),
   refined by robust least squares, then iteratively matched against the full catalogue

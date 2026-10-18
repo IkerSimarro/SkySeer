@@ -5,6 +5,10 @@
 #   2. generate_database() accepts catalog_path= so the star catalogue can live anywhere.
 #   3. datetime.utcnow() (deprecated) -> datetime.now(timezone.utc).
 #   4. scipy.ndimage.filters.* (deprecated namespace) -> scipy.ndimage.*
+#   5. solve_from_centroids(return_pattern=True) also returns the 4-star pattern that solved
+#      the image ('pattern_centroids', 'pattern_stars', 'pattern_catID', in the pairing the
+#      solver used) and how many image patterns it tried ('patterns_tried'). Off by default;
+#      nothing else changes.
 """
 tetra3: A fast lost-in-space plate solver for star trackers.
 ============================================================
@@ -1241,7 +1245,8 @@ class Tetra3():
     def solve_from_centroids(self, star_centroids, size, fov_estimate=None, fov_max_error=None,
                              pattern_checking_stars=8, match_radius=.01, match_threshold=1e-3,
                              solve_timeout=None, target_pixel=None, distortion=0,
-                             return_matches=False, return_visual=False):
+                             return_matches=False, return_visual=False,
+                             return_pattern=False):  # SkySeer patch
         """Solve for the sky location using a list of centroids.
 
         Use :meth:`tetra3.get_centroids_from_image` or your own centroiding algorithm to find an
@@ -1290,6 +1295,8 @@ class Tetra3():
                 stars and their pixel coordinates in the image is returned.
             return_visual (bool, optional): If set to True, an image is returned that visualises
                 the solution.
+            return_pattern (bool, optional): SkySeer patch. If set to True, the 4-star pattern
+                that solved the image and the number of image patterns tried are returned.
 
         Returns:
             dict: A dictionary with the following keys is returned:
@@ -1322,6 +1329,12 @@ class Tetra3():
                   FOV and distortion estimates in orange, the final FOV and distortion
                   estimates in green. Also has circles for the catalogue stars in green or
                   red for successful/unsuccessful match. Not included if return_visual=False.
+                - SkySeer patch: 'pattern_centroids' (4x2, (y, x)), 'pattern_stars' (4x3, RA,
+                  Dec, magnitude) and 'pattern_catID': the image pattern that solved the image
+                  and the catalogue pattern it was matched to, row by row in the pairing used
+                  (both sorted by distance from the pattern's centre); 'patterns_tried': how
+                  many 4-star image patterns were looked up, this one included. Not included
+                  if return_pattern=False (the default).
 
                 If unsuccsessful in finding a match, None is returned for all keys of the
                 dictionary except 'T_solve', and the optional return keys are missing.
@@ -1389,6 +1402,7 @@ class Tetra3():
                     image_centroids, (height, width), k=k)
 
         # Try all combinations of p_size of pattern_checking_stars brightest
+        patterns_tried = 0  # SkySeer patch
         for image_pattern_indices in itertools.combinations(
                 range(min(len(image_centroids), pattern_checking_stars)), p_size):
             image_pattern_centroids = image_centroids[image_pattern_indices, :]
@@ -1398,6 +1412,7 @@ class Tetra3():
                 if elapsed_time > solve_timeout:
                     self._logger.debug('Timeout reached after: ' + str(elapsed_time) + 's.')
                     break
+            patterns_tried += 1  # SkySeer patch
             # Set largest distance to None, this is cached to avoid recalculating in future FOV estimation.
             pattern_largest_distance = None
 
@@ -1709,6 +1724,17 @@ class Tetra3():
                             match_data = self._get_matched_star_data(
                                 image_centroids[matched_stars[:, 0]], nearby_star_inds[matched_stars[:, 1]])
                             solution_dict.update(match_data)
+
+                        if return_pattern:  # SkySeer patch: the 4-star pattern that solved it
+                            pattern_inds = np.array(image_pattern_indices)[np.argsort(pattern_radii)]
+                            pattern_cat = catalog_matches[index]
+                            if not presorted:
+                                pattern_cat = pattern_cat[np.argsort(catalog_radii)]
+                            pattern_data = self._get_matched_star_data(
+                                image_centroids[pattern_inds], pattern_cat)
+                            solution_dict.update({'pattern_' + key[len('matched_'):]: value
+                                                  for key, value in pattern_data.items()})
+                            solution_dict['patterns_tried'] = patterns_tried
 
                         # If requested to create a visualisation, do so and append
                         if return_visual:

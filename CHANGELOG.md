@@ -9,6 +9,19 @@ The first complete release: SkySeer rebuilt from a Streamlit prototype into a te
 installable system, with an astronomy layer, a web dashboard and the software for an
 unattended Raspberry Pi station.
 
+### The recognised star pattern (2026-10-18)
+- Plate solving now records which 4-star pattern tetra3 recognised (the 4 image stars,
+  their Hipparcos numbers, in the pairing the solver used) and how many patterns it tried
+  first. It is kept on the calibration, written to `calibration.json` (`pattern`,
+  `solver.patterns_tried`, `solver.search`) and drawn on the overlay as orange lines.
+- tetra3 patch 5: an opt-in `return_pattern` option. With it off, 12 of 12 solves on
+  random simulated skies gave identical results to the original code (11 solved, 1 failed
+  the same way in both).
+- On 3 simulated skies, every pattern star is one of the stars SkySeer's independent
+  full-catalogue match found, at the same position (< 0.5 px) with the same Hipparcos
+  number. The Madrid test sky was recognised on the 16th of 70 patterns of the fast
+  search; a harder test sky needed the widened search, after 347 of 1,001.
+
 ### Phase 7: release preparation (2026-10-17)
 - New README with measured results, a demo, dashboard screenshots and an honest
   limitations section; this CHANGELOG; an MIT licence file (the licence the package

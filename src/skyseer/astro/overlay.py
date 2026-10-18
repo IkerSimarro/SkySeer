@@ -1,6 +1,9 @@
-"""Visual proof of a calibration: matched stars circled and named, plus a coordinate grid."""
+"""Visual proof of a calibration: matched stars circled and named, a coordinate grid, and
+the 4-star pattern the star-tracker search recognised."""
 
 from __future__ import annotations
+
+from itertools import combinations
 
 import cv2
 import numpy as np
@@ -13,6 +16,7 @@ from .starnames import STAR_NAMES
 _STAR = (120, 255, 120)  # BGR
 _NAME = (190, 255, 190)
 _GRID = (200, 140, 60)
+_PATTERN = (40, 170, 255)  # orange
 
 
 def _label(
@@ -47,9 +51,10 @@ def _polyline(
 
 
 def draw_calibration(
-    image: np.ndarray, cal: Calibration, catalog: StarCatalog | None = None
+    image: np.ndarray, cal: Calibration, catalog: StarCatalog | None = None, pattern: bool = True
 ) -> np.ndarray:
-    """Return a copy of ``image`` (gray or BGR) annotated with the calibration."""
+    """Return a copy of ``image`` (gray or BGR) annotated with the calibration. With
+    ``pattern``, the recognised 4-star pattern is joined by thin orange lines."""
     img = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR) if image.ndim == 2 else image.copy()
     img = np.ascontiguousarray(img)
     scale = max(0.45, img.shape[1] / 2400)
@@ -73,6 +78,13 @@ def draw_calibration(
             d = np.linspace(-89, 89, 357)
             _polyline(img, cal, radec_to_vec(np.full_like(d, ra), d), _GRID)
 
+    # All 6 lines between the pattern's stars: their length ratios are its fingerprint.
+    shown = pattern and len(cal.pattern) == 4
+    if shown:
+        corners = [(int(round(m["x"])), int(round(m["y"]))) for m in cal.pattern]
+        for a, b in combinations(corners, 2):
+            cv2.line(img, a, b, _PATTERN, max(1, int(scale * 1.5)), cv2.LINE_AA)
+
     r = max(6, int(10 * scale))
     for m in cal.matched:
         c = (int(round(m["x"])), int(round(m["y"])))
@@ -88,6 +100,13 @@ def draw_calibration(
         f'{s["stars_matched"]} stars matched   residual {s["rms_arcsec"]:.0f}" '
         f"({s['rms_px']:.2f} px)",
     ]
+    if shown:
+        tried = cal.solver.get("patterns_tried")
+        lines.append(
+            "Star pattern (orange): HIP "
+            + " ".join(str(int(m["hip"])) for m in cal.pattern)
+            + (f", recognised on try {tried}" if tried else "")
+        )
     if cal.observer is not None:
         lines.insert(
             1,

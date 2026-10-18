@@ -1,9 +1,10 @@
+import math
 from datetime import UTC, datetime, timedelta
 
 import numpy as np
 import pytest
 
-from skyseer.astro.calibrate import Calibration, CalibrationError, calibrate
+from skyseer.astro.calibrate import Calibration, CalibrationError, _solver, calibrate, find_stars
 from skyseer.astro.camera import CameraModel, fit_camera, wahba_rotation
 from skyseer.astro.frames import (
     Observer,
@@ -136,6 +137,16 @@ def test_calibrates_simulated_sky(seed, catalog, test_db):
     err = angular_separation_deg(cal.camera.pixel_to_vec(grid), truth.pixel_to_vec(grid))
     assert err.max() < truth.pixel_scale_arcsec * 1.5 / 3600  # < 1.5 px anywhere in frame
 
+    # The 4-star pattern that cracked it: tetra3's first guess (4 image stars paired with 4
+    # catalogue stars) must agree with SkySeer's independent full-catalogue match, star by
+    # star: same position, same Hipparcos number.
+    assert len(cal.pattern) == 4 and cal.solver["patterns_tried"] >= 1
+    matched = {m["hip"]: (m["x"], m["y"]) for m in cal.matched}
+    for star in cal.pattern:
+        assert star["hip"] in matched, f"pattern star HIP {star['hip']} not among the matches"
+        x, y = matched[star["hip"]]
+        assert np.hypot(star["x"] - x, star["y"] - y) < 0.5
+
 
 def test_calibration_save_load_roundtrip(tmp_path, catalog, test_db):
     obs = Observer(40.4, -3.7, 650)
@@ -152,11 +163,40 @@ def test_calibration_save_load_roundtrip(tmp_path, catalog, test_db):
     )
     cal.save(tmp_path / "cal.json")
     loaded = Calibration.load(tmp_path / "cal.json")
+    assert loaded.pattern == cal.pattern and len(loaded.pattern) == 4
     uv = np.array([[100.0, 200.0], [1800.0, 900.0]])
     assert np.allclose(loaded.pixel_to_altaz(uv), cal.pixel_to_altaz(uv))
     ra, dec = loaded.pixel_to_radec(uv)
     back, _ = loaded.radec_to_pixel(ra, dec)
     assert np.abs(back - uv).max() < 0.01
+
+
+def test_asking_for_the_pattern_changes_nothing_else(test_db, catalog):
+    """tetra3's return_pattern (a SkySeer patch) only adds keys: the solution is the same."""
+    obs = Observer(40.4, -3.7, 650)
+    when = datetime(2026, 8, 12, 22, 30, tzinfo=UTC)
+    truth = camera_looking_at(60, 45, 0, 1920, 1080, 55, k1=-0.05)
+    stars = find_stars(render_starfield(truth, obs, when, catalog))
+    solver = _solver(test_db)
+    # SkySeer's second, widened search (calibrate() escalates to it when needed).
+    args = {
+        "fov_estimate": 55,
+        "fov_max_error": 10,
+        "pattern_checking_stars": 14,
+        "match_radius": 0.02,
+        "distortion": (-0.3, 0.1),
+        "return_matches": True,
+    }
+    plain = solver.solve_from_centroids(stars[:, ::-1] + 0.5, (1080, 1920), **args)
+    extra = solver.solve_from_centroids(
+        stars[:, ::-1] + 0.5, (1080, 1920), return_pattern=True, **args
+    )
+    added = {"pattern_centroids", "pattern_stars", "pattern_catID", "patterns_tried"}
+    assert plain["RA"] is not None and set(extra) - set(plain) == added
+    for key in set(plain) - {"T_solve"}:  # everything but the time taken is identical
+        assert extra[key] == plain[key], key
+    assert len(extra["pattern_catID"]) == 4
+    assert 1 <= extra["patterns_tried"] <= math.comb(14, 4)  # groups of 4 among 14 stars
 
 
 def test_random_dots_are_never_accepted_as_a_sky(test_db, catalog):

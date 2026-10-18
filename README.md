@@ -99,11 +99,19 @@ flowchart LR
 5. **Classification.** Rules use measurements that don't depend on the camera: speed in
    image diagonals per second, path straightness, how regularly a strobe flashes (aircraft
    flash 40–100 times a minute), and the cloud texture around the object.
-6. **Plate solving.** tetra3 matches 4-star patterns against a database built from
-   Hipparcos (118,000 stars). The camera's orientation comes from Wahba's problem solved
-   with an SVD, the classic spacecraft attitude method. Lens distortion is then fitted
-   against the full catalogue. Guards against false solutions reject random dots and
-   impossible lenses.
+6. **Plate solving.** tetra3 takes groups of 4 bright stars, turns each group's shape
+   into a code (the ratios of the 6 distances between them) and looks it up in a database
+   built from Hipparcos (118,000 stars). SkySeer records the pattern that was recognised,
+   and after how many tries, and draws it on the calibration overlay. The camera's
+   orientation comes from Wahba's problem solved with an SVD, the classic spacecraft
+   attitude method. Lens distortion is then fitted against the full catalogue. Guards
+   against false solutions reject random dots and impossible lenses.
+
+   <img src="docs/images/plate-solve-pattern.jpg" alt="Calibration overlay of a simulated sky: 106 matched stars circled in green, an alt/az grid, and four bright stars around Rasalhague joined by orange lines" width="100%">
+
+   <sub>The Madrid test sky (simulated from real catalogue stars): the 4-star pattern
+   tetra3 recognised (orange, on the 16th group it tried) and the 106 catalogue stars then
+   matched (green).</sub>
 7. **Satellite identification.** The whole catalogue is propagated with SGP4 at once
    (~40 ms for 16,000 objects). Each observed path is compared with each candidate's
    predicted path. The **sideways** distance between them is insensitive to a wrong

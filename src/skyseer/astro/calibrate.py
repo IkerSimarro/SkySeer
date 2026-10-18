@@ -65,6 +65,9 @@ class Calibration:
     solver: dict[str, Any] = field(default_factory=dict)
     matched: list[dict[str, float]] = field(default_factory=list)  # for overlays/debugging
     zero_point: ZeroPoint | None = None  # magnitude scale, from the matched stars
+    # The 4 stars whose shape the star-tracker search recognised (hip, mag, x, y), in the
+    # pairing it used. Empty when the solve was a quick refinement of a previous one.
+    pattern: list[dict[str, float]] = field(default_factory=list)
 
     @property
     def frame(self) -> str:
@@ -160,6 +163,7 @@ class Calibration:
             "rms_px": self.rms_px,
             "solver": self.solver,
             "zero_point": None if self.zero_point is None else self.zero_point.to_dict(),
+            "pattern": self.pattern,
             "summary": self.summary(),
         }
 
@@ -179,6 +183,7 @@ class Calibration:
             d["rms_px"],
             d.get("solver", {}),
             zero_point=None if zp is None else ZeroPoint(zp["value"], zp["scatter"], zp["n_stars"]),
+            pattern=d.get("pattern") or [],
         )
 
 
@@ -368,10 +373,11 @@ def calibrate(
         except CalibrationError as e:
             log.info("Quick re-calibration failed (%s); doing a full solve", e)
 
-    model, solver_info = _lost_in_space(
+    model, solver_info, pattern = _lost_in_space(
         stars, w, h, frame_vecs, fov_estimate, fov_max_error, database
     )
     cal = _refine(model, stars, cat, frame_vecs, time, observer, solver_info, *limits)
+    cal.pattern = pattern
     return _with_zero_point(cal, image)
 
 
@@ -411,8 +417,13 @@ def _lost_in_space(
     fov_estimate: float | None,
     fov_max_error: float | None,
     database: Path | None,
-) -> tuple[CameraModel, dict[str, Any]]:
-    """Pattern-match the brightest stars against the database (no prior knowledge)."""
+) -> tuple[CameraModel, dict[str, Any], list[dict[str, float]]]:
+    """Pattern-match the brightest stars against the database (no prior knowledge).
+
+    Also returns the 4-star pattern that cracked it: tetra3 turns the shape of each group
+    of 4 bright stars into a code (from the ratios of their distances) and looks it up in a
+    database built from Hipparcos, like a spacecraft star tracker.
+    """
     solver = _solver(database or build_database())
     t3_stars = stars[:, ::-1] + 0.5
     # Escalating attempts: the fast default usually works; in wide, distorted fields the
@@ -437,7 +448,9 @@ def _lost_in_space(
             "solve_timeout": 30_000,
             **attempt,
         }
-        result = solver.solve_from_centroids(t3_stars, (h, w), return_matches=True, **kwargs)
+        result = solver.solve_from_centroids(
+            t3_stars, (h, w), return_matches=True, return_pattern=True, **kwargs
+        )
         if result.get("RA") is not None:
             break
         log.info("Solve attempt failed (%s); widening search", attempt)
@@ -452,13 +465,25 @@ def _lost_in_space(
     }
     solver_info["Matches"] = int(result["Matches"])
     solver_info["method"] = "lost-in-space"
+    solver_info["search"] = attempts.index(attempt) + 1  # 1 = fast default; more = widened
+    solver_info["patterns_tried"] = int(result["patterns_tried"])  # in that search
+    pattern_px = np.asarray(result["pattern_centroids"])[:, ::-1] - 0.5  # (y, x) -> (x, y)
+    pattern = [
+        {"hip": int(hip), "mag": round(float(star[2]), 2), "x": float(x), "y": float(y)}
+        for hip, star, (x, y) in zip(
+            result["pattern_catID"], result["pattern_stars"], pattern_px, strict=True
+        )
+    ]
     log.info(
-        "Plate solve: RA %.3f Dec %.3f FOV %.2f, %d stars, %.0f ms",
+        "Plate solve: RA %.3f Dec %.3f FOV %.2f, %d stars, %.0f ms; pattern HIP %s "
+        "recognised after %d tried",
         result["RA"],
         result["Dec"],
         result["FOV"],
         result["Matches"],
         result["T_solve"],
+        "-".join(str(m["hip"]) for m in pattern),
+        result["patterns_tried"],
     )
 
     m_stars = np.asarray(result["matched_stars"])
@@ -473,7 +498,7 @@ def _lost_in_space(
         fit_distortion=len(m_px) >= 10,
         fit_center=False,
     )
-    return fit.model, solver_info
+    return fit.model, solver_info, pattern
 
 
 def _refine(
