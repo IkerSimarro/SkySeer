@@ -262,7 +262,12 @@ def _text(img: np.ndarray, text: str, org: tuple[int, int], color: tuple[int, ..
 
 
 def _title(event: Event) -> str:
-    name = event.identification.name.strip() if event.identification else str(event.label)
+    if event.aircraft is not None and event.label == ObjectClass.PLANE:
+        name = event.aircraft.name
+    elif event.identification:
+        name = event.identification.name.strip()
+    else:
+        name = str(event.label)
     return f"#{event.id} {name} {event.confidence:.0%}"
 
 

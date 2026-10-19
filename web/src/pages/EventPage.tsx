@@ -248,7 +248,7 @@ export default function EventPage({ id }: { id: number }) {
               <dt>Straightness</dt><dd>{(100 * e.features.path_deviation_max).toFixed(2)}% max deviation</dd>
               <dt>Seen in</dt><dd>{Math.round(100 * e.features.detection_rate)}% of frames</dd>
               <dt>Strobe rhythm</dt><dd>{e.features.flash_score > 0 ? `${e.features.flash_rate_hz.toFixed(2)} Hz (score ${e.features.flash_score.toFixed(2)})` : 'none'}</dd>
-              {e.periodicity && <><dt>Blinks every</dt><dd>{e.periodicity.period_s.toFixed(2)} s (tumbling?)</dd></>}
+              {e.periodicity && <><dt>Blinks every</dt><dd>{e.periodicity.period_s.toFixed(2)} s{e.label === 'Plane' ? ' (its lights)' : ' (tumbling?)'}</dd></>}
               <dt>Detections</dt><dd>{e.track.length} (frames {e.first_frame}–{e.last_frame})</dd>
             </dl>
           </section>
