@@ -553,9 +553,14 @@ class AircraftIdentifier:
         # A distant aircraft crawls across the sky: then its timing along the path can't
         # be measured (a second of clock error moves it less than the noise), and the
         # along-track agreement is judged as an angle instead.
+        # A path shorter than the tolerance only says "something was here": its direction
+        # can't be checked, so a speck near a distant aircraft would 'match' it. Refuse.
+        arc = float(angular_separation_deg(obs_v[0], obs_v[-1]))
+        if arc < cfg.min_arc_deg:
+            return None
         # Net speed, first to last point: per-frame steps of a slow object are mostly noise.
         span_s = max(float(obs_t[-1] - obs_t[0]), 1e-3)
-        speed = max(float(angular_separation_deg(obs_v[0], obs_v[-1])) / span_s, 1e-3)  # deg/s
+        speed = max(arc / span_s, 1e-3)  # deg/s
         slack = min(20.0, cfg.max_cross_track_deg / speed)  # s to travel the tolerance
         pad = cfg.max_clock_offset_s + 1.0 + slack
         reach = pad + cfg.max_extrapolate_s

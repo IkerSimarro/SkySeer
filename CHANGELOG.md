@@ -26,9 +26,11 @@ unattended Raspberry Pi station.
 - Measured: direction from a broadcast within 1" of Skyfield; 150/150 simulated flights
   named among 20 others (broadcasts every 10 s; 149/150 every 5 s), clock error to 0.04 s
   median; 0 of 90 random paths named. Distant aircraft that barely move are matched on
-  position alone and report the clock as not measurable. Simulated view built from 80 s
-  of real OpenSky traffic over Madrid, camera 13° above the horizon: 7 of 10 aircraft
-  named, none wrongly; the other 3 were 100+ km away, moving under a pixel a second.
+  position along the path and report the clock as not measurable; paths shorter than
+  0.5° aren't matched (their direction can't be checked). Simulated view built from 80 s
+  of real OpenSky traffic over Madrid, camera 13° above the horizon: 5 of 10 aircraft
+  named, none wrongly; the other 5 were 88-154 km away, moving under a pixel a second,
+  and broke into pieces too short to check.
 
 ### The recognised star pattern (2026-10-18)
 - Plate solving now records which 4-star pattern tetra3 recognised (the 4 image stars,

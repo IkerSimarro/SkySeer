@@ -303,10 +303,12 @@ tests/  tools/        tests; validation, benchmarks, simulators, footage tools
 - **Aircraft:** only aircraft that broadcast ADS-B can be named (many light aircraft,
   helicopters and some military don't). The tests use straight flights; a plane turning
   between OpenSky's 10 s positions strays up to ~150 m from the straight line (~0.3° at
-  30 km, close to the 0.5° limit). Aircraft 100+ km away crawl across the view (under a
-  pixel a second): the motion detector partly absorbs them, so they break into several
-  short events (each named correctly) or are missed. On a simulated view near the horizon
-  built from 80 s of real OpenSky traffic over Madrid, 7 of 10 aircraft were named.
+  30 km, close to the 0.5° limit). Aircraft 90+ km away crawl across the view (under a
+  pixel a second): the motion detector partly absorbs them, so they break into short
+  pieces, and a piece shorter than 0.5° isn't named, because its direction can't be
+  checked. On a simulated view 13° above the horizon built from 80 s of real OpenSky
+  traffic over Madrid, 5 of 10 aircraft were named, none wrongly; the other 5 were
+  88–154 km away.
 - **Raspberry Pi:** the camera driver has been tested against a stand-in for its library,
   not real hardware, and Pi throughput is an estimate until the station is built.
 - **The dashboard has no login.** It listens only on the computer itself unless told

@@ -421,3 +421,13 @@ def test_a_distant_slow_aircraft_is_named_without_a_clock_reading():
     # With a sharper measurement the same pass does time the clock (1.0 s off).
     sharp = ident.identify(_observe(far, seconds=40, clock_offset_s=1.0, noise_deg=0.005))
     assert sharp is not None and sharp.clock_offset_s == pytest.approx(1.0, abs=0.3)
+
+
+def test_a_speck_next_to_a_distant_aircraft_is_not_named():
+    """Too short a path (under min_arc_deg) can't show its direction: refuse to name it."""
+    cfg = load_config().aircraft
+    far = _flight((8, 200), 70, "4cabec", "EIN581", altitude=11_800)
+    ident = AircraftIdentifier(_log_of([far]), MADRID, cfg)
+    speck = _observe(far, seconds=2.0, noise_deg=0.02)  # 2 s of a ~0.15 deg/s aircraft
+    assert ident.identify(speck) is None
+    assert ident.identify(_observe(far, seconds=20.0, noise_deg=0.02)) is not None

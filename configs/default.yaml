@@ -113,6 +113,7 @@ aircraft:                     # naming aircraft from their ADS-B broadcasts (nee
   max_requests_per_day: 380   # OpenSky allows 400 a day without an account, 4000 with one
   check_delay_s: 15.0         # live: identify once broadcasts after the pass have arrived
   max_cross_track_deg: 0.5    # max sideways distance between seen and broadcast path
+  min_arc_deg: 0.5            # shorter paths aren't matched (their direction can't be checked)
   max_clock_offset_s: 3.0     # how wrong the camera clock may be
   max_timing_spread_s: 1.0    # max variation of the timing offset along the path
   candidate_radius_deg: 8.0

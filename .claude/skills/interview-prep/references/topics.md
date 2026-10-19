@@ -337,9 +337,11 @@ doubt (it evolves). Paths are relative to the repository root.
   dashboard updated in place).
 - **Results:** 150/150 simulated flights (10 s broadcasts, 20 decoys, +-2.5 s clock),
   clock error 0.04 s median; 0/90 false paths (a third slow). Real-traffic demo (80 s of
-  OpenSky over Madrid, simulated camera 13 deg up): 7/10 named; misses were 100+ km away
-  moving < 1 px/s, absorbed by the background model. Honest limits: non-ADS-B aircraft,
-  turning flights between 10 s positions (~150 m chord error).
+  OpenSky over Madrid, simulated camera 13 deg up): 5/10 named, none wrongly; misses were
+  88-154 km away moving < 1 px/s, absorbed by the background model into short pieces.
+  Safeguard found by that demo: paths shorter than 0.5 deg (min_arc_deg) aren't matched,
+  because a near-stationary speck "matches" any aircraft at that spot. Honest limits:
+  non-ADS-B aircraft, turning flights between 10 s positions (~150 m chord error).
 - **Interview angle:** a second, independent catalogue (air traffic) cross-checks the
   classifier and will label real training data, and the design respects a real API's
   rate limits instead of assuming unlimited data.

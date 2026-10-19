@@ -206,6 +206,11 @@ class AircraftConfig(_Section):
         15.0, description="Live: wait this long after an event for broadcasts that cover it"
     )
     max_cross_track_deg: float = 0.5
+    min_arc_deg: float = Field(
+        0.5,
+        description="Paths shorter than this aren't matched: their direction can't be checked, "
+        "so a speck near a distant aircraft would 'match' it",
+    )
     max_clock_offset_s: float = 3.0
     max_timing_spread_s: float = 1.0
     candidate_radius_deg: float = 8.0
