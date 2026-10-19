@@ -38,11 +38,18 @@ CSV_SKY = [
     "clock_offset_s",
     "peak_mag",
     "shower",
+    "aircraft",
+    "icao24",
+    "aircraft_altitude_m",
 ]
 
 
 def name_of(e: dict[str, Any]) -> str | None:
-    """What it was identified as: a satellite's name or a meteor shower's code."""
+    """What it was identified as: an aircraft's flight number, a satellite's name or a
+    meteor shower's code."""
+    plane = e.get("aircraft")
+    if isinstance(plane, dict) and e.get("label") == "Plane":
+        return str(plane.get("name") or plane.get("icao24", "")).strip() or None
     ident = e.get("identification")
     if isinstance(ident, dict):
         return str(ident.get("name", "")).strip() or None
@@ -68,6 +75,7 @@ def events_csv(events: list[dict[str, Any]]) -> str:
     for e in events:
         sky = e.get("sky") or {}
         ident = e.get("identification") or {}
+        plane = e.get("aircraft") or {}
         shower = e.get("shower")
         start, end = sky.get("start", {}), sky.get("end", {})
         extra = [
@@ -82,6 +90,9 @@ def events_csv(events: list[dict[str, Any]]) -> str:
             ident.get("clock_offset_s", ""),
             "" if magnitude_of(e) is None else magnitude_of(e),
             shower.get("code") if isinstance(shower, dict) else (shower or ""),
+            plane.get("name", ""),
+            plane.get("icao24", ""),
+            plane.get("altitude_m", ""),
         ]
         writer.writerow(
             [e[k] for k in CSV_BASE] + extra + [e["features"].get(k, "") for k in feature_keys]
@@ -153,6 +164,16 @@ def night_report(session: dict[str, Any], events: list[dict[str, Any]]) -> dict[
         key=lambda m: (m["magnitude"] is None, m["magnitude"] or 0.0),
     )
     showers = Counter(m["shower"] for m in meteors if m["shower"])
+    aircraft = [
+        {
+            "id": e["id"],
+            "time": e["start_time"],
+            "name": name_of(e),
+            "altitude_m": (e.get("aircraft") or {}).get("altitude_m"),
+        }
+        for e in sorted(real, key=lambda e: e["start_time"])
+        if e["label"] == "Plane"
+    ]
     meta = session.get("meta") or {}
     return {
         "session": {k: session.get(k) for k in ("id", "name", "kind", "source", "started")},
@@ -163,9 +184,11 @@ def night_report(session: dict[str, Any], events: list[dict[str, Any]]) -> dict[
         "rejected": sum(e["label"] in ("Junk", "Star") for e in events),
         "reviewed": sum(e.get("review") is not None for e in events),
         "identified_satellites": sum(1 for s in satellites if s["name"]),
+        "identified_aircraft": sum(1 for a in aircraft if a["name"]),
         "timeline": timeline,
         "satellites": satellites,
         "meteors": meteors,
+        "aircraft": aircraft,
         "showers": dict(showers.most_common()),
         "brightest_meteor": meteors[0] if meteors and meteors[0]["magnitude"] is not None else None,
         "observer": meta.get("observer"),

@@ -86,6 +86,39 @@ class SkyPath:
         return out
 
 
+def fit_prediction(
+    obs_v: np.ndarray, t_obs: np.ndarray, pred: np.ndarray, step: float, pad: float
+) -> tuple[float, float, float] | None:
+    """How well a predicted path explains observed directions, independently across and
+    along the path (used for satellites and aircraft).
+
+    ``obs_v`` (M, 3) observed unit vectors at ``t_obs`` (M,) seconds after the first one;
+    ``pred`` (n, 3) predicted unit vectors on a time grid starting ``pad`` seconds before
+    the first observation, every ``step`` seconds. Returns (RMS cross-track distance in
+    degrees, median timing offset in s, spread of the offsets in s), or None if a point
+    falls at the very end of the grid (the object doesn't fit in time).
+    """
+    n = len(pred)
+    dots = obs_v @ pred.T  # (M, n)
+    k = np.argmax(dots, axis=1)
+    cross = np.empty(len(obs_v))
+    t_hit = np.empty(len(obs_v))
+    for m, kk in enumerate(k):  # nearest predicted point, refined onto the segment
+        lo, hi = max(kk - 1, 0), min(kk + 1, n - 1)
+        a, b = pred[lo], pred[hi]
+        seg = b - a
+        u = np.clip(((obs_v[m] - a) @ seg) / max(seg @ seg, 1e-18), 0.0, 1.0)
+        p = a + u * seg
+        p /= np.linalg.norm(p)
+        cross[m] = float(angular_separation_deg(obs_v[m], p))
+        t_hit[m] = (lo + u * (hi - lo)) * step - pad
+    offsets = t_hit - t_obs
+    # Points matched to the very ends of the window mean the path doesn't fit in time.
+    if (k == 0).any() or (k == n - 1).any():
+        return None
+    return float(np.sqrt(np.mean(cross**2))), float(np.median(offsets)), float(np.std(offsets))
+
+
 def _altaz_vecs(alt: np.ndarray, az: np.ndarray | None) -> np.ndarray:
     from .frames import altaz_to_vec
 

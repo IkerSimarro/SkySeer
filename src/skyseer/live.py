@@ -34,6 +34,7 @@ from .sources import FrameSource
 from .storage import Store
 
 if TYPE_CHECKING:
+    from .aircraft import AircraftFeed, AircraftIdentifier
     from .astro.autocal import AutoCalibrator
     from .astro.frames import Observer
     from .astro.satellites import SatelliteIdentifier
@@ -61,7 +62,12 @@ class LiveStation:
         clips: bool = True,
         on_event: Callable[[Event], None] | None = None,
         simulated: bool = False,
+        aircraft: AircraftIdentifier | None = None,
+        aircraft_feed: AircraftFeed | None = None,
     ):
+        """``aircraft`` names planes from ADS-B broadcasts; ``aircraft_feed`` keeps its log
+        up to date (it is asked only while something crosses the view, see
+        :meth:`_crossing`). Events are checked once broadcasts after them have arrived."""
         self.source, self.config, self.store = source, config, store
         self.camera = camera
         self.folder = Path(folder)
@@ -85,6 +91,14 @@ class LiveStation:
         self._pipeline: Pipeline | None = None
         self._subscribers: list[tuple[asyncio.AbstractEventLoop, _Queue]] = []
         self._lock = threading.Lock()
+        self.aircraft = aircraft
+        self.aircraft_feed = aircraft_feed
+        if aircraft_feed is not None and aircraft_feed.active is None:
+            aircraft_feed.active = self._crossing
+        self._last_crossing = -1e9  # time.monotonic() when something last crossed the view
+        self._awaiting: dict[int, Event] = {}  # events waiting for aircraft broadcasts
+        self._timers: list[threading.Timer] = []
+        self._aircraft_lock = threading.Lock()
 
     # ------------------------------------------------------------------ control
     def start(self) -> None:
@@ -112,6 +126,8 @@ class LiveStation:
         )
         self._thread = threading.Thread(target=self._run, name="live-station", daemon=True)
         self._thread.start()
+        if self.aircraft_feed is not None:
+            self.aircraft_feed.start()
         log.info("Live station started: camera %s, session %s", self.camera, self.session_id)
 
     def stop(self, timeout: float = 30.0) -> None:
@@ -152,6 +168,7 @@ class LiveStation:
             ),
             "counts": dict(self.counts),
             "error": self.error,
+            "aircraft": None if self.aircraft_feed is None else self.aircraft_feed.status(),
         }
 
     def preview_jpeg(self) -> bytes | None:
@@ -191,6 +208,8 @@ class LiveStation:
             (source.width, source.height),
             autocal=self.autocal,
             identifier=self.identifier,
+            aircraft=self.aircraft,
+            defer_aircraft=self.aircraft_feed is not None,
         )
         self._pipeline = pipeline
         recorder = ClipRecorder(self.folder, cfg.clips, source.fps) if self.clips else None
@@ -204,6 +223,8 @@ class LiveStation:
                     recorder.feed(frame)
                 for event in pipeline.process(frame):
                     self._emit(event, recorder)
+                if self.aircraft_feed is not None and _moving(pipeline.tracker.active_tracks):
+                    self._last_crossing = time.monotonic()
                 self.frames += 1
                 now = time.perf_counter()
                 window.append(now)
@@ -224,6 +245,9 @@ class LiveStation:
             source.close()
             if self.autocal is not None:
                 self.autocal.close()
+            self._check_waiting_aircraft()
+            if self.aircraft_feed is not None:
+                self.aircraft_feed.stop()
             self._finish(pipeline)
             self._publish({"type": "status", "live": self.status()})
 
@@ -236,16 +260,14 @@ class LiveStation:
             fh.write(json.dumps(report) + "\n")
         label = str(event.label)
         self.counts[label] = self.counts.get(label, 0) + 1
+        if event.aircraft_pending:
+            with self._aircraft_lock:
+                self._awaiting[event.id] = event
+            self._schedule_aircraft(event, 1)
         if event.label in (ObjectClass.JUNK, ObjectClass.STAR):
             return
         self._recent.append((time.perf_counter(), event))
-        item = summary({**report, "id": db_id, "session_id": self.session_id, "event_id": event.id})
-        if item.get("media"):
-            base = f"/media/{self.session_id}/"
-            item["media"] = {
-                k: base + v if k in ("clip", "thumbnail", "context", "clean") else v
-                for k, v in item["media"].items()
-            }
+        item = self._card(report, db_id, event.id)
         if written is None:
             self._publish({"type": "event", "event": item})
         else:
@@ -254,6 +276,85 @@ class LiveStation:
             written.add_done_callback(lambda job: self._publish_event(item, job))
         if self.on_event is not None:
             self.on_event(event)
+
+    def _card(self, report: dict[str, Any], db_id: int, event_id: int) -> dict[str, Any]:
+        """What dashboards show for an event (an event card), with media URLs."""
+        item = summary({**report, "id": db_id, "session_id": self.session_id, "event_id": event_id})
+        if item.get("media"):
+            base = f"/media/{self.session_id}/"
+            item["media"] = {
+                k: base + v if k in ("clip", "thumbnail", "context", "clean") else v
+                for k, v in item["media"].items()
+            }
+        return item
+
+    # ------------------------------------------------------------ aircraft
+    def _crossing(self) -> bool:
+        """Is something crossing the view, or did it just finish? (The aircraft feed then
+        asks for broadcasts, including those just after the pass.)"""
+        cfg = self.config.aircraft
+        return time.monotonic() - self._last_crossing < cfg.check_delay_s + 2 * cfg.poll_s
+
+    def _schedule_aircraft(self, event: Event, attempt: int) -> None:
+        delay = self.config.aircraft.check_delay_s
+        timer = threading.Timer(delay, self._check_aircraft, (event.id, attempt))
+        timer.daemon = True
+        with self._aircraft_lock:
+            self._timers = [t for t in self._timers if t.is_alive()] + [timer]
+        timer.start()
+
+    def _check_aircraft(self, event_id: int, attempt: int, final: bool = False) -> None:
+        """Match an event against the broadcasts once they cover it (up to 3 tries; at the
+        end of the night, with whatever has arrived)."""
+        from .aircraft import apply_match
+
+        assert self.aircraft is not None
+        with self._aircraft_lock:
+            event = self._awaiting.pop(event_id, None)
+        if event is None:
+            return  # already checked
+        if not final and attempt < 3 and not self.aircraft.covers(event.sky):
+            with self._aircraft_lock:
+                self._awaiting[event_id] = event
+            self._schedule_aircraft(event, attempt + 1)
+            return
+        before = str(event.label)
+        try:
+            apply_match(event, self.aircraft.identify(event.sky))
+        except Exception:  # never let one check stop the station
+            log.exception("Aircraft check of event %d failed", event.id)
+            return
+        finally:
+            event.aircraft_pending = False
+        if event.aircraft is None and str(event.label) == before:
+            report = event.to_dict()  # record that the broadcasts were checked
+            assert self.session_id is not None
+            self.store.add_event(self.session_id, report)
+            return
+        log.info("Event %d identified as aircraft %s", event.id, event.aircraft.short_label())
+        self._update(event, before)
+
+    def _update(self, event: Event, label_before: str) -> None:
+        """Store and announce an event whose identification changed after it was shown."""
+        report = event.to_dict()
+        assert self.session_id is not None
+        db_id = self.store.add_event(self.session_id, report)  # replaces the stored event
+        with open(self.folder / "events.jsonl", "a", encoding="utf-8") as fh:
+            fh.write(json.dumps(report) + "\n")
+        label = str(event.label)
+        if label != label_before:
+            self.counts[label_before] = max(0, self.counts.get(label_before, 1) - 1)
+            self.counts[label] = self.counts.get(label, 0) + 1
+        self._publish({"type": "event", "event": self._card(report, db_id, event.id)})
+
+    def _check_waiting_aircraft(self) -> None:
+        """End of the night: check every event still waiting, with what has arrived."""
+        with self._aircraft_lock:
+            timers, waiting = list(self._timers), list(self._awaiting)
+        for t in timers:
+            t.cancel()
+        for event_id in waiting:
+            self._check_aircraft(event_id, 3, final=True)
 
     def _publish_event(self, item: dict[str, Any], job: Future[None]) -> None:
         if job.exception() is not None:
@@ -347,6 +448,15 @@ class LiveStation:
         )
         ok, jpeg = cv2.imencode(".jpg", view, [cv2.IMWRITE_JPEG_QUALITY, 75])
         return jpeg.tobytes() if ok else None
+
+
+def _moving(tracks: list[Any]) -> bool:
+    """Is any tracked object really moving across the view (not a twinkling star)?"""
+    for t in tracks:
+        d = t.detections
+        if len(d) >= 5 and np.hypot(d[-1].x - d[0].x, d[-1].y - d[0].y) > 10:
+            return True
+    return False
 
 
 def _put(queue: asyncio.Queue[dict[str, Any]], message: dict[str, Any]) -> None:

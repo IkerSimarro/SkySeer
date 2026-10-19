@@ -55,7 +55,23 @@ receiver's PPS wire is connected to a GPIO pin, see the comment in
 
 Check: `chronyc sources` (a `*` marks the source in use) and `cgps` (the GPS fix).
 
-## 5. Focus and exposure
+## 5. Naming aircraft (optional)
+
+SkySeer can name the aircraft it sees from the positions they broadcast (ADS-B). With
+internet and no extra hardware, use the free OpenSky Network: in `configs/pi.yaml` add
+
+```yaml
+aircraft:
+  source: opensky
+```
+
+Without an account OpenSky allows 400 requests a day; SkySeer only asks while something
+crosses the view and stops at `max_requests_per_day`. A free account allows 4,000: put
+its API client's id and secret in the service's environment as
+`SKYSEER_OPENSKY_CLIENT_ID` and `SKYSEER_OPENSKY_CLIENT_SECRET`, and raise the limit. A
+USB ADS-B receiver running readsb (`source: readsb`) works offline with no limits.
+
+## 6. Focus and exposure
 
 - **Focus on stars, at night.** Open the Live page, point the camera at a bright star
   and turn the lens focus ring until the star is the smallest, sharpest dot. Then lock
@@ -68,7 +84,7 @@ Check: `chronyc sources` (a `*` marks the source in use) and `cgps` (the GPS fix
   [docs/performance.md](../../docs/performance.md) and check the Live page's frames per
   second: it must stay above `camera.fps`.
 
-## 6. Everyday use
+## 7. Everyday use
 
 | Want to... | Do |
 |---|---|

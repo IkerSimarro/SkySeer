@@ -25,6 +25,7 @@ meteor or an aircraft. It then names it:
 
 - **Satellites:** the catalogue object it is, with its height, speed and distance.
 - **Meteors:** the shower it belongs to, and its brightness in magnitudes.
+- **Aircraft:** the flight broadcasting from that spot (ADS-B), with its height and speed.
 
 To do this it recognises the star pattern in the image, like a spacecraft star tracker,
 so it knows exactly where every pixel points in the sky. It then compares each path with
@@ -45,6 +46,7 @@ for December 2026.
 | **Camera-shake correction**, star-tracker style: the image offset is measured from star positions and removed. | 0.05 px accuracy in 0.7 ms per frame; false alarms from a 4 px wobble 416 → 0 |
 | **Classification**: hand-written rules by default. An optional machine-learning model is trained on simulated nights and tested honestly against real footage. | the model wins in simulation (96.7% vs 69.5%) but loses on real footage, so the rules stay the default |
 | **Mission-control dashboard**: live camera view, event pages, all-sky map, night reports, and review buttons whose answers become training data. | |
+| **Aircraft identification**: matches each path against the positions aircraft broadcast (ADS-B), from the free OpenSky Network or a local receiver, the same way as satellites. | 150/150 simulated flights named among 20 others; 0 of 90 false paths named |
 | **Unattended station**: observes from dusk to dawn, takes position and time from GPS, starts itself at boot and cleans up its own disk. | Sun position within 0.012° of NASA JPL's ephemeris |
 
 ## The dashboard
@@ -122,6 +124,13 @@ flowchart LR
    speed must match what the shower's entry velocity predicts for that geometry.
    Magnitudes come from a photometric zero point measured on catalogue stars in the same
    image.
+9. **Aircraft.** Airliners broadcast their GNSS position, height, speed and flight
+   number (ADS-B). SkySeer turns each broadcast position into a direction in the
+   camera's sky (WGS84 coordinates to the local horizon) and matches paths with the same
+   sideways-and-timing test as satellites. A live station asks OpenSky only while
+   something crosses the view, to stay within its free daily allowance, and names a pass
+   once the broadcasts after it have arrived. A match outranks the motion rules: a
+   broadcasting aircraft really was there.
 
 ## Results
 
@@ -139,6 +148,8 @@ Every number below has a test, a benchmark or a recorded experiment behind it.
 | Meteor brightness | within ±0.1 magnitude | simulated meteors with known magnitudes |
 | Shake correction | 0.05 px accuracy, 0.7 ms/frame; false alarms 45 → 0 (2 px wobble) and 416 → 0 (4 px) | simulated wobble and knocks |
 | Learned classifier (optional) | 96.7% vs 69.5% for the rules on 150 hard simulated nights, but 19/31 vs 27/31 on real footage | held-out simulations; 224 tracks labelled by eye without seeing either answer ([details](docs/classifier.md)) |
+| Aircraft identification | 150/150 simulated flights named among 20 others, broadcasts every 10 s (149/150 every 5 s); camera clock error measured to 0.04 s median; 0 of 90 random paths named | random flights over Madrid with GNSS-like noise and up to 2.5 s of clock error |
+| Aircraft direction from a broadcast | within 1″ of Skyfield's independent WGS84 calculation | 50 random positions |
 | Sun position (night schedule) | median 0.003°, max 0.012° from NASA JPL DE421; Madrid dusk within 1.5 s | 500 random times and places |
 | Throughput at the Pi camera's 2028×1520 | 23.8 frames/s full, 41.5 frames/s half resolution, same objects found | whole live station on an Intel i7-7700; the Pi 5 is not yet measured ([details](docs/performance.md)) |
 
@@ -206,6 +217,18 @@ uv run skyseer serve --replay data/sim/sats.mp4 --start-time 2026-10-17T19:45:00
 ```
 
 The second command plays the video as if it were a live camera.
+
+To name aircraft in your own video, record their broadcasts while you film (any
+camera; OpenSky is free and needs no account), then pass the log to the analysis:
+
+```bash
+uv run skyseer aircraft now --lat 40.42 --lon -3.70           # what is overhead right now
+uv run skyseer aircraft record --lat 40.42 --lon -3.70 --out data/aircraft/tonight.jsonl
+uv run skyseer analyze VIDEO --start-time ... --lat 40.42 --lon -3.70 --aircraft data/aircraft/tonight.jsonl
+```
+
+A live station names aircraft as they pass with `--aircraft opensky` (or `readsb` for a
+local receiver).
 
 Other commands: `skyseer calibrate IMAGE` (where is this camera pointing?),
 `skyseer showers --date ... --lat ... --lon ...` (active showers and where their
@@ -277,6 +300,13 @@ tests/  tools/        tests; validation, benchmarks, simulators, footage tools
 - **One camera sees only a 2D path,** so about 5% of sporadic meteors match a shower by
   chance. Two stations triangulating the path would fix this.
 - **Photometry** has no atmospheric extinction or colour correction yet.
+- **Aircraft:** only aircraft that broadcast ADS-B can be named (many light aircraft,
+  helicopters and some military don't). The tests use straight flights; a plane turning
+  between OpenSky's 10 s positions strays up to ~150 m from the straight line (~0.3° at
+  30 km, close to the 0.5° limit). Aircraft 100+ km away crawl across the view (under a
+  pixel a second): the motion detector partly absorbs them, so they break into several
+  short events (each named correctly) or are missed. On a simulated view near the horizon
+  built from 80 s of real OpenSky traffic over Madrid, 7 of 10 aircraft were named.
 - **Raspberry Pi:** the camera driver has been tested against a stand-in for its library,
   not real hardware, and Pi throughput is an estimate until the station is built.
 - **The dashboard has no login.** It listens only on the computer itself unless told
@@ -297,6 +327,9 @@ tests/  tools/        tests; validation, benchmarks, simulators, footage tools
 - **Meteor showers:** [IAU Meteor Data Center](https://www.ta3.sk/IAUC22DB/MDC2022/);
   Jopek & Kaňuchová (2017), *Planet. Space Sci.* 143, 3–6; Jenniskens et al. (2020),
   *Planet. Space Sci.* 182, 104821.
+- **Aircraft broadcasts:** [The OpenSky Network](https://opensky-network.org); Schäfer et
+  al. (2014), *Bringing up OpenSky: A large-scale ADS-B sensor network for research*,
+  IPSN '14. Local receivers: [readsb](https://github.com/wiedehopf/readsb).
 - Also built with OpenCV, NumPy, SciPy, scikit-learn, PyAV, FastAPI, React and Vite.
 
 ## Author

@@ -179,6 +179,42 @@ class SatelliteConfig(_Section):
     )
 
 
+class AircraftConfig(_Section):
+    """Naming aircraft from their ADS-B broadcasts (needs the location)."""
+
+    enabled: bool = True
+    source: str = Field(
+        "none",
+        description="Live broadcasts: none, opensky (free online service; set "
+        "SKYSEER_OPENSKY_CLIENT_ID/_SECRET for an account) or readsb (a local receiver)",
+    )
+    readsb_url: str = Field(
+        "http://localhost/tar1090/data/aircraft.json",
+        description="readsb/dump1090 aircraft.json (URL or file path)",
+    )
+    radius_km: float = Field(150.0, description="Ignore aircraft further from the camera")
+    poll_s: float = Field(
+        10.0, description="Seconds between requests (OpenSky: 10 without an account, 5 with)"
+    )
+    active_only: bool = Field(
+        True, description="Ask only while something is crossing the view (saves OpenSky credits)"
+    )
+    max_requests_per_day: int = Field(
+        380, description="Stop asking OpenSky for the day after this (anonymous limit: 400)"
+    )
+    check_delay_s: float = Field(
+        15.0, description="Live: wait this long after an event for broadcasts that cover it"
+    )
+    max_cross_track_deg: float = 0.5
+    max_clock_offset_s: float = 3.0
+    max_timing_spread_s: float = 1.0
+    candidate_radius_deg: float = 8.0
+    max_gap_s: float = Field(30.0, description="Interpolate between broadcasts at most this apart")
+    max_extrapolate_s: float = Field(
+        15.0, description="Dead-reckon from speed and heading at most this far past a broadcast"
+    )
+
+
 class ShowerConfig(_Section):
     """Associating meteors with showers (IAU Meteor Data Center established showers)."""
 
@@ -368,6 +404,7 @@ class Config(_Section):
     observer: ObserverConfig = ObserverConfig()
     astro: AstroConfig = AstroConfig()
     satellites: SatelliteConfig = SatelliteConfig()
+    aircraft: AircraftConfig = AircraftConfig()
     showers: ShowerConfig = ShowerConfig()
     photometry: PhotometryConfig = PhotometryConfig()
     alerts: AlertConfig = AlertConfig()

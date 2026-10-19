@@ -9,6 +9,27 @@ The first complete release: SkySeer rebuilt from a Streamlit prototype into a te
 installable system, with an astronomy layer, a web dashboard and the software for an
 unattended Raspberry Pi station.
 
+### Aircraft identification (2026-10-19)
+- Aircraft are named from their ADS-B broadcasts (position, height, speed, flight
+  number), matched to the observed path with the same sideways-and-timing test as
+  satellites (now shared code). Broadcasts come from the free OpenSky Network (no
+  hardware; 400 requests a day without an account, 4,000 with one) or a local readsb
+  receiver.
+- `skyseer aircraft now` lists what is overhead; `skyseer aircraft record` logs
+  broadcasts while you film with any camera, for `skyseer analyze --aircraft LOG`.
+  `serve`/`live`/`station` take `--aircraft opensky|readsb`: the station asks only while
+  something crosses the view, keeps the night's broadcasts in `aircraft.jsonl`, and names
+  a pass once broadcasts after it have arrived (updating the dashboard).
+- A confident match makes the event a Plane (`label_source: adsb`), outranking the rules
+  and any satellite. Event pages show flight, ICAO address, height, distance, speed and
+  the camera clock error; night reports and the CSV list aircraft.
+- Measured: direction from a broadcast within 1" of Skyfield; 150/150 simulated flights
+  named among 20 others (broadcasts every 10 s; 149/150 every 5 s), clock error to 0.04 s
+  median; 0 of 90 random paths named. Distant aircraft that barely move are matched on
+  position alone and report the clock as not measurable. Simulated view built from 80 s
+  of real OpenSky traffic over Madrid, camera 13° above the horizon: 7 of 10 aircraft
+  named, none wrongly; the other 3 were 100+ km away, moving under a pixel a second.
+
 ### The recognised star pattern (2026-10-18)
 - Plate solving now records which 4-star pattern tetra3 recognised (the 4 image stars,
   their Hipparcos numbers, in the pairing the solver used) and how many patterns it tried

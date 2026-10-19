@@ -25,6 +25,7 @@ from .sources import FileSource
 from .storage import Store
 
 if TYPE_CHECKING:
+    from .aircraft import AircraftIdentifier
     from .astro.calibrate import Calibration
     from .astro.frames import Observer
     from .astro.satellites import SatelliteIdentifier
@@ -117,6 +118,35 @@ def make_identifier(
     return SatelliteIdentifier(orbits, observer, s)
 
 
+def make_aircraft_identifier(
+    cfg: Config,
+    observer: Observer | None,
+    log_path: Path | None,
+    clock: float | None = None,
+    notify: Notify = log.info,
+) -> AircraftIdentifier | None:
+    """Aircraft identifier from a recorded broadcast log (``aircraft.jsonl``, e.g. from
+    ``skyseer aircraft record`` while filming), or None if there is none."""
+    if log_path is None or not cfg.aircraft.enabled:
+        return None
+    if observer is None:
+        notify("No location given: aircraft will not be named (add --lat/--lon).")
+        return None
+    from .aircraft import AircraftIdentifier, AircraftLog
+
+    a = cfg.aircraft
+    if clock is not None:
+        a = a.model_copy(update={"max_clock_offset_s": clock})
+    broadcasts = AircraftLog.load(log_path)
+    span = broadcasts.span()
+    if span is None:
+        notify(f"No aircraft broadcasts in {log_path}; aircraft will not be named.")
+        return None
+    n_aircraft = len(broadcasts.ids_between(span[0], span[1]))
+    notify(f"Loaded {len(broadcasts):,} broadcast positions of {n_aircraft} aircraft")
+    return AircraftIdentifier(broadcasts, observer, a, "log")
+
+
 def run_info(
     kind: str,
     source: str,
@@ -177,6 +207,7 @@ def analyze_video(
     clips: bool = True,
     include_junk: bool = False,
     store: Store | None = None,
+    aircraft_log: Path | None = None,
     progress: Progress | None = None,
     notify: Notify = log.info,
 ) -> Analysis:
@@ -184,6 +215,9 @@ def analyze_video(
     if cal is None and sky:
         cal = calibrate_recording(video, cfg, observer, start_time, notify)
     identifier = make_identifier(cfg, cal.observer, tle, clock, notify) if cal else None
+    aircraft = (
+        make_aircraft_identifier(cfg, cal.observer, aircraft_log, clock, notify) if cal else None
+    )
 
     source = FileSource(video, start_time)
     total = source.frame_count
@@ -204,6 +238,7 @@ def analyze_video(
             identifier=identifier,
             stats=stats,
             clips=recorder,
+            aircraft=aircraft,
         )
     )
     if progress:

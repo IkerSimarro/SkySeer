@@ -9,7 +9,14 @@ const SOURCE: Record<string, string> = {
   rules: 'hand-written rules',
   model: 'learned model',
   orbit: 'matched to a satellite orbit',
+  adsb: "matched to an aircraft's broadcasts",
   starfield: 'moves with the stars',
+}
+
+const AIRCRAFT_SOURCE: Record<string, string> = {
+  opensky: 'OpenSky Network',
+  readsb: 'local receiver',
+  log: 'recorded log',
 }
 
 function ReviewPanel({ e, onChange }: { e: EventDetail; onChange: (label: ObjectClass | null) => void }) {
@@ -134,6 +141,7 @@ export default function EventPage({ id }: { id: number }) {
   if (!ev.data) return <Loading what="event" />
   const e = { ...ev.data, review: review === undefined ? ev.data.review : review }
   const ident = e.identification
+  const plane = e.aircraft
   const shower = e.shower
   const sky = e.sky
   return (
@@ -142,7 +150,7 @@ export default function EventPage({ id }: { id: number }) {
         <a className="btn small" href={href('events', { session: e.session_id })}><BackIcon /> Events</a>
         <div>
           <h1>
-            <ClassBadge label={e.label} /> {ident?.name ?? (typeof shower === 'object' ? `${shower.name} meteor` : `Event #${e.event_id}`)}
+            <ClassBadge label={e.label} /> {(e.label === 'Plane' && plane?.name) || ident?.name || (typeof shower === 'object' ? `${shower.name} meteor` : `Event #${e.event_id}`)}
             {e.fireball && <span className="chip" style={{ marginLeft: 8, color: 'var(--meteor)' }}>Fireball</span>}
             {e.simulated && <> <SimTag /></>}
           </h1>
@@ -189,6 +197,25 @@ export default function EventPage({ id }: { id: number }) {
                 <dt>Match error</dt><dd>{(ident.cross_track_deg * 60).toFixed(1)}′ across the path</dd>
                 <dt>Camera clock</dt><dd>{ident.clock_offset_s >= 0 ? '+' : ''}{ident.clock_offset_s.toFixed(2)} s off</dd>
                 {ident.runner_up && <><dt>Runner-up</dt><dd>{ident.runner_up}</dd></>}
+              </dl>
+            </section>
+          )}
+          {plane && (
+            <section className="panel">
+              <h3>Aircraft identification</h3>
+              <dl className="kv">
+                <dt>Flight</dt><dd>{plane.callsign ?? 'no flight number broadcast'}</dd>
+                <dt>ICAO address</dt><dd><a href={`https://opensky-network.org/aircraft-profile?icao24=${plane.icao24}`} target="_blank" rel="noreferrer">{plane.icao24.toUpperCase()}</a></dd>
+                {plane.country && <><dt>Registered in</dt><dd>{plane.country}</dd></>}
+                <dt>Height</dt><dd>{Math.round(plane.altitude_m).toLocaleString()} m ({plane.geometric_altitude ? 'GNSS' : 'barometric'})</dd>
+                <dt>Distance</dt><dd>{plane.range_km.toFixed(1)} km</dd>
+                <dt>Speed</dt><dd>{Math.round(plane.speed_m_s * 3.6)} km/h, heading {Math.round(plane.heading_deg)}°</dd>
+                <dt>Climb</dt><dd>{plane.vertical_m_s >= 0 ? '+' : ''}{plane.vertical_m_s.toFixed(1)} m/s</dd>
+                <dt>Match error</dt><dd>{(plane.cross_track_deg * 60).toFixed(1)}′ across the path</dd>
+                <dt>Camera clock</dt>
+                <dd>{plane.clock_offset_s === null ? 'not measurable (too far away, moves too slowly)' : `${plane.clock_offset_s >= 0 ? '+' : ''}${plane.clock_offset_s.toFixed(2)} s off`}</dd>
+                <dt>Broadcasts</dt><dd>{AIRCRAFT_SOURCE[plane.source] ?? plane.source}, every {plane.broadcast_spacing_s.toFixed(0)} s</dd>
+                {plane.runner_up && <><dt>Runner-up</dt><dd>{plane.runner_up.toUpperCase()}</dd></>}
               </dl>
             </section>
           )}

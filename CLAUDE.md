@@ -38,6 +38,10 @@ techniques, clean tested code.
   observes from dusk to dawn. Pi profile `configs/pi.yaml`; install kit and guide in
   `deploy/pi/`; parts in `docs/hardware.md`; throughput in `docs/performance.md`
   (`tools/perf_station.py`).
+- Aircraft (ADS-B): `skyseer aircraft now|record --lat --lon` (OpenSky, free; budget 400
+  requests/day without an account), `skyseer analyze VIDEO --aircraft LOG`,
+  `serve/live/station --aircraft opensky|readsb`. Demo from real traffic:
+  `python tools/simulate_scenario.py aircraft --lat --lon --out data/sim/aircraft.mp4`.
 - `uv sync` installs/updates the environment. If `uv` isn't on PATH in a fresh shell,
   refresh PATH from the registry or call the venv's python directly.
 

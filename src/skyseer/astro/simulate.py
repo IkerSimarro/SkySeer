@@ -1,4 +1,4 @@
-"""Physically correct test skies: real stars and real satellite orbits, known truth.
+"""Physically correct test skies: real stars, real satellite orbits and aircraft, known truth.
 
 Used to validate calibration and satellite identification end to end before any camera
 hardware exists: the rendered video goes through exactly the same pipeline as real footage.
@@ -345,3 +345,143 @@ def render_sky_video(
             writer.write(cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR))
     writer.release()
     return passes
+
+
+# --------------------------------------------------------------------------- aircraft
+@dataclass
+class SimFlight:
+    """An aircraft flying a straight line at constant speed, with lights and broadcasts."""
+
+    icao24: str
+    callsign: str
+    when: datetime  # time at ``xyz``
+    xyz: np.ndarray  # Earth-fixed position (m) at ``when``
+    velocity: np.ndarray  # Earth-fixed velocity (m/s)
+    points: list[tuple[int, float, float]] = field(default_factory=list)  # (frame, x, y)
+
+    def position(self, t: np.ndarray) -> np.ndarray:
+        """Earth-fixed positions (T, 3) at Unix times ``t``."""
+        dt = np.asarray(t, dtype=float) - self.when.timestamp()
+        return self.xyz + dt[:, None] * self.velocity
+
+    def broadcasts(
+        self, start: datetime, seconds: float, every_s: float, noise_m: float, rng: Any
+    ) -> list[Any]:
+        """ADS-B positions every ``every_s`` seconds, with GNSS-like position noise."""
+        from ..aircraft import AircraftState, ecef_to_geodetic, enu_basis
+
+        t = start.timestamp() + every_s * np.arange(int(seconds / every_s) + 1)
+        t = np.round(t)  # broadcasts carry whole-second times, like OpenSky's
+        xyz = self.position(t) + rng.normal(0.0, noise_m, (len(t), 3))
+        lat, lon, alt = ecef_to_geodetic(xyz)
+        out = []
+        for k in range(len(t)):
+            e, n, u = enu_basis(float(lat[k]), float(lon[k])) @ self.velocity
+            out.append(
+                AircraftState(
+                    self.icao24,
+                    float(t[k]),
+                    float(lat[k]),
+                    float(lon[k]),
+                    float(alt[k]),
+                    True,
+                    self.callsign,
+                    float(np.hypot(e, n)),
+                    float(np.degrees(np.arctan2(e, n)) % 360),
+                    float(u),
+                )
+            )
+        return out
+
+
+def flight_through(
+    observer: Observer,
+    direction_enu: np.ndarray,
+    when: datetime,
+    altitude_m: float,
+    speed_m_s: float,
+    heading_deg: float,
+    icao24: str,
+    callsign: str,
+    vertical_m_s: float = 0.0,
+) -> SimFlight:
+    """A flight that is seen in (geometric) ``direction_enu`` at ``when``, at
+    ``altitude_m`` above the ellipsoid, flying level towards ``heading_deg``."""
+    from ..aircraft import ecef_to_geodetic, enu_basis, geodetic_to_ecef
+
+    origin = geodetic_to_ecef(observer.latitude, observer.longitude, observer.elevation_m)
+    d = np.asarray(direction_enu, dtype=float) @ enu_basis(observer.latitude, observer.longitude)
+    lo, hi = 0.0, 2_000_000.0  # slant range (m) where the line of sight reaches the altitude
+    for _ in range(60):
+        mid = (lo + hi) / 2
+        lo, hi = (mid, hi) if ecef_to_geodetic(origin + mid * d)[2] < altitude_m else (lo, mid)
+    xyz = origin + lo * d
+    lat, lon, _ = ecef_to_geodetic(xyz)
+    east, north, up = enu_basis(float(lat), float(lon))
+    h = np.radians(heading_deg)
+    velocity = speed_m_s * (np.sin(h) * east + np.cos(h) * north) + vertical_m_s * up
+    return SimFlight(icao24, callsign, when, xyz, velocity)
+
+
+def render_aircraft_video(
+    out_path: str | Path,
+    camera: CameraModel,
+    observer: Observer,
+    start: datetime,
+    seconds: float,
+    fps: float,
+    stars: StarCatalog,
+    flights: list[SimFlight],
+    light_amp: float = 70.0,
+    strobe_hz: float = 1.0,
+    noise: float = 2.5,
+    seed: int = 0,
+    visible: list[tuple[float, float] | None] | None = None,
+) -> list[SimFlight]:
+    """Render aircraft over a drifting real star field: a steady navigation light and a
+    white anti-collision strobe (``strobe_hz`` flashes a second) where each flight really
+    is, seen from ``observer`` (apparent, refracted directions). ``visible`` optionally
+    limits each flight to (from_s, to_s) of the video, as if it flew behind a cloud."""
+    from ..aircraft import enu_basis, geodetic_to_ecef
+
+    rng = np.random.default_rng(seed)
+    out_path = Path(out_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    origin = geodetic_to_ecef(observer.latitude, observer.longitude, observer.elevation_m)
+    to_enu = enu_basis(observer.latitude, observer.longitude)
+    layers: dict[int, np.ndarray] = {}
+    flash_frames = max(1, round(0.1 * fps))
+    writer = cv2.VideoWriter(
+        str(out_path), cv2.VideoWriter.fourcc(*"mp4v"), fps, (camera.width, camera.height)
+    )
+    n = int(seconds * fps)
+    for k in range(n):
+        block = int(k / fps // 2)
+        if block not in layers:
+            when = start + timedelta(seconds=(block + 0.5) * 2)
+            layers[block] = render_starfield(camera, observer, when, stars, noise=0.0).astype(
+                np.float32
+            )
+        img = layers[block] + rng.normal(0, noise, layers[block].shape).astype(np.float32)
+        t = start.timestamp() + k / fps
+        for j, f in enumerate(flights):
+            window = visible[j] if visible is not None else None
+            if window is not None and not window[0] <= k / fps <= window[1]:
+                continue
+            enu = (f.position(np.array([t]))[0] - origin) @ to_enu.T
+            if not np.isfinite(enu).all():  # no position known at this moment
+                continue
+            enu /= np.linalg.norm(enu)
+            if enu[2] <= 0:
+                continue
+            uv, ok = camera.vec_to_pixel(apply_refraction(enu[None]))
+            if not camera.in_image(uv, ok, margin=4)[0]:
+                continue
+            x, y = float(uv[0, 0]), float(uv[0, 1])
+            _stamp(img, x, y, light_amp * 0.6, 1.4)
+            if (k + 7 * j) % max(1, round(fps / strobe_hz)) < flash_frames:
+                _stamp(img, x + 3, y, light_amp * 1.6, 1.6)
+            f.points.append((k, x, y))
+        writer.write(cv2.cvtColor(np.clip(img, 0, 255).astype(np.uint8), cv2.COLOR_GRAY2BGR))
+    writer.release()
+    return flights

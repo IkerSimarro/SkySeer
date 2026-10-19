@@ -101,7 +101,12 @@ class Event:
     sky: Any = None  # astro.sky.SkyPath when the camera is calibrated
     identification: Any = None  # astro.satellites.SatelliteMatch when matched to an orbit
     identification_checked: bool = False  # True if an orbit catalogue was searched
-    label_source: str = "rules"  # "rules", "model", "starfield" or "orbit" (matched an orbit)
+    # "rules", "model", "starfield", "orbit" (matched a satellite orbit) or "adsb" (matched
+    # an aircraft's broadcasts)
+    label_source: str = "rules"
+    aircraft: Any = None  # aircraft.AircraftMatch when matched to ADS-B broadcasts
+    aircraft_checked: bool = False  # True if aircraft broadcasts were searched
+    aircraft_pending: bool = False  # live: broadcasts covering the path not yet received
     photometry: Any = None  # astro.photometry.EventPhotometry when the camera is calibrated
     shower: Any = None  # astro.showers.ShowerMatch for meteors from a known shower
     shower_checked: bool = False  # True if shower association ran (None => sporadic)
@@ -140,6 +145,10 @@ class Event:
             out["identification"] = self.identification.to_dict()
         elif self.identification_checked:
             out["identification"] = None  # searched the catalogue, nothing matched
+        if self.aircraft is not None:
+            out["aircraft"] = self.aircraft.to_dict()
+        elif self.aircraft_checked:
+            out["aircraft"] = None  # searched the broadcasts, nothing matched
         if self.photometry is not None:
             out["photometry"] = self.photometry.to_dict()
         if self.shower_checked:

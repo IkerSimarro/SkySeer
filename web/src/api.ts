@@ -90,6 +90,24 @@ export interface EventDetail extends EventSummary {
     runner_up?: string | null
   } | null
   shower?: { code: string; name: string; radiant_offset_deg: number; confidence: number } | 'sporadic'
+  aircraft?: {
+    icao24: string
+    callsign: string | null
+    name: string
+    confidence: number
+    cross_track_deg: number
+    clock_offset_s: number | null // null: moves too slowly to time
+    range_km: number
+    altitude_m: number
+    speed_m_s: number
+    heading_deg: number
+    vertical_m_s: number
+    geometric_altitude: boolean
+    broadcast_spacing_s: number
+    source: 'opensky' | 'readsb' | 'log'
+    country: string | null
+    runner_up?: string | null
+  } | null
   photometry?: { peak_magnitude: number | null; saturated: boolean; light_curve: (number | null)[] }
   periodicity?: { period_s: number; amplitude: number; false_alarm: number }
 }
@@ -103,9 +121,11 @@ export interface Report {
   rejected: number
   reviewed: number
   identified_satellites: number
+  identified_aircraft: number
   timeline: { bin_minutes: number; bins: ({ start: string } & Record<string, number>)[] }
   satellites: { id: number; time: string; name: string | null; magnitude: number | null }[]
   meteors: { id: number; time: string; shower: string | null; magnitude: number | null; fireball: boolean }[]
+  aircraft: { id: number; time: string; name: string | null; altitude_m: number | null }[]
   showers: Record<string, number>
   brightest_meteor: Report['meteors'][number] | null
   observer: Session['meta']['observer'] | null
@@ -152,6 +172,14 @@ export interface LiveStatus {
     error: string | null
   } | null
   clock_warning?: string | null
+  aircraft?: {
+    source: string
+    authenticated: boolean
+    last_update: string | null
+    aircraft: number
+    requests_today: number
+    error: string | null
+  } | null
 }
 
 async function get<T>(url: string): Promise<T> {

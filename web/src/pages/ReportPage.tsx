@@ -47,7 +47,8 @@ export default function ReportPage({ id }: { id?: number }) {
               <span className="stat-label">Satellites{r.identified_satellites ? ` · ${r.identified_satellites} named` : ''}</span></div>
             <div className="panel stat"><span className="stat-value c-Meteor">{r.counts.Meteor}</span>
               <span className="stat-label">Meteors{r.brightest_meteor ? ` · brightest ${mag(r.brightest_meteor.magnitude)}` : ''}</span></div>
-            <div className="panel stat"><span className="stat-value c-Plane">{r.counts.Plane}</span><span className="stat-label">Aircraft</span></div>
+            <div className="panel stat"><span className="stat-value c-Plane">{r.counts.Plane}</span>
+              <span className="stat-label">Aircraft{r.identified_aircraft ? ` · ${r.identified_aircraft} named` : ''}</span></div>
             <div className="panel stat"><span className="stat-value">{r.reviewed}</span>
               <span className="stat-label">Checked by you (<a href={href('events', { session, review: 'unreviewed' })}>review more</a>)</span></div>
           </div>
@@ -98,6 +99,24 @@ export default function ReportPage({ id }: { id?: number }) {
               )}
             </section>
           </div>
+
+          {r.aircraft.length > 0 && (
+            <section className="panel">
+              <h3>Aircraft</h3>
+              <table className="data">
+                <thead><tr><th>Time (UTC)</th><th>Flight</th><th className="num">Height</th></tr></thead>
+                <tbody>
+                  {r.aircraft.map((a) => (
+                    <tr key={a.id}>
+                      <td className="mono"><a href={href(`event/${a.id}`)}>{utcTime(a.time)}</a></td>
+                      <td>{a.name ?? <span className="muted">not identified</span>}</td>
+                      <td className="num mono">{a.altitude_m === null ? '—' : `${Math.round(a.altitude_m).toLocaleString()} m`}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </section>
+          )}
 
           <section className="panel">
             <h3>Station</h3>

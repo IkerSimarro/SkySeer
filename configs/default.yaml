@@ -103,6 +103,22 @@ satellites:                   # naming satellites from public orbit data (needs 
   max_candidates: 40
   max_elements_age_days: 10.0 # orbits further than this from the recording date are unusable
 
+aircraft:                     # naming aircraft from their ADS-B broadcasts (needs the location)
+  enabled: true
+  source: none                # live: none, opensky (free online) or readsb (local receiver)
+  readsb_url: http://localhost/tar1090/data/aircraft.json
+  radius_km: 150.0            # ignore aircraft further away
+  poll_s: 10.0                # OpenSky gives new positions every 10 s (5 s with an account)
+  active_only: true           # ask only while something crosses the view (saves credits)
+  max_requests_per_day: 380   # OpenSky allows 400 a day without an account, 4000 with one
+  check_delay_s: 15.0         # live: identify once broadcasts after the pass have arrived
+  max_cross_track_deg: 0.5    # max sideways distance between seen and broadcast path
+  max_clock_offset_s: 3.0     # how wrong the camera clock may be
+  max_timing_spread_s: 1.0    # max variation of the timing offset along the path
+  candidate_radius_deg: 8.0
+  max_gap_s: 30.0             # interpolate between broadcasts at most this far apart
+  max_extrapolate_s: 15.0     # dead-reckon from speed and heading at most this far
+
 showers:                      # meteor shower association (IAU Meteor Data Center list)
   enabled: true
   # Tuned by Monte Carlo: ~96% of shower meteors found, ~5% of sporadics matched by chance

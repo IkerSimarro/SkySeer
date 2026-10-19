@@ -24,7 +24,9 @@ function useLiveFeed(): Feed {
       ws.onmessage = (msg) => {
         const data = JSON.parse(msg.data as string)
         if (data.type === 'status') setFeed((f) => ({ ...f, status: data.live }))
-        if (data.type === 'event') setFeed((f) => ({ ...f, events: [data.event, ...f.events].slice(0, 60) }))
+        // An event can be sent again once identified (e.g. matched to an aircraft later).
+        if (data.type === 'event')
+          setFeed((f) => ({ ...f, events: [data.event, ...f.events.filter((e) => e.id !== data.event.id)].slice(0, 60) }))
       }
       ws.onclose = () => {
         setFeed((f) => ({ ...f, connected: false }))
@@ -46,6 +48,14 @@ function gpsText(gps: NonNullable<LiveStatus['gps']>): string {
   if (!fix || fix.mode < 2) return gps.using_cached_location ? 'no fix yet (using the saved location)' : gps.error ?? 'searching for satellites…'
   const clock = fix.clock_offset_s === null ? '' : `, clock ${fix.clock_offset_s >= 0 ? '+' : ''}${fix.clock_offset_s.toFixed(2)} s`
   return `${fix.mode === 3 ? '3-D' : '2-D'} fix, ${fix.satellites} satellites${clock}`
+}
+
+function aircraftText(a: NonNullable<LiveStatus['aircraft']>): string {
+  const name = a.source === 'opensky' ? 'OpenSky' : 'receiver'
+  if (a.error) return `${name}: ${a.error}`
+  if (!a.last_update) return `${name}: asked only while something crosses the view`
+  const quota = a.source === 'opensky' ? ` · ${a.requests_today} requests today` : ''
+  return `${name}: ${a.aircraft} nearby at ${utcTime(a.last_update)} UTC${quota}`
 }
 
 export default function LivePage() {
@@ -135,6 +145,7 @@ export default function LivePage() {
               <dd>{s.calibrated ? (s.pointing ? `pointing alt ${s.pointing.alt.toFixed(1)}°, az ${s.pointing.az.toFixed(1)}°` : 'solved (sky coordinates only)') : 'waiting for enough stars…'}</dd>
               <dt>Location</dt><dd>{s.observer ? `${s.observer.lat.toFixed(3)}°, ${s.observer.lon.toFixed(3)}°` : 'not set: satellites cannot be named'}</dd>
               {s.gps && <><dt>GPS</dt><dd>{gpsText(s.gps)}</dd></>}
+              {s.aircraft && <><dt>Aircraft</dt><dd>{aircraftText(s.aircraft)}</dd></>}
               <dt>Tonight</dt>
               <dd>
                 <span className="c-Satellite">{counts.Satellite ?? 0} satellites</span> ·{' '}

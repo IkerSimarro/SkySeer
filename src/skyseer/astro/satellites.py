@@ -23,7 +23,7 @@ import numpy as np
 from ..config import SatelliteConfig
 from .frames import Observer, altaz_to_vec, angular_separation_deg, apply_refraction
 from .orbits import EARTH_RADIUS_KM, OrbitCatalog, is_sunlit
-from .sky import SkyPath
+from .sky import SkyPath, fit_prediction
 
 log = logging.getLogger(__name__)
 
@@ -214,31 +214,9 @@ class SatelliteIdentifier:
         pred, valid = pred[0], valid[0]
         if not valid.all():
             return None
-        # For each observed point: nearest predicted point, refined onto the segment.
-        dots = obs_v @ pred.T  # (M, n)
-        k = np.argmax(dots, axis=1)
-        cross = np.empty(len(obs_v))
-        t_hit = np.empty(len(obs_v))
-        for m, kk in enumerate(k):
-            lo, hi = max(kk - 1, 0), min(kk + 1, n - 1)
-            a, b = pred[lo], pred[hi]
-            seg = b - a
-            u = np.clip(((obs_v[m] - a) @ seg) / max(seg @ seg, 1e-18), 0.0, 1.0)
-            p = a + u * seg
-            p /= np.linalg.norm(p)
-            cross[m] = float(angular_separation_deg(obs_v[m], p))
-            t_hit[m] = (lo + u * (hi - lo)) * step - pad
         t_obs = np.array([(t - obs_t[0]).total_seconds() for t in obs_t])
-        offsets = t_hit - t_obs
-        # Points matched to the very ends of the window mean the path doesn't fit in time.
-        if (k == 0).any() or (k == n - 1).any():
-            return None
-        return _Candidate(
-            index,
-            float(np.sqrt(np.mean(cross**2))),
-            float(np.median(offsets)),
-            float(np.std(offsets)),
-        )
+        fit = fit_prediction(obs_v, t_obs, pred, step, pad)
+        return None if fit is None else _Candidate(index, *fit)
 
     def _describe(
         self, best: _Candidate, runner: _Candidate | None, t_mid: datetime

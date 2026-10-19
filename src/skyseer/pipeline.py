@@ -22,6 +22,7 @@ from .starfield import StarFieldFilter
 from .track import Tracker
 
 if TYPE_CHECKING:
+    from .aircraft import AircraftIdentifier
     from .astro.autocal import AutoCalibrator
     from .astro.calibrate import Calibration
     from .astro.satellites import SatelliteIdentifier
@@ -48,12 +49,19 @@ class Pipeline:
         calibration: Calibration | None = None,
         autocal: AutoCalibrator | None = None,
         identifier: SatelliteIdentifier | None = None,
+        aircraft: AircraftIdentifier | None = None,
+        defer_aircraft: bool = False,
     ):
+        """``aircraft`` names planes from ADS-B broadcasts. With ``defer_aircraft`` (a live
+        station) an event whose broadcasts haven't all arrived yet is only marked
+        ``aircraft_pending`` for the station to check a little later."""
         self.config = config
         self._diagonal = float(np.hypot(*frame_size))
         self.calibration = calibration
         self.autocal = autocal
         self.identifier = identifier
+        self.aircraft = aircraft
+        self.defer_aircraft = defer_aircraft
         self.fps = fps
         self.detector = MotionDetector(config.detector, frame_size)
         self.stabiliser = Stabiliser(config.stabilise, fps) if config.stabilise.enabled else None
@@ -195,9 +203,12 @@ class Pipeline:
             from .astro.sky import sky_path
 
             event.sky = sky_path(track, self.calibration)
+            if self.aircraft is not None and label is not ObjectClass.STAR:
+                self._check_aircraft(event)
             if (
                 self.identifier is not None
                 and label is not ObjectClass.STAR
+                and event.label_source != "adsb"  # a broadcasting aircraft explains it
                 and self.identifier.can_check(event.sky)
             ):
                 event.identification_checked = True
@@ -220,6 +231,19 @@ class Pipeline:
             len(track.detections),
         )
         return event
+
+    def _check_aircraft(self, event: Event) -> None:
+        from .aircraft import apply_match
+
+        assert self.aircraft is not None
+        if event.sky.alt is None or len(event.sky.times) < 3:
+            return
+        if self.defer_aircraft and not self.aircraft.covers(event.sky):
+            event.aircraft_pending = True
+            return
+        apply_match(event, self.aircraft.identify(event.sky))
+        if event.aircraft is not None:
+            log.info("Event %d identified as aircraft %s", event.id, event.aircraft.short_label())
 
     def _science(self, event: Event) -> None:
         """Photometry, shower association, light-curve periodicity and fireball alerts."""
@@ -265,6 +289,7 @@ def run(
     identifier: SatelliteIdentifier | None = None,
     stats: dict[str, Any] | None = None,
     clips: ClipRecorder | None = None,
+    aircraft: AircraftIdentifier | None = None,
 ) -> Iterator[Event]:
     """Run the pipeline over a whole source, yielding events as they complete.
 
@@ -273,7 +298,13 @@ def run(
     given, every frame is buffered and each event gets a clip and images (``Event.media``).
     """
     pipeline = Pipeline(
-        config, source.fps, (source.width, source.height), calibration, autocal, identifier
+        config,
+        source.fps,
+        (source.width, source.height),
+        calibration,
+        autocal,
+        identifier,
+        aircraft,
     )
     try:
         for frame in source:

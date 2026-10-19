@@ -20,6 +20,7 @@ doubt (it evolves). Paths are relative to the repository root.
 14. Phase 5: database, web API, live station, dashboard
 15. Phase 6: the unattended Raspberry Pi station
 16. Phase 7: v1.0 release, and what using it revealed
+17. Aircraft identification (ADS-B)
 
 ## 1. Big picture and architecture
 - **What it is:** video in → detect → track → classify → calibrate from stars →
@@ -314,3 +315,31 @@ doubt (it evolves). Paths are relative to the repository root.
   Result: clean copies saved at once only for meteors (rare, the ones worth sharing); any
   other event of a recording made on request (<1 s) and cached. Refactor kept the marked
   clips pixel-identical (checked by decoding before/after).
+
+## 17. Aircraft identification (ADS-B) (`src/skyseer/aircraft.py`)
+- **ADS-B:** aircraft broadcast GNSS position, height, ground speed, track and flight
+  number ~2x/s on 1090 MHz. Sources: OpenSky Network REST (`/states/all`, bounding box
+  under 25 sq deg = 1 credit; anonymous 400/day at 10 s resolution, free account 4,000/day
+  at 5 s and 1 h of history; OAuth2 client credentials) or a local readsb receiver.
+- **Geometry:** WGS84 geodetic -> ECEF -> local ENU (East-North-Up) at the observer ->
+  alt/az; refraction applied as for stars (overstated for an aircraft inside the
+  atmosphere, < 0.1 deg above 10 deg). Checked against Skyfield: within 1".
+- **Between broadcasts:** straight-line interpolation in ECEF (gaps up to 30 s); beyond the
+  last one, dead reckoning from speed/heading/climb (up to 15 s). Reported speed/heading
+  come from the broadcast itself (GNSS velocity), not from differencing noisy positions.
+- **Matching:** the same cross-track RMS + along-track timing as satellites (shared
+  `fit_prediction`). For slow (distant) aircraft timing is unmeasurable, so the along-
+  track agreement is judged as an angle and the clock is reported as None. Net speed
+  (first to last point) instead of per-frame speed, which is noise for slow objects.
+- **Live design:** credits are scarce, so the station polls OpenSky only while something
+  moves across the view (plus a tail), stops at a daily budget, honours 429 retry-after,
+  and identifies a pass only once broadcasts after it have arrived (deferred check,
+  dashboard updated in place).
+- **Results:** 150/150 simulated flights (10 s broadcasts, 20 decoys, +-2.5 s clock),
+  clock error 0.04 s median; 0/90 false paths (a third slow). Real-traffic demo (80 s of
+  OpenSky over Madrid, simulated camera 13 deg up): 7/10 named; misses were 100+ km away
+  moving < 1 px/s, absorbed by the background model. Honest limits: non-ADS-B aircraft,
+  turning flights between 10 s positions (~150 m chord error).
+- **Interview angle:** a second, independent catalogue (air traffic) cross-checks the
+  classifier and will label real training data, and the design respects a real API's
+  rate limits instead of assuming unlimited data.

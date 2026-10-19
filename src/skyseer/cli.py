@@ -81,7 +81,9 @@ def _summary(events: list[Event]) -> Table:
     table = Table(title=f"{len(events)} events", header_style="bold cyan")
     with_sky = any(e.sky is not None for e in events)
     with_mag = any(e.photometry is not None for e in events)
-    with_id = any(e.identification_checked or e.shower_checked for e in events)
+    with_id = any(
+        e.identification_checked or e.shower_checked or e.aircraft_checked for e in events
+    )
     cols = ["#", "Class", "Conf.", "Start (UTC)", "Duration"]
     cols += ["Speed °/s", "Arc °"] if with_sky else ["Speed px/f", "Linearity"]
     if with_mag:
@@ -117,6 +119,11 @@ def _summary(events: list[Event]) -> Table:
 def _identity(e: Event) -> str:
     """What the event is beyond its class: satellite name, meteor shower, fireball."""
     parts = []
+    if e.aircraft is not None:
+        a = e.aircraft
+        parts.append(f"{a.short_label()}, {a.altitude_m:,.0f} m")
+    elif e.aircraft_checked and e.label == "Plane":
+        parts.append("[dim]no broadcast match[/dim]")
     if e.identification is not None:
         parts.append(e.identification.short_label())
     elif e.identification_checked and e.label == "Satellite":
@@ -186,6 +193,23 @@ ClockOpt = Annotated[
     float | None,
     typer.Option("--clock-tolerance", help="How many seconds the camera clock may be off"),
 ]
+AircraftOpt = Annotated[
+    str | None,
+    typer.Option(
+        "--aircraft",
+        help="Name aircraft from live broadcasts: opensky (free online), readsb (a local "
+        "receiver) or none (default: config)",
+    ),
+]
+AircraftLogOpt = Annotated[
+    Path | None,
+    typer.Option(
+        "--aircraft-log",
+        exists=True,
+        dir_okay=False,
+        help="Replay only: aircraft broadcasts recorded with the video",
+    ),
+]
 
 
 def _identifier(
@@ -219,6 +243,14 @@ def analyze(
     ] = True,
     tle: TleOpt = None,
     clock_tolerance: ClockOpt = None,
+    aircraft: Annotated[
+        Path | None,
+        typer.Option(
+            exists=True,
+            dir_okay=False,
+            help="Aircraft broadcasts recorded while filming (skyseer aircraft record)",
+        ),
+    ] = None,
     sensitivity: Annotated[int | None, typer.Option(min=1, max=10)] = None,
     frame_skip: Annotated[int | None, typer.Option(min=1)] = None,
     video_out: Annotated[
@@ -274,6 +306,7 @@ def analyze(
             clips,
             include_junk,
             store=_store(cfg),
+            aircraft_log=aircraft,
             progress=lambda i, n: progress.update(task, completed=i, total=n or None),
             notify=_say,
         )
@@ -333,6 +366,8 @@ def live(
     ] = True,
     tle: TleOpt = None,
     clock_tolerance: ClockOpt = None,
+    aircraft: AircraftOpt = None,
+    aircraft_log: AircraftLogOpt = None,
     clips: Annotated[
         bool, typer.Option("--clips/--no-clips", help="Write a clip and images per event")
     ] = True,
@@ -350,6 +385,8 @@ def live(
     def show(e: Event) -> None:
         where = f", {e.sky.angular_speed:.2f}°/s" if e.sky is not None else ""
         name = f" = {e.identification.short_label()}" if e.identification else ""
+        if e.aircraft is not None:
+            name = f" = {e.aircraft.short_label()}"
         console.print(
             f"[bold]{e.track.start_time:%H:%M:%S}[/bold] #{e.id} {e.label}{name} "
             f"({e.confidence:.2f}, {e.track.duration:.1f}s{where})"
@@ -367,6 +404,8 @@ def live(
         clock_tolerance,
         clips,
         show,
+        aircraft,
+        aircraft_log,
     )
     station.start()
     console.print(
@@ -394,6 +433,8 @@ def _live_station(
     clock_tolerance: float | None,
     clips: bool,
     on_event: Any = None,
+    aircraft: str | None = None,
+    aircraft_log: Path | None = None,
 ) -> LiveStation:
     """A live station on a camera, or on a replayed video (for demos and testing)."""
     from .analysis import is_simulation
@@ -436,6 +477,9 @@ def _live_station(
         autocal = AutoCalibrator(cfg.astro, observer, source.fps, cache_path=cache)
         identifier = _identifier(cfg, observer, tle, clock_tolerance)
     folder = Path(cfg.storage.live_dir) / f"{kind}_{datetime.now():%Y%m%d_%H%M%S}"
+    planes, feed = _aircraft_for(cfg, observer if sky else None, replay, aircraft, aircraft_log)
+    if feed is not None:
+        feed.log.path = folder / "aircraft.jsonl"  # the night's broadcasts are kept with it
     return LiveStation(
         source,
         cfg,
@@ -448,7 +492,35 @@ def _live_station(
         clips,
         on_event,
         simulated=replay is not None and is_simulation(str(replay)),
+        aircraft=planes,
+        aircraft_feed=feed,
     )
+
+
+def _aircraft_for(
+    cfg: Config,
+    observer: Observer | None,
+    replay: Path | None,
+    source: str | None,
+    log_path: Path | None,
+) -> tuple[Any, Any]:
+    """(AircraftIdentifier, AircraftFeed) for a live station, or Nones."""
+    from .aircraft import AircraftFeed, AircraftIdentifier, AircraftLog, make_source
+
+    a = cfg.aircraft
+    kind = source or a.source
+    if not a.enabled or observer is None or (kind == "none" and log_path is None):
+        if kind != "none" and a.enabled and observer is None:
+            _say("No location given: aircraft will not be named (add --lat/--lon).")
+        return None, None
+    if log_path is not None:  # a replay with the broadcasts recorded at the time
+        return AircraftIdentifier(AircraftLog.load(log_path), observer, a, "log"), None
+    if replay is not None:
+        _say("A replay is in the past, so live broadcasts will not match (use --aircraft-log).")
+        return None, None
+    feed = AircraftFeed(make_source(a, observer, kind), AircraftLog(keep_s=2 * 3600), a)
+    _say(f"Naming aircraft from {kind} broadcasts")
+    return AircraftIdentifier(feed.log, observer, a, kind), feed
 
 
 @app.command()
@@ -472,6 +544,8 @@ def serve(
     ] = True,
     tle: TleOpt = None,
     clock_tolerance: ClockOpt = None,
+    aircraft: AircraftOpt = None,
+    aircraft_log: AircraftLogOpt = None,
     config: ConfigOpt = None,
     verbose: VerboseOpt = False,
 ) -> None:
@@ -499,6 +573,8 @@ def serve(
             tle,
             clock_tolerance,
             clips=True,
+            aircraft=aircraft,
+            aircraft_log=aircraft_log,
         )
     store = _store(cfg)
     added = store.import_runs(cfg.storage.runs_dir, cfg.storage.live_dir)
@@ -543,6 +619,7 @@ def station(
         str | None,
         typer.Option(help="GPS: gpsd, a device such as /dev/ttyACM0, or none (default: config)"),
     ] = None,
+    aircraft: AircraftOpt = None,
     config: ConfigOpt = None,
     verbose: VerboseOpt = False,
 ) -> None:
@@ -575,7 +652,17 @@ def station(
 
     def make_night() -> LiveStation:  # each night uses the station's latest location
         return _live_station(
-            cfg, cam, None, None, 1.0, st.observer, sky, tle, clock_tolerance, True
+            cfg,
+            cam,
+            None,
+            None,
+            1.0,
+            st.observer,
+            sky,
+            tle,
+            clock_tolerance,
+            True,
+            aircraft=aircraft,
         )
 
     st = Station(cfg, store, make_night, observer, gps=monitor)
@@ -929,6 +1016,120 @@ def orbits(
         f"Orbital elements are {float(np.median(ages)):.1f} days old (median); "
         "they stay accurate for about a week."
     )
+
+
+aircraft_app = typer.Typer(
+    help="Aircraft broadcasts (ADS-B): what is overhead now, or record them while filming.",
+    no_args_is_help=True,
+)
+app.add_typer(aircraft_app, name="aircraft")
+SourceOpt = Annotated[
+    str | None,
+    typer.Option("--source", help="opensky (free online service) or readsb (a local receiver)"),
+]
+
+
+def _aircraft_source(cfg: Config, observer: Observer | None, source: str | None) -> Any:
+    from .aircraft import make_source
+
+    if observer is None:
+        console.print("[red]The location is needed (--lat/--lon or observer: in the config).")
+        raise typer.Exit(1)
+    return make_source(cfg.aircraft, observer, source or _default_source(cfg))
+
+
+def _default_source(cfg: Config) -> str:
+    return cfg.aircraft.source if cfg.aircraft.source != "none" else "opensky"
+
+
+@aircraft_app.command("now")
+def aircraft_now(
+    lat: LatOpt = None,
+    lon: LonOpt = None,
+    elevation: ElevOpt = None,
+    source: SourceOpt = None,
+    config: ConfigOpt = None,
+) -> None:
+    """List the aircraft around you right now, nearest first, and where to look."""
+    import numpy as np
+
+    from .aircraft import enu_basis, geodetic_to_ecef
+    from .astro.frames import vec_to_altaz
+
+    cfg = _config(config, None, None)
+    observer = _observer(cfg, lat, lon, elevation)
+    src = _aircraft_source(cfg, observer, source)
+    assert observer is not None
+    with console.status(f"Asking {src.name}..."):
+        states = src.fetch()
+    origin = geodetic_to_ecef(observer.latitude, observer.longitude, observer.elevation_m)
+    to_enu = enu_basis(observer.latitude, observer.longitude)
+    rows = []
+    for st in states:
+        enu = (geodetic_to_ecef(st.lat, st.lon, st.alt_m) - origin) @ to_enu.T
+        dist = float(np.linalg.norm(enu))
+        if dist <= cfg.aircraft.radius_km * 1000:
+            look_alt, look_az = vec_to_altaz(enu / dist)
+            rows.append((dist, st, float(look_alt), float(look_az)))
+    table = Table(title=f"{len(rows)} aircraft within {cfg.aircraft.radius_km:.0f} km")
+    for col in ("Flight", "ICAO", "Distance", "Height", "Speed", "Look: alt", "az"):
+        table.add_column(col, justify="left" if col in ("Flight", "ICAO") else "right")
+    for dist, st, look_alt_deg, look_az_deg in sorted(rows, key=lambda r: r[0]):
+        speed = "-" if st.speed_m_s is None else f"{st.speed_m_s * 3.6:.0f} km/h"
+        table.add_row(
+            st.callsign or "?",
+            st.icao24.upper(),
+            f"{dist / 1000:.0f} km",
+            f"{st.alt_m:,.0f} m",
+            speed,
+            f"{look_alt_deg:.0f}°",
+            f"{look_az_deg:.0f}°",
+        )
+    console.print(table)
+
+
+@aircraft_app.command("record")
+def aircraft_record(
+    out: Annotated[Path, typer.Option("--out", "-o", help="Broadcast log to write (.jsonl)")],
+    minutes: Annotated[float, typer.Option(help="How long to record")] = 30.0,
+    lat: LatOpt = None,
+    lon: LonOpt = None,
+    elevation: ElevOpt = None,
+    source: SourceOpt = None,
+    config: ConfigOpt = None,
+    verbose: VerboseOpt = False,
+) -> None:
+    """Record aircraft broadcasts while you film, for `skyseer analyze --aircraft`.
+
+    Start it when you start filming (any camera works) and keep the computer online. With
+    OpenSky and no account, 30 minutes uses ~180 of the 400 free requests a day.
+    """
+    import time
+
+    from .aircraft import AircraftFeed, AircraftLog
+
+    _setup_logging(verbose)
+    cfg = _config(config, None, None)
+    observer = _observer(cfg, lat, lon, elevation)
+    src = _aircraft_source(cfg, observer, source)
+    broadcasts = AircraftLog(path=out)
+    feed = AircraftFeed(src, broadcasts, cfg.aircraft)
+    end = time.time() + minutes * 60
+    console.print(f"Recording broadcasts from {src.name} into {out} (Ctrl+C to stop)")
+    try:
+        while time.time() < end:
+            feed.poll()
+            st = feed.status()
+            console.print(
+                f"{datetime.now():%H:%M:%S}  {st['aircraft']} aircraft, "
+                f"{len(broadcasts):,} positions, {st['requests_today']} requests"
+                + (f"  [yellow]{st['error']}[/yellow]" if st["error"] else ""),
+                highlight=False,
+            )
+            time.sleep(cfg.aircraft.poll_s)
+    except KeyboardInterrupt:
+        pass
+    console.print(f"Saved {len(broadcasts):,} positions to {out}")
 
 
 @app.command()
