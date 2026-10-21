@@ -18,7 +18,7 @@ the dashboard on your home network. Parts list and build notes: [docs/hardware.m
 ```
 git clone https://github.com/IkerSimarro/SkySeer.git ~/skyseer
 cd ~/skyseer
-./deploy/pi/install.sh --gps        # leave out --gps without a GPS receiver
+./deploy/pi/install.sh              # add --gps if you fitted a USB GPS receiver
 ```
 
 The script installs the system packages, a Python environment, the dashboard, the star
@@ -30,10 +30,7 @@ Open the dashboard from any device on the same network: `http://skyseer.local:80
 
 ## 3. Tell it where it is
 
-With a **GPS receiver** nothing else is needed: the station reads its position (and the
-time) from it and remembers the last position, so it works straight after a reboot.
-
-Without one, put the location in `configs/pi.yaml`:
+The budget kit has no GPS: put the location in `configs/pi.yaml` (once):
 
 ```yaml
 observer:
@@ -45,6 +42,10 @@ observer:
 then `sudo systemctl restart skyseer`. Where the camera points is found from the stars
 automatically each night (plate solving): no compass or level needed.
 
+With a **GPS receiver** (an optional upgrade) nothing needs typing: install with
+`--gps`, set `gps: source: gpsd` in `configs/pi.yaml`, and the station reads its position
+(and the time) from it, remembering the last position for straight after a reboot.
+
 ## 4. Time
 
 Satellite names need the clock right to within a few seconds. The Pi has no clock
@@ -55,17 +56,11 @@ receiver's PPS wire is connected to a GPIO pin, see the comment in
 
 Check: `chronyc sources` (a `*` marks the source in use) and `cgps` (the GPS fix).
 
-## 5. Naming aircraft (optional)
+## 5. Naming aircraft
 
-SkySeer can name the aircraft it sees from the positions they broadcast (ADS-B). With
-internet and no extra hardware, use the free OpenSky Network: in `configs/pi.yaml` add
-
-```yaml
-aircraft:
-  source: opensky
-```
-
-Without an account OpenSky allows 400 requests a day; SkySeer only asks while something
+SkySeer names the aircraft it sees from the positions they broadcast (ADS-B). The Pi
+profile already uses the free OpenSky Network (`aircraft: source: opensky`, needs
+internet); set `source: none` to turn it off. Without an account OpenSky allows 400 requests a day; SkySeer only asks while something
 crosses the view and stops at `max_requests_per_day`. A free account allows 4,000: put
 its API client's id and secret in the service's environment as
 `SKYSEER_OPENSKY_CLIENT_ID` and `SKYSEER_OPENSKY_CLIENT_SECRET`, and raise the limit. A

@@ -35,7 +35,8 @@ doubt (it evolves). Paths are relative to the repository root.
 - **Configuration:** typed pydantic models in `src/skyseer/config.py`; the YAML file
   `configs/default.yaml` must equal the code defaults (a test enforces this).
 - **Hardware plan:** Raspberry Pi 5 + HQ camera (IMX477) + 6 mm lens (~55° field of
-  view) + USB GPS for location and time.
+  view); budget kit ~EUR 170-220 on a 2 GB Pi (measured peak ~0.9 GB with a 384 MB clip
+  buffer). GPS optional: internet time + typed location; aircraft from OpenSky.
 
 ## 2. Detection (`src/skyseer/detect.py`)
 - **Method:** OpenCV MOG2 background subtraction (a per-pixel statistical model of the

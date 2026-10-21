@@ -2,7 +2,7 @@
 # Only the differences from configs/default.yaml are here; everything else keeps its
 # default. The service runs: skyseer station --config configs/pi.yaml --host 0.0.0.0
 
-observer:                     # your location; leave null when a GPS is connected
+observer:                     # your location (or leave null and add a GPS, see below)
   latitude: null
   longitude: null
   elevation_m: 0.0
@@ -12,7 +12,10 @@ station:
   dark_sun_altitude: -12.0    # observe from nautical dusk to nautical dawn
 
 gps:
-  source: gpsd                # set up by install.sh --gps; none without a receiver
+  source: none                # with a USB GPS: gpsd (and install with install.sh --gps)
+
+aircraft:
+  source: opensky             # name aircraft from the free OpenSky Network (needs internet)
 
 camera:                       # HQ camera (IMX477), 2x2 binned: full field, less noise
   width: 2028
@@ -26,4 +29,6 @@ detector:
                               # the test night (docs/performance.md)
 
 clips:
-  buffer_mb: 768              # leaves memory for everything else on an 8 GB Pi
+  buffer_mb: 384              # whole station peaks at ~0.9 GB with this (measured on a PC):
+                              # fits a 2 GB Pi; clips stay sharp (frames kept at ~60%,
+                              # clips are written 640 px wide)

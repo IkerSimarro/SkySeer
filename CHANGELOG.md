@@ -9,6 +9,18 @@ The first complete release: SkySeer rebuilt from a Streamlit prototype into a te
 installable system, with an astronomy layer, a web dashboard and the software for an
 unattended Raspberry Pi station.
 
+### A station kit under budget (2026-10-21)
+- `docs/hardware.md` now lists a budget kit of about €170-220 (Raspberry Pi prices rose
+  three times since December 2025): a 2 GB Pi 5, the HQ camera and 6 mm f/1.2 lens, a
+  microSD card and a home-made window box. GPS, dew heater, SSD, PoE and an aircraft
+  receiver became optional upgrades.
+- A 2 GB Pi is enough, measured: with the clip buffer at 384 MB the whole station
+  (orbit catalogue and star database loaded, 2028 x 1520 video) peaked at 857 MB on a PC,
+  against 1,074 MB with the old 768 MB buffer. Clips stay sharp: buffered frames are kept
+  at ~60% resolution and clips are written 640 px wide.
+- The Pi profile now expects no GPS (internet time, typed location) and names aircraft
+  from OpenSky.
+
 ### Aircraft identification (2026-10-19)
 - Aircraft are named from their ADS-B broadcasts (position, height, speed, flight
   number), matched to the observed path with the same sideways-and-timing test as

@@ -83,7 +83,9 @@ used for robustness testing.
 - **Libraries:** NumPy, SciPy, OpenCV, scikit-learn, Skyfield, sgp4, pydantic (typed YAML
   configuration), Typer + Rich (command-line tool).
 - **Development machine:** Windows laptop.
-- **Target device:** Raspberry Pi 5 + HQ camera (IMX477) + 6 mm lens + USB GPS.
+- **Target device:** Raspberry Pi 5 (2 GB) + HQ camera (IMX477) + 6 mm f/1.2 lens, a
+  budget kit of about €170-220 (GPS, dew heater and an aircraft receiver are later
+  upgrades; time from the internet, aircraft from OpenSky).
 - **Source:** public GitHub repository. The work lives on a feature branch and nothing
   is pushed without the author's approval.
 
