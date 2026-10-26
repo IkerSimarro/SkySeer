@@ -224,3 +224,55 @@ def test_clips_without_markings(client, analysed, tmp_path):
         assert r.status_code == 409 and r.json()["detail"] == detail["clean_reason"]
         refused += 1
     assert refused >= 2
+
+
+def _video_made_at(path, when: str | None):
+    """A 1-second video whose file says it was made at ``when`` (ISO, UTC)."""
+    import av
+    import numpy as np
+
+    with av.open(str(path), "w") as c:
+        if when is not None:
+            c.metadata["creation_time"] = when
+        s = c.add_stream("mpeg4", rate=10)
+        s.width, s.height, s.pix_fmt = 64, 48, "yuv420p"
+        for _ in range(10):
+            frame = av.VideoFrame.from_ndarray(np.zeros((48, 64, 3), np.uint8), format="rgb24")
+            for packet in s.encode(frame):
+                c.mux(packet)
+        for packet in s.encode():
+            c.mux(packet)
+    return path
+
+
+def test_the_time_saved_in_a_video_is_used_only_if_it_was_night_there(tmp_path):
+    """An upload's own date is meaningless, and a re-encoded video often carries the time
+    it was processed (YouTube's said 12:50 UTC). Trust the file's time only when the Sun
+    was down at the given place; otherwise treat the time as unknown."""
+    from skyseer.analysis import recording_time
+    from skyseer.astro.frames import Observer
+
+    madrid, said = Observer(40.42, -3.70, 650), []
+    night = _video_made_at(tmp_path / "night.mp4", "2026-10-21T22:30:00.000000Z")
+    noon = _video_made_at(tmp_path / "noon.mp4", "2026-10-21T12:50:00.000000Z")
+    plain = _video_made_at(tmp_path / "plain.mp4", None)
+    assert recording_time(night, madrid, said.append).isoformat() == "2026-10-21T22:30:00+00:00"
+    assert recording_time(noon, madrid, said.append) is None and "Sun was up" in said[-1]
+    assert recording_time(night, None, said.append) is None  # no place: can't check it
+    assert recording_time(plain, madrid, said.append) is None
+
+
+def test_an_unknown_recording_time_is_recorded_and_not_guessed(synth_clip, tmp_path):
+    from skyseer.analysis import analyze_video
+    from skyseer.astro.frames import Observer
+
+    path, _ = synth_clip  # its file carries no recording time
+    said: list[str] = []
+    result = analyze_video(
+        path, load_config(), tmp_path / "run", None, Observer(40.42, -3.70, 650),
+        sky=False, clips=False, notify=said.append,
+    )  # fmt: skip
+    run = json.loads((result.out_dir / "run.json").read_text())
+    assert run["time_source"] == "unknown" and "observer" not in run
+    assert any("recording time is unknown" in m for m in said)
+    assert not any(e.shower_checked or e.identification_checked for e in result.events)

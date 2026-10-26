@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useAsync, href } from '../hooks'
+import { useAsync, useUtcNow, href } from '../hooks'
 
 interface Job {
   id: string
@@ -10,6 +10,25 @@ interface Job {
   session_id: number | null
   error: string | null
   created: string
+  started: string | null
+}
+
+const LOCAL_ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone
+
+/** A datetime-local value in this computer's time zone or in UTC, as UTC ISO 8601. */
+function toUtc(value: string, zone: 'local' | 'utc'): string | null {
+  if (!value) return null
+  const d = new Date(zone === 'utc' ? `${value}Z` : value) // no zone: read as local time
+  return Number.isNaN(d.getTime()) ? null : d.toISOString()
+}
+
+function timeLeft(job: Job, now: number): string | null {
+  if (job.state !== 'running' || !job.started || job.progress < 0.01) return null
+  const elapsed = (now - Date.parse(job.started)) / 1000
+  const left = (elapsed * (1 - job.progress)) / job.progress
+  if (left < 90) return 'less than 2 min left'
+  const h = Math.floor(left / 3600), m = Math.round((left % 3600) / 60)
+  return `about ${h ? `${h} h ` : ''}${m} min left`
 }
 
 const getJobs = async (): Promise<Job[]> => (await fetch('/api/jobs')).json()
@@ -31,6 +50,9 @@ export default function AnalyzePage() {
   const jobs = useAsync(getJobs, [], 1500)
   const [file, setFile] = useState<File | null>(null)
   const [start, setStart] = useState('')
+  const [zone, setZone] = useState<'local' | 'utc'>('local')
+  const now = useUtcNow()
+  const utcStart = toUtc(start, zone)
   const [lat, setLat] = useState('')
   const [lon, setLon] = useState('')
   const [elevation, setElevation] = useState('')
@@ -44,7 +66,8 @@ export default function AnalyzePage() {
     if (!file) return
     const form = new FormData()
     form.append('file', file)
-    if (start) form.append('start_time', start)
+    const utc = toUtc(start, zone)
+    if (utc) form.append('start_time', utc)
     if (lat && lon) {
       form.append('lat', lat)
       form.append('lon', lon)
@@ -79,11 +102,24 @@ export default function AnalyzePage() {
             <span>Video file</span>
             <input key={inputKey} type="file" accept="video/*" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
           </label>
-          <label className="field">
-            <span>Recording started (UTC)</span>
-            <input type="datetime-local" step="1" value={start} onChange={(e) => setStart(e.target.value)} />
-            <small className="muted">Needed for sky positions and satellite names. Leave empty if unknown.</small>
-          </label>
+          <div className="field-row">
+            <label className="field">
+              <span>Recording started</span>
+              <input type="datetime-local" step="1" value={start} onChange={(e) => setStart(e.target.value)} />
+            </label>
+            <label className="field">
+              <span>Time zone</span>
+              <select value={zone} onChange={(e) => setZone(e.target.value as 'local' | 'utc')}>
+                <option value="local">{LOCAL_ZONE} (this computer)</option>
+                <option value="utc">UTC</option>
+              </select>
+            </label>
+          </div>
+          <small className="muted">
+            {utcStart ? `= ${utcStart.slice(0, 19).replace('T', ' ')} UTC. ` : ''}
+            Needed to name satellites, aircraft and meteor showers. If empty, SkySeer uses the
+            time saved in the video file, but only when it was night there then.
+          </small>
           <div className="field-row">
             <label className="field"><span>Latitude °N</span><input type="text" inputMode="decimal" placeholder="40.42" value={lat} onChange={(e) => setLat(e.target.value)} /></label>
             <label className="field"><span>Longitude °E</span><input type="text" inputMode="decimal" placeholder="-3.70" value={lon} onChange={(e) => setLon(e.target.value)} /></label>
@@ -113,7 +149,10 @@ export default function AnalyzePage() {
                     <span className={`chip ${j.state}`}>{j.state}</span>
                   </div>
                   <div className="bar-track"><div className="bar-fill" style={{ width: `${100 * j.progress}%`, background: j.state === 'failed' ? 'var(--bad)' : 'var(--accent)' }} /></div>
-                  <div className="muted small">{j.error ?? j.message}</div>
+                  <div className="muted small">
+                    {j.error ?? j.message}
+                    {timeLeft(j, now.getTime()) && <> · {timeLeft(j, now.getTime())}</>}
+                  </div>
                   {j.session_id && (
                     <div className="small">
                       <a href={href(`report/${j.session_id}`)}>Report</a> · <a href={href('events', { session: j.session_id })}>Events</a> · <a href={href('sky', { session: j.session_id })}>Sky map</a>

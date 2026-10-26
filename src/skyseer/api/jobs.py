@@ -47,6 +47,7 @@ class Jobs:
             "session_id": None,
             "error": None,
             "created": datetime.now(UTC).isoformat(),
+            "started": None,  # when the analysis itself began (for the time-left estimate)
         }
         with self._lock:
             self._jobs[job_id] = job
@@ -87,7 +88,9 @@ class Jobs:
             observer = Observer(lat, lon, elevation)
         stamp = f"{datetime.now():%Y%m%d_%H%M%S}"
         out_dir = Path(self.config.storage.runs_dir) / f"{video.stem}_{stamp}"
-        self._update(job_id, state="running", message="Starting")
+        self._update(
+            job_id, state="running", message="Starting", started=datetime.now(UTC).isoformat()
+        )
         try:
             result = analyze_video(
                 video,

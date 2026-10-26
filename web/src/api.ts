@@ -130,6 +130,7 @@ export interface Report {
   brightest_meteor: Report['meteors'][number] | null
   observer: Session['meta']['observer'] | null
   pointing: Session['meta']['pointing'] | null
+  time_source?: 'given' | 'video file' | 'unknown' | null
   disturbances: [number, number][]
 }
 

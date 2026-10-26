@@ -193,6 +193,7 @@ def night_report(session: dict[str, Any], events: list[dict[str, Any]]) -> dict[
         "brightest_meteor": meteors[0] if meteors and meteors[0]["magnitude"] is not None else None,
         "observer": meta.get("observer"),
         "pointing": meta.get("pointing"),
+        "time_source": meta.get("time_source"),  # given / video file / unknown (recordings)
         "disturbances": meta.get("disturbances", []),
     }
 

@@ -8,6 +8,12 @@ function fmtSeconds(s: number): string {
   return `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`
 }
 
+const TIME_SOURCE: Record<string, string> = {
+  given: 'given when it was analysed',
+  'video file': 'from the video file (checked: night at that place)',
+  unknown: 'unknown: satellites, aircraft and showers were not identified',
+}
+
 export default function ReportPage({ id }: { id?: number }) {
   const sessions = useAsync(api.sessions, [])
   const session = id ?? sessions.data?.[0]?.id
@@ -123,6 +129,12 @@ export default function ReportPage({ id }: { id?: number }) {
             <dl className="kv">
               <dt>Location</dt>
               <dd>{r.observer ? `${r.observer.lat.toFixed(3)}°, ${r.observer.lon.toFixed(3)}°` : 'not given'}</dd>
+              {r.time_source && (
+                <>
+                  <dt>Recording time</dt>
+                  <dd>{TIME_SOURCE[r.time_source] ?? r.time_source}</dd>
+                </>
+              )}
               <dt>Camera pointing</dt>
               <dd>{r.pointing ? `alt ${r.pointing.alt.toFixed(1)}°, az ${r.pointing.az.toFixed(1)}°` : 'not calibrated'}</dd>
               <dt>Reviewed by a person</dt><dd>{r.reviewed} event{r.reviewed === 1 ? '' : 's'}</dd>

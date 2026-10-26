@@ -12,7 +12,7 @@ import json
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -183,6 +183,54 @@ def run_info(
     return info
 
 
+def recording_time(
+    video: Path, observer: Observer | None, notify: Notify = log.info
+) -> datetime | None:
+    """When a recording started, from the time its file says it was made, or None.
+
+    That time is only trusted if a location is known and the Sun was down there for the
+    whole recording: a downloaded or re-encoded video often carries the time it was
+    processed instead (a YouTube video in testing said 12:50 UTC, the middle of the day).
+    """
+    import av
+
+    from .astro.sun import sun_altitude
+
+    try:
+        with av.open(str(video)) as c:
+            stream = c.streams.video[0]
+            raw = c.metadata.get("creation_time") or stream.metadata.get("creation_time")
+            seconds = float(c.duration / 1_000_000) if c.duration else 0.0
+    except (av.error.FFmpegError, IndexError):
+        return None
+    if not raw:
+        return None
+    try:
+        when = datetime.fromisoformat(raw)
+    except ValueError:
+        return None
+    when = when if when.tzinfo else when.replace(tzinfo=UTC)
+    if when.year < 2000:  # a placeholder (1904 and 1970 are common)
+        return None
+    if observer is None:
+        notify(
+            f"The video file says it was made {when:%Y-%m-%d %H:%M} UTC, but without a "
+            "location SkySeer can't check that it was night then; treating the time as "
+            "unknown."
+        )
+        return None
+    end = when + timedelta(seconds=seconds)
+    if max(sun_altitude(when, observer), sun_altitude(end, observer)) > -6.0:
+        notify(
+            f"The video file says it was made {when:%Y-%m-%d %H:%M} UTC, but the Sun was up "
+            "then at that place: probably when the file was processed, not recorded. "
+            "Treating the time as unknown."
+        )
+        return None
+    notify(f"Recording time from the video file: {when:%Y-%m-%d %H:%M:%S} UTC (night there)")
+    return when
+
+
 @dataclass
 class Analysis:
     out_dir: Path
@@ -211,6 +259,27 @@ def analyze_video(
     progress: Progress | None = None,
     notify: Notify = log.info,
 ) -> Analysis:
+    time_source = "given"
+    if start_time is None:
+        start_time = recording_time(video, observer, notify)
+        time_source = "video file" if start_time is not None else "unknown"
+    if start_time is None:
+        # Without the time, positions on the star background still work (they need only
+        # time differences within the video), but nothing that needs the date or the
+        # horizon does: never guess them from the file's date.
+        notify(
+            "The recording time is unknown: satellites, aircraft and meteor showers will "
+            "not be identified. Give the start time to enable them."
+        )
+        observer = None
+        off = {"enabled": False}
+        cfg = cfg.model_copy(
+            update={
+                "satellites": cfg.satellites.model_copy(update=off),
+                "showers": cfg.showers.model_copy(update=off),
+                "aircraft": cfg.aircraft.model_copy(update=off),
+            }
+        )
     cal = calibration
     if cal is None and sky:
         cal = calibrate_recording(video, cfg, observer, start_time, notify)
@@ -258,6 +327,7 @@ def analyze_video(
         cal,
         stats,
     )
+    info["time_source"] = time_source  # "given", "video file" or "unknown"
     (out_dir / "run.json").write_text(json.dumps(info, indent=2), encoding="utf-8")
     session_id = store.import_run(out_dir) if store is not None else None
     return Analysis(out_dir, events, reported, cal, identifier, stats, session_id)
