@@ -276,3 +276,72 @@ def test_an_unknown_recording_time_is_recorded_and_not_guessed(synth_clip, tmp_p
     assert run["time_source"] == "unknown" and "observer" not in run
     assert any("recording time is unknown" in m for m in said)
     assert not any(e.shower_checked or e.identification_checked for e in result.events)
+
+
+def _own_station(analysed, tmp_path):
+    """A dashboard whose data folders hold a copy of the analysed run and its upload."""
+    import shutil
+
+    cfg = load_config(
+        storage={
+            "database": str(tmp_path / "data" / "db.sqlite"),
+            "runs_dir": str(tmp_path / "data" / "runs"),
+            "live_dir": str(tmp_path / "data" / "live"),
+        }
+    )
+    run = tmp_path / "data" / "runs" / "night2"
+    shutil.copytree(analysed[0], run)
+    upload = tmp_path / "data" / "uploads" / "night2.mp4"
+    upload.parent.mkdir(parents=True)
+    upload.write_bytes(b"x" * 2_000_000)
+    info = json.loads((run / "run.json").read_text())
+    (run / "run.json").write_text(json.dumps({**info, "source": str(upload)}))
+    store = Store(cfg.storage.database)
+    assert store.import_runs(cfg.storage.runs_dir) == 1
+    return TestClient(create_app(cfg, store, static_dir=None)), store, cfg, run, upload
+
+
+def test_sessions_can_be_renamed_and_stay_renamed(analysed, tmp_path):
+    client, store, cfg, run, _ = _own_station(analysed, tmp_path)
+    (s,) = client.get("/api/sessions").json()
+    assert (
+        client.patch(f"/api/sessions/{s['id']}", json={"title": "First light"}).status_code == 200
+    )
+    (s,) = client.get("/api/sessions").json()
+    assert s["title"] == "First light" and s["name"] == "night2"
+    assert store.import_runs(cfg.storage.runs_dir) == 0  # a restart doesn't re-import it
+    client.patch(f"/api/sessions/{s['id']}", json={"title": ""})  # back to the folder name
+    assert client.get("/api/sessions").json()[0]["title"] is None
+
+
+def test_removing_a_session_keeps_it_removed_and_can_free_its_files(analysed, tmp_path):
+    client, store, cfg, run, upload = _own_station(analysed, tmp_path)
+    (s,) = client.get("/api/sessions").json()
+    files = client.get(f"/api/sessions/{s['id']}/files").json()
+    assert files["folder"] and files["upload_mb"] == 2.0
+    # Records only: the files stay, and a restart doesn't bring the session back.
+    assert client.delete(f"/api/sessions/{s['id']}").json()["freed_mb"] == 0
+    assert client.get("/api/sessions").json() == [] and run.exists() and upload.exists()
+    assert store.import_runs(cfg.storage.runs_dir) == 0
+    # Imported again on purpose, then removed with its files: both are deleted.
+    sid = store.import_run(run)
+    out = client.delete(f"/api/sessions/{sid}", params={"files": True}).json()
+    assert out["freed_mb"] >= 2.0 and not run.exists() and not upload.exists()
+
+
+def test_files_outside_skyseers_folders_are_never_deleted(client, analysed):
+    folder, _ = analysed  # lives in a temporary folder, not in data/
+    (s,) = client.get("/api/sessions").json()
+    assert client.get(f"/api/sessions/{s['id']}/files").json()["folder"] is None
+    client.delete(f"/api/sessions/{s['id']}", params={"files": True})
+    assert (folder / "events.json").exists()
+
+
+def test_sessions_come_with_their_most_striking_events(client):
+    (s,) = client.get("/api/sessions").json()
+    picks = s["highlights"]
+    assert 1 <= len(picks) <= 3 and all(p["thumbnail"].startswith("/media/") for p in picks)
+    assert client.get(picks[0]["thumbnail"]).status_code == 200
+    labels = [p["label"] for p in picks]
+    if "Meteor" in labels:  # meteors are the most striking, so they come first
+        assert labels[0] == "Meteor"

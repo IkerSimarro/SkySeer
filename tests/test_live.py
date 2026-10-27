@@ -29,6 +29,11 @@ def test_station_stores_every_event_and_its_folder(synth_clip, tmp_path):
     assert status["frames"] == 16 * 30
     session = store.sessions()[0]
     assert session["kind"] == "live" and session["ended"]
+    # Ends at its last frame's time (a replay's own clock), not the computer's: 16 s.
+    from datetime import datetime
+
+    length = datetime.fromisoformat(session["ended"]) - datetime.fromisoformat(session["started"])
+    assert abs(length.total_seconds() - 479 / 30) < 0.5
     assert session["events"] == len(truth.objects)
     folder = tmp_path / "night"
     events = json.loads((folder / "events.json").read_text())

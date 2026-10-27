@@ -13,6 +13,7 @@ the live pipeline write while the dashboard reads.
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 import threading
 from collections.abc import Iterator
@@ -45,7 +46,10 @@ CREATE TABLE IF NOT EXISTS events (
 );
 CREATE INDEX IF NOT EXISTS events_time ON events (start_time);
 CREATE INDEX IF NOT EXISTS events_label ON events (label);
+-- Run folders a person removed from SkySeer: never imported again.
+CREATE TABLE IF NOT EXISTS removed_runs (folder TEXT PRIMARY KEY);
 """
+
 
 LABELS = ("Satellite", "Meteor", "Plane", "Junk", "Star")
 
@@ -58,6 +62,9 @@ class Store:
         with self._connect() as db:
             db.execute("PRAGMA journal_mode=WAL")
             db.executescript(SCHEMA)
+            columns = {r["name"] for r in db.execute("PRAGMA table_info(sessions)")}
+            if "title" not in columns:  # added later: a name a person gave it (rename)
+                db.execute("ALTER TABLE sessions ADD COLUMN title TEXT")
 
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
@@ -118,10 +125,49 @@ class Store:
     def session(self, session_id: int) -> dict[str, Any] | None:
         return next((s for s in self.sessions() if s["id"] == session_id), None)
 
-    def delete_session(self, session_id: int) -> None:
-        """Remove a session's records (its folder on disk is left alone)."""
+    def rename_session(self, session_id: int, title: str | None) -> bool:
+        """Give a session a title of its own (None restores its folder name). The name,
+        which ties it to its folder, stays."""
         with self._lock, self._connect() as db:
+            cur = db.execute("UPDATE sessions SET title = ? WHERE id = ?", (title, session_id))
+            return cur.rowcount > 0
+
+    def delete_session(self, session_id: int, remember: bool = True) -> None:
+        """Remove a session's records (its folder on disk is left alone). With
+        ``remember`` its folder is never imported again, so it stays removed."""
+        with self._lock, self._connect() as db:
+            row = db.execute("SELECT folder FROM sessions WHERE id = ?", (session_id,)).fetchone()
             db.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
+            if remember and row is not None:
+                db.execute(
+                    "INSERT OR IGNORE INTO removed_runs (folder) VALUES (?)",
+                    (_folder_key(row["folder"]),),
+                )
+
+    def highlights(self, per_session: int = 3) -> dict[int, list[dict[str, Any]]]:
+        """Each session's most striking events that have a trail image: fireballs and
+        bright meteors, then named satellites and aircraft (long, bright passes first)."""
+        with self._connect() as db:
+            rows = db.execute(
+                """SELECT id, session_id, label,
+                     json_extract(data, '$.media.thumbnail') AS thumbnail,
+                     json_extract(data, '$.photometry.peak_magnitude') AS magnitude,
+                     json_extract(data, '$.duration_s') AS duration,
+                     json_extract(data, '$.fireball') AS fireball,
+                     COALESCE(json_extract(data, '$.aircraft.name'),
+                              json_extract(data, '$.identification.name'),
+                              json_extract(data, '$.shower.code'),
+                              json_extract(data, '$.shower')) AS name
+                   FROM events
+                   WHERE label IN ('Satellite', 'Meteor', 'Plane')
+                     AND json_extract(data, '$.media.thumbnail') IS NOT NULL"""
+            ).fetchall()
+        by_session: dict[int, list[dict[str, Any]]] = {}
+        for r in sorted(rows, key=_interest, reverse=True):
+            picks = by_session.setdefault(r["session_id"], [])
+            if len(picks) < per_session:
+                picks.append({k: r[k] for k in ("id", "label", "name", "thumbnail", "magnitude")})
+        return by_session
 
     # ------------------------------------------------------------------ events
     def add_events(self, session_id: int, events: list[dict[str, Any]]) -> None:
@@ -234,20 +280,41 @@ class Store:
         session_id = self.add_session(
             name or folder.name, info.get("kind", kind), folder, info.get("source"), started, info
         )
+        with self._lock, self._connect() as db:  # imported on purpose: no longer removed
+            db.execute("DELETE FROM removed_runs WHERE folder = ?", (_folder_key(folder),))
         self.add_events(session_id, events)
         if info.get("ended"):
             self.finish_session(session_id, info["ended"], {})
         return session_id
 
     def import_runs(self, *roots: str | Path) -> int:
-        """Register every run folder under ``roots`` not yet known. Returns how many."""
-        known = {s["name"] for s in self.sessions()}
+        """Register every run folder under ``roots`` not yet known (by folder, so renamed
+        sessions aren't imported twice) and not removed by a person. Returns how many."""
+        known = {_folder_key(s["folder"]) for s in self.sessions()}
+        with self._connect() as db:
+            known |= {r["folder"] for r in db.execute("SELECT folder FROM removed_runs")}
         added = 0
         for root in roots:
             for events_file in sorted(Path(root).glob("*/events.json")):
-                if events_file.parent.name not in known:
+                if _folder_key(events_file.parent) not in known:
                     added += self.import_run(events_file.parent) is not None
         return added
+
+
+def _folder_key(folder: str | Path) -> str:
+    """One spelling per folder (absolute, case-folded on Windows)."""
+    return os.path.normcase(os.path.abspath(str(folder)))
+
+
+def _interest(r: sqlite3.Row) -> float:
+    """How striking an event looks: higher first (magnitudes: lower is brighter)."""
+    mag, duration = r["magnitude"], r["duration"] or 0.0
+    bright = 0.0 if mag is None else 4.0 - mag
+    if r["label"] == "Meteor":
+        return (100.0 if r["fireball"] else 60.0) + 5 * bright
+    if r["label"] == "Satellite":
+        return (45.0 if r["name"] else 20.0) + min(duration, 120.0) / 6 + 2 * bright
+    return (35.0 if r["name"] else 15.0) + min(duration, 60.0) / 6
 
 
 def _session(row: sqlite3.Row) -> dict[str, Any]:

@@ -4,9 +4,19 @@ export type ObjectClass = 'Satellite' | 'Meteor' | 'Plane' | 'Star' | 'Junk'
 export const REAL_CLASSES: ObjectClass[] = ['Satellite', 'Meteor', 'Plane']
 export const ALL_CLASSES: ObjectClass[] = ['Satellite', 'Meteor', 'Plane', 'Junk', 'Star']
 
+export interface Highlight {
+  id: number
+  label: ObjectClass
+  name: string | null
+  thumbnail: string
+  magnitude: number | null
+}
+
 export interface Session {
   id: number
-  name: string
+  name: string // ties it to its folder
+  title: string | null // a name a person gave it
+  highlights?: Highlight[] // its most striking events, best first
   kind: 'file' | 'live'
   source: string | null
   started: string | null
@@ -26,6 +36,16 @@ export interface Session {
     discarded_tracks?: number
     simulated?: boolean
   }
+}
+
+/** What to call a session: the name a person gave it, else its folder's name. */
+export const sessionTitle = (s: Pick<Session, 'name' | 'title'>) => s.title || s.name
+
+export interface SessionFiles {
+  folder: string | null // inside SkySeer's data folders, else null (never deleted)
+  folder_mb: number
+  upload: string | null
+  upload_mb: number
 }
 
 export interface SkyPoint {
@@ -113,7 +133,7 @@ export interface EventDetail extends EventSummary {
 }
 
 export interface Report {
-  session: Pick<Session, 'id' | 'name' | 'kind' | 'source' | 'started'>
+  session: Pick<Session, 'id' | 'name' | 'title' | 'kind' | 'source' | 'started'>
   start: string | null
   end: string | null
   duration_s: number
@@ -230,6 +250,21 @@ export const api = {
       throw new Error(body?.detail ?? `Could not make the clip: ${r.status}`)
     }
     return (await r.json()) as Media
+  },
+  renameSession: async (id: number, title: string) => {
+    const r = await fetch(`/api/sessions/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title }),
+    })
+    if (!r.ok) throw new Error(((await r.json().catch(() => null)) as { detail?: string } | null)?.detail ?? `Rename failed: ${r.status}`)
+    return (await r.json()) as Session
+  },
+  sessionFiles: (id: number) => get<SessionFiles>(`/api/sessions/${id}/files`),
+  removeSession: async (id: number, files: boolean) => {
+    const r = await fetch(`/api/sessions/${id}?files=${files}`, { method: 'DELETE' })
+    if (!r.ok) throw new Error(((await r.json().catch(() => null)) as { detail?: string } | null)?.detail ?? `Remove failed: ${r.status}`)
+    return (await r.json()) as { deleted: boolean; freed_mb: number }
   },
   exportUrl: (id: number, format: 'csv' | 'json') => `/api/sessions/${id}/export.${format}`,
 }

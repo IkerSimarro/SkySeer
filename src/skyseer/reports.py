@@ -176,7 +176,9 @@ def night_report(session: dict[str, Any], events: list[dict[str, Any]]) -> dict[
     ]
     meta = session.get("meta") or {}
     return {
-        "session": {k: session.get(k) for k in ("id", "name", "kind", "source", "started")},
+        "session": {
+            k: session.get(k) for k in ("id", "name", "title", "kind", "source", "started")
+        },
         "start": start.isoformat() if start else None,
         "end": end.isoformat() if end else None,
         "duration_s": round((end - start).total_seconds(), 1) if start and end else 0.0,

@@ -1,4 +1,4 @@
-import { api, duration, mag, utcDate, utcTime } from '../api'
+import { api, sessionTitle, duration, mag, utcDate, utcTime } from '../api'
 import { Timeline } from '../components/charts'
 import { Failed, Loading, SessionSelect, SimTag } from '../components/common'
 import { DownloadIcon } from '../components/Icons'
@@ -32,7 +32,7 @@ export default function ReportPage({ id }: { id?: number }) {
           <h1>Night report {sessions.data.find((s) => s.id === session)?.meta.simulated && <SimTag />}</h1>
           {r && (
             <div className="muted mono">
-              {r.session.name} · {r.start ? `${utcDate(r.start)} ${utcTime(r.start)}` : ''}
+              {sessionTitle(r.session)} · {r.start ? `${utcDate(r.start)} ${utcTime(r.start)}` : ''}
               {r.end ? `–${utcTime(r.end)} UTC` : ''} · {duration(r.duration_s)}
             </div>
           )}

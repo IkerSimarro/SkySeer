@@ -1,5 +1,5 @@
 import type { EventSummary, ObjectClass, Session } from '../api'
-import { duration, mag, utcDate, utcTime } from '../api'
+import { duration, mag, sessionTitle, utcDate, utcTime } from '../api'
 import { href } from '../hooks'
 
 export function ClassBadge({ label }: { label: ObjectClass }) {
@@ -11,8 +11,9 @@ export function ClassBadge({ label }: { label: ObjectClass }) {
   )
 }
 
-/** One detection: its trail image (the whole path in one picture) and key facts. */
-export function EventCard({ e }: { e: EventSummary }) {
+/** One detection: its trail image (the whole path in one picture) and key facts.
+ * ``session`` names the session it belongs to (when cards from several are shown). */
+export function EventCard({ e, session }: { e: EventSummary; session?: string }) {
   return (
     <a className="event-card" href={href(`event/${e.id}`)} style={{ borderTopColor: `var(--${e.label.toLowerCase()})` }}>
       <div className="event-thumb">
@@ -36,6 +37,7 @@ export function EventCard({ e }: { e: EventSummary }) {
           <span>{duration(e.duration_s)}</span>
           <span title="Peak brightness (magnitude: lower is brighter)">{mag(e.magnitude)}</span>
         </div>
+        {session && <div className="event-session muted" title="Session">{session}</div>}
       </div>
     </a>
   )
@@ -55,7 +57,7 @@ export function SessionSelect({
       <option value="">All sessions</option>
       {sessions.map((s) => (
         <option key={s.id} value={s.id}>
-          {s.started ? `${utcDate(s.started)} · ` : ''}{s.name}
+          {s.started ? `${utcDate(s.started)} · ` : ''}{sessionTitle(s)}
         </option>
       ))}
     </select>

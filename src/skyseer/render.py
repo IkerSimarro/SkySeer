@@ -83,21 +83,17 @@ def render_annotated_video(
     satellite's orbit predicts; it is drawn dashed while the event is visible, so the
     viewer can see the real object riding along its predicted orbit.
     """
-    cap = cv2.VideoCapture(str(video_path))
-    if not cap.isOpened():
-        raise ValueError(f"Could not open video: {video_path}")
-    fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
-    size = (int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)), int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)))
+    from .sources import VideoFile
+
+    video = VideoFile(video_path)  # the same frames, numbered the same, as the analysis
+    fps = video.fps
+    size = (video.width, video.height)
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     writer = cv2.VideoWriter(str(out_path), cv2.VideoWriter.fourcc(*"mp4v"), fps, size)
     boxes = _boxes_by_frame(events, labels)
 
-    index = 0
-    while True:
-        ok, frame = cap.read()
-        if not ok:
-            break
+    for index, frame in video.frames():
         active = boxes.get(index)
         if active or index % speedup == 0:
             for ev, (x, y, w, h) in active or []:
@@ -117,8 +113,7 @@ def render_annotated_video(
                     cv2.LINE_AA,
                 )
             writer.write(frame)
-        index += 1
-    cap.release()
+    video.close()
     writer.release()
     log.info("Wrote annotated video %s", out_path)
     return out_path

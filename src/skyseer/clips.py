@@ -425,27 +425,21 @@ def write_clean_clip(event: dict[str, Any], video: Path, run_dir: Path, cfg: Cli
     out = run_dir / rel
     if out.exists():
         return rel
-    cap = cv2.VideoCapture(str(video))
-    if not cap.isOpened():
-        raise ValueError(f"Could not open the video {video}")
-    fps = float(cap.get(cv2.CAP_PROP_FPS)) or 30.0
+    from .sources import VideoFile
+
+    reader = VideoFile(video)  # the same frames, numbered the same, as the analysis
+    fps = reader.fps
     stride = max(1, int(media.get("speedup") or 1))
     first = max(0, event["first_frame"] - round(cfg.pre_roll_s * fps))
     last = event["last_frame"] + round(cfg.post_roll_s * fps)
-    frames: list[tuple[int, np.ndarray]] = []
     try:
-        cap.set(cv2.CAP_PROP_POS_FRAMES, first)
-        for index in range(first, last + 1):
-            ok, image = cap.read()
-            if not ok:
-                break
-            if index % stride:
-                continue
-            if not cfg.color and image.ndim == 3:
-                image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-            frames.append((index, image))
+        frames = [
+            (index, image)
+            for index, image in reader.frames(first, last + 1, gray=not cfg.color)
+            if index % stride == 0
+        ]
     finally:
-        cap.release()
+        reader.close()
     if not frames:
         raise ValueError(f"The event's frames could not be read from {video}")
     points = [(p["frame"], p["x"], p["y"], max(p["bbox"][2], p["bbox"][3])) for p in event["track"]]

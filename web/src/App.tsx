@@ -79,7 +79,7 @@ export default function App() {
       body = <AnalyzePage />
       break
     default:
-      body = <Overview />
+      body = <Overview query={route.query} />
   }
   const active = page === 'event' ? 'events' : (page ?? '')
   return (

@@ -63,6 +63,10 @@ class Review(BaseModel):
     label: str | None  # Satellite, Meteor, Plane, Junk, Star; None clears the review
 
 
+class Rename(BaseModel):
+    title: str | None  # a name for the session; None or "" restores its folder name
+
+
 def _media(e: dict[str, Any]) -> dict[str, Any] | None:
     """Turn an event's relative clip/image paths into URLs."""
     media = e.get("media")
@@ -164,17 +168,77 @@ def create_app(
 
     @app.get("/api/sessions")
     def get_sessions() -> list[dict[str, Any]]:
-        return store.sessions()
+        """Every session, each with up to 3 of its most striking events (``highlights``)."""
+        best = store.highlights()
+        out = []
+        for s in store.sessions():
+            picks = [] if s["meta"].get("clips_deleted") else best.get(s["id"], [])
+            base = f"/media/{s['id']}/"
+            s["highlights"] = [{**h, "thumbnail": base + h["thumbnail"]} for h in picks]
+            out.append(s)
+        return out
+
+    data_dirs = [Path(config.storage.runs_dir), Path(config.storage.live_dir), uploads]
+
+    def own_file(path: str | None) -> Path | None:
+        """``path`` if it exists inside SkySeer's own data folders (never anything else)."""
+        if not path:
+            return None
+        p = Path(path).resolve()
+        inside = any(p.is_relative_to(d.resolve()) and p != d.resolve() for d in data_dirs)
+        return p if inside and p.exists() else None
+
+    def files_of(s: dict[str, Any]) -> dict[str, Any]:
+        folder = own_file(s["folder"])
+        upload = own_file(s.get("source")) if s["kind"] == "file" else None
+        if upload is not None and not upload.is_relative_to(uploads.resolve()):
+            upload = None  # only videos uploaded through the dashboard
+        size = sum(f.stat().st_size for f in folder.rglob("*") if f.is_file()) if folder else 0
+        return {
+            "folder": str(folder) if folder else None,
+            "folder_mb": round(size / 1e6, 1),
+            "upload": str(upload) if upload else None,
+            "upload_mb": round(upload.stat().st_size / 1e6, 1) if upload else 0.0,
+        }
+
+    @app.get("/api/sessions/{session_id}/files")
+    def get_session_files(session_id: int) -> dict[str, Any]:
+        """What removing the session with its files would delete (SkySeer's own only)."""
+        return files_of(session_or_404(session_id))
+
+    @app.patch("/api/sessions/{session_id}")
+    def rename_session(session_id: int, body: Rename) -> dict[str, Any]:
+        session_or_404(session_id)
+        title = (body.title or "").strip() or None
+        if title is not None and len(title) > 80:
+            raise HTTPException(400, "A session's name can be at most 80 characters")
+        store.rename_session(session_id, title)
+        return session_or_404(session_id)
 
     @app.get("/api/sessions/{session_id}")
     def get_session(session_id: int) -> dict[str, Any]:
         return session_or_404(session_id)
 
     @app.delete("/api/sessions/{session_id}")
-    def delete_session(session_id: int) -> dict[str, bool]:
-        session_or_404(session_id)
-        store.delete_session(session_id)  # records only: the folder stays on disk
-        return {"deleted": True}
+    def delete_session(session_id: int, files: bool = False) -> dict[str, Any]:
+        """Remove a session (it won't be imported again). With ``files`` also delete its
+        analysis folder (clips, reports) and its uploaded video, both only inside
+        SkySeer's own data folders."""
+        s = session_or_404(session_id)
+        live = station.status() if station is not None else {}
+        if live.get("running") and live.get("session_id") == session_id:
+            raise HTTPException(409, "The live station is recording this session right now")
+        freed = 0.0
+        if files:
+            found = files_of(s)
+            if found["folder"]:
+                shutil.rmtree(found["folder"], ignore_errors=True)
+                freed += found["folder_mb"]
+            if found["upload"]:
+                Path(found["upload"]).unlink(missing_ok=True)
+                freed += found["upload_mb"]
+        store.delete_session(session_id)
+        return {"deleted": True, "freed_mb": round(freed, 1)}
 
     @app.get("/api/sessions/{session_id}/report")
     def get_report(session_id: int) -> dict[str, Any]:

@@ -96,6 +96,7 @@ class LiveStation:
         if aircraft_feed is not None and aircraft_feed.active is None:
             aircraft_feed.active = self._crossing
         self._last_crossing = -1e9  # time.monotonic() when something last crossed the view
+        self._last_time: datetime | None = None  # timestamp of the latest frame
         self._awaiting: dict[int, Event] = {}  # events waiting for aircraft broadcasts
         self._timers: list[threading.Timer] = []
         self._aircraft_lock = threading.Lock()
@@ -226,6 +227,7 @@ class LiveStation:
                 if self.aircraft_feed is not None and _moving(pipeline.tracker.active_tracks):
                     self._last_crossing = time.monotonic()
                 self.frames += 1
+                self._last_time = frame.timestamp
                 now = time.perf_counter()
                 window.append(now)
                 while window and now - window[0] > 2.0:
@@ -365,7 +367,9 @@ class LiveStation:
         """Close the session: events.json and run.json make the folder self-contained."""
         if self.session_id is None:
             return
-        ended = datetime.now(UTC)
+        # The session ends at its last frame's time: for a replay that is the video's clock,
+        # like its start (the wall clock gave replays lengths of days).
+        ended = self._last_time or datetime.now(UTC)
         fps = self.source.fps
         meta = {
             "ended": ended.isoformat(),

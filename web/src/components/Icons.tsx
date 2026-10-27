@@ -33,3 +33,9 @@ export const DownloadIcon = () => (
   <Icon><path d="M12 4v11M8 11l4 4 4-4" /><path d="M5 20h14" /></Icon>
 )
 export const BackIcon = () => <Icon><path d="M15 6l-6 6 6 6" /></Icon>
+export const EditIcon = () => (
+  <Icon><path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16z" /><path d="M13.5 6.5l4 4" /></Icon>
+)
+export const TrashIcon = () => (
+  <Icon><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" /></Icon>
+)
