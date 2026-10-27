@@ -119,3 +119,30 @@ def test_camera_bump_does_not_create_fake_objects(synth_clip, tmp_path):
         assert t1 < start - pad or t0 > end + pad, "event overlaps the camera bump"
     # The jump itself must not show up as a burst of objects.
     assert len(events) <= len(truth.objects)
+
+
+def test_positions_are_measured_on_the_full_image():
+    """Detection at half size (4x fewer pixels) still measures positions on the full
+    image: half-size pixels gave 0.7 px errors, too coarse for the astrometry."""
+    w, h = 1920, 1080
+    yy, xx = np.mgrid[0:h, 0:w]
+    rng = np.random.default_rng(1)
+
+    def positions(scale: float) -> list[tuple[float, float, float, float]]:
+        det = MotionDetector(load_config(detector={"process_scale": scale}).detector, (w, h))
+        out = []
+        for i in range(30):
+            img = 15 + rng.normal(0, 1.5, (h, w))
+            x0, y0 = 700.3 + 3.1 * i, 400.7 + 1.3 * i  # a satellite at sub-pixel positions
+            if i >= 20:
+                box = np.s_[int(y0) - 8 : int(y0) + 9, int(x0) - 8 : int(x0) + 9]
+                img[box] += 80 * np.exp(-((xx[box] - x0) ** 2 + (yy[box] - y0) ** 2) / 2.9)
+            found = det.detect(Frame(np.clip(img, 0, 255).astype(np.uint8), i, T0))
+            if i >= 22:
+                (d,) = found
+                out.append((d.x, d.y, x0, y0))
+        return out
+
+    for scale in (0.5, 1.0):
+        errors = [np.hypot(x - x0, y - y0) for x, y, x0, y0 in positions(scale)]
+        assert max(errors) < 0.3, (scale, errors)

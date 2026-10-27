@@ -16,7 +16,16 @@ class _Section(BaseModel):
 class DetectorConfig(_Section):
     sensitivity: int = Field(5, ge=1, le=10, description="1 = only bright blobs, 10 = faintest")
     process_scale: float = Field(
-        1.0, gt=0, le=1, description="Downscale factor applied before detection (0.5 = half size)"
+        1.0,
+        gt=0,
+        le=1,
+        description="Downscale factor applied before detection (0.5 = half size: ~3x faster "
+        "on HD video, but faint satellites can be missed on a bright sky)",
+    )
+    gpu: bool = Field(
+        True,
+        description="Run the background model on the graphics card (OpenCL) when there is "
+        "one: the same detections, faster",
     )
     mog2_history: int = 500
     mog2_var_threshold: float = 35.0
@@ -129,6 +138,24 @@ class RulesConfig(_Section):
     stationary_speed: float = Field(
         0.0015, description="Diagonals/s below which a track is noise or a star"
     )
+    smooth_px: float = Field(
+        2.0,
+        gt=0,
+        description="Detections this far (median px) from where their neighbours put them "
+        "make a track doubtful; at twice this it is noise linked up",
+    )
+    plane_smooth_px: float = Field(3.0, gt=0, description="The same for aircraft (strobes)")
+    jump_share: float = Field(
+        0.5,
+        gt=0,
+        le=1,
+        description="A track covering this share of its path in one sudden jump is two "
+        "specks joined up (trusted fully below 60% of it)",
+    )
+    evidence_rate: float = Field(
+        0.3, gt=0, description="A satellite or aircraft is seen in this share of its frames..."
+    )
+    evidence_count: float = Field(40.0, gt=0, description="...or at least this many times")
 
 
 class ObserverConfig(_Section):

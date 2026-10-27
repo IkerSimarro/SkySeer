@@ -79,6 +79,9 @@ class Pipeline:
         self._pending: list[Track] = []  # finished tracks waiting out the padding
         self._first_index: int | None = None
         self._settle_until = -1
+        # Resuming a stopped analysis: tracks starting before this frame were already
+        # reported; they are followed again only as context for the star filter.
+        self.keep_from = 0
         self._shower_associator: Any = None
         self.alerter = Alerter(config.alerts, config.photometry)
 
@@ -103,6 +106,17 @@ class Pipeline:
         self.last_detections = detections
         self._pending.extend(self.tracker.update(detections, frame.index))
         return self._release(frame.index)
+
+    @property
+    def next_event_id(self) -> int:
+        return self._next_event_id
+
+    def settled_frame(self, index: int) -> int:
+        """After processing frame ``index``: every track starting before the returned
+        frame has been reported or dropped, so an analysis stopped now can resume from
+        there without losing or repeating an event."""
+        unfinished = (*self.tracker.active_tracks, *self._pending)
+        return min([index + 1, *(t.first_frame for t in unfinished)])
 
     def finish(self) -> list[Event]:
         """Flush tracks still open when the stream ends."""
@@ -171,7 +185,7 @@ class Pipeline:
         kept = [t for t in finished if self._passes_filter(t)]
         self._recent.extend(kept)
         context = list(self._recent) + self.tracker.active_tracks
-        return [self._classify(t, context) for t in kept]
+        return [self._classify(t, context) for t in kept if t.first_frame >= self.keep_from]
 
     def _passes_filter(self, track: Track) -> bool:
         f = self.config.filter
@@ -290,12 +304,22 @@ def run(
     stats: dict[str, Any] | None = None,
     clips: ClipRecorder | None = None,
     aircraft: AircraftIdentifier | None = None,
+    keep_from: int = 0,
+    first_event_id: int = 1,
+    checkpoint: Callable[[Pipeline, int], None] | None = None,
+    checkpoint_every: int = 0,
 ) -> Iterator[Event]:
     """Run the pipeline over a whole source, yielding events as they complete.
 
     If ``stats`` is given it is filled at the end with the disturbances that were ignored
     (camera moved / scene changed) and how many tracks they invalidated. If ``clips`` is
     given, every frame is buffered and each event gets a clip and images (``Event.media``).
+
+    To resume a stopped analysis, start the source a little before ``keep_from`` (the
+    background model and the star filter's context need it): events starting earlier are
+    not reported again, and new ones are numbered from ``first_event_id``.
+    ``checkpoint(pipeline, frame)`` is called every ``checkpoint_every`` frames, once
+    the clips queued so far are written.
     """
     pipeline = Pipeline(
         config,
@@ -306,6 +330,8 @@ def run(
         identifier,
         aircraft,
     )
+    pipeline.keep_from = keep_from
+    pipeline._next_event_id = first_event_id
     try:
         for frame in source:
             if clips is not None:
@@ -316,6 +342,10 @@ def run(
                 yield event
             if progress and frame.index % 100 == 0:
                 progress(frame.index)
+            if checkpoint is not None and checkpoint_every and frame.index % checkpoint_every == 0:
+                if clips is not None:
+                    clips.wait()
+                checkpoint(pipeline, frame.index)
         for event in pipeline.finish():
             if clips is not None:
                 clips.save(event)

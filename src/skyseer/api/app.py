@@ -15,6 +15,7 @@ import shutil
 import threading
 import time
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated, Any, Protocol
 
@@ -42,6 +43,7 @@ from ..config import Config
 from ..reports import REAL, events_csv, night_report, summary
 from ..storage import LABELS, Store
 from .jobs import Jobs
+from .worker import SPEEDS
 
 STATIC_DIR = Path(__file__).parent / "static"
 VIDEO_SUFFIXES = {".mp4", ".avi", ".mov", ".mkv", ".m4v", ".webm", ".mpg", ".mpeg", ".ts"}
@@ -150,9 +152,15 @@ def create_app(
     station: Station | None = None,
     static_dir: Path | None = STATIC_DIR,
 ) -> FastAPI:
-    app = FastAPI(title="SkySeer", version=__version__, docs_url="/api/docs")
-    started = time.time()
     jobs = Jobs(config, store)
+
+    @asynccontextmanager
+    async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+        yield
+        jobs.close()  # running analyses stop at their last save, to resume later
+
+    app = FastAPI(title="SkySeer", version=__version__, docs_url="/api/docs", lifespan=lifespan)
+    started = time.time()
     clean_lock = threading.Lock()  # one clean clip made at a time (and never twice)
     uploads = Path(config.storage.database).parent / "uploads"
 
@@ -332,14 +340,19 @@ def create_app(
         lon: Annotated[float | None, Form()] = None,
         elevation: Annotated[float, Form()] = 0.0,
         sky: Annotated[bool, Form()] = True,
+        speed: Annotated[str, Form()] = "full",
     ) -> dict[str, Any]:
-        """Upload a recording to analyse in the background (see /api/jobs)."""
+        """Upload a recording to analyse in the background (see /api/jobs). ``speed`` is
+        full (detail) or quick (a half-size picture: faster, may miss faint satellites).
+        Both run at low priority on half the cores, so the computer stays usable."""
         import re
         from datetime import UTC, datetime
 
         name = Path(file.filename or "video").name
         if Path(name).suffix.lower() not in VIDEO_SUFFIXES:
             raise HTTPException(400, f"Not a video file: {name}")
+        if speed not in SPEEDS:
+            raise HTTPException(400, f"speed must be one of {SPEEDS}")
         when = None
         if start_time:
             try:
@@ -354,7 +367,7 @@ def create_app(
         with open(dest, "wb") as fh:  # in chunks: night recordings can be gigabytes
             while chunk := await file.read(1 << 20):
                 fh.write(chunk)
-        return jobs.submit(dest, when, lat, lon, elevation, sky)
+        return jobs.submit(dest, when, lat, lon, elevation, sky, speed)
 
     @app.get("/api/jobs")
     def get_jobs() -> list[dict[str, Any]]:
@@ -366,6 +379,28 @@ def create_app(
         if job is None:
             raise HTTPException(404, f"No job {job_id}")
         return job
+
+    @app.post("/api/jobs/{job_id}/stop")
+    def stop_job(job_id: str) -> dict[str, Any]:
+        """Stop an analysis; it keeps its last save (about every 5 min of video)."""
+        job = jobs.stop(job_id)
+        if job is None:
+            raise HTTPException(404, f"No job {job_id}")
+        return job
+
+    @app.post("/api/jobs/{job_id}/resume")
+    def resume_job(job_id: str) -> dict[str, Any]:
+        job = jobs.resume(job_id)
+        if job is None:
+            raise HTTPException(409, "Only a stopped analysis can be resumed")
+        return job
+
+    @app.delete("/api/jobs/{job_id}")
+    def delete_job(job_id: str) -> dict[str, bool]:
+        """Take an analysis off the list (its files and session stay)."""
+        if not jobs.remove(job_id):
+            raise HTTPException(409, "Only a finished, failed or stopped analysis can be removed")
+        return {"removed": True}
 
     @app.get("/media/{session_id}/{path:path}")
     def get_media(session_id: int, path: str) -> FileResponse:

@@ -147,10 +147,12 @@ Every number below has a test, a benchmark or a recorded experiment behind it.
 | Meteor showers | ~96% of shower meteors assigned correctly; ~5% of sporadic meteors matched by chance | Monte Carlo: 2,000 meteors with realistic radiant and speed scatter |
 | Meteor brightness | within ±0.1 magnitude | simulated meteors with known magnitudes |
 | Shake correction | 0.05 px accuracy, 0.7 ms/frame; false alarms 45 → 0 (2 px wobble) and 416 → 0 (4 px) | simulated wobble and knocks |
+| Noise linked into fake objects | 467 → 71 in 10 min of a dark, compressed 1080p recording; blind-labelled real footage: same 27/31 real objects, junk called real 13 → 7; 23/23 real satellite passes kept | smooth-motion, sudden-jump and evidence tests ([details](docs/classifier.md)) |
 | Learned classifier (optional) | 96.7% vs 69.5% for the rules on 150 hard simulated nights, but 19/31 vs 27/31 on real footage | held-out simulations; 224 tracks labelled by eye without seeing either answer ([details](docs/classifier.md)) |
 | Aircraft identification | 150/150 simulated flights named among 20 others, broadcasts every 10 s (149/150 every 5 s); camera clock error measured to 0.04 s median; 0 of 90 random paths named | random flights over Madrid with GNSS-like noise and up to 2.5 s of clock error |
 | Aircraft direction from a broadcast | within 1″ of Skyfield's independent WGS84 calculation | 50 random positions |
 | Sun position (night schedule) | median 0.003°, max 0.012° from NASA JPL DE421; Madrid dusk within 1.5 s | 500 random times and places |
+| Analysing a 1080p30 recording | 30-34 frames/s, about the video's own speed (was 12-19); exactly the same tracks as before on the processor | two real 4.7 h and 6.4 h recordings on an Intel i7-7700 ([details](docs/performance.md#analysing-recordings-on-a-pc-october-2026)) |
 | Throughput at the Pi camera's 2028×1520 | 23.8 frames/s full, 41.5 frames/s half resolution, same objects found | whole live station on an Intel i7-7700; the Pi 5 is not yet measured ([details](docs/performance.md)) |
 
 ## Real skies

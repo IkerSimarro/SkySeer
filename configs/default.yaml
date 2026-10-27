@@ -26,7 +26,9 @@ stabilise:                    # camera-shake correction, measured from the stars
 
 detector:
   sensitivity: 5              # 1-10; higher finds fainter, smaller blobs (and more noise)
-  process_scale: 1.0          # downscale before detection, e.g. 0.5 on a Raspberry Pi
+  process_scale: 1.0          # downscale before detection: 0.5 = ~3x faster on HD video,
+                              # but faint satellites can be missed on a bright sky
+  gpu: true                   # background model on the graphics card (OpenCL) if there is one
   mog2_history: 500           # frames of background memory
   mog2_var_threshold: 35.0    # lower = more sensitive to dim changes
   blur_kernel: 3              # 1 = none; more blur dims tiny satellites
@@ -75,6 +77,12 @@ rules:                        # heuristic baseline classifier
   direction_change_deg: 30.0
   junk_base_score: 0.1
   stationary_speed: 0.0015          # slower tracks are noise or stars
+  # One object, not noise linked up by the tracker:
+  smooth_px: 2.0                    # median px off where neighbours put each point (2x: noise)
+  plane_smooth_px: 3.0              # the same for aircraft (strobes)
+  jump_share: 0.5                   # share of the path covered in one sudden jump: two specks
+  evidence_rate: 0.3                # satellites/aircraft are seen in this share of frames...
+  evidence_count: 40.0              # ...or at least this many times
 
 observer:                     # where the camera is (GPS fills this in on the station)
   latitude: null              # degrees, north positive

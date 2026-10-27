@@ -58,7 +58,38 @@ FEATURE_NAMES: tuple[str, ...] = (
     "snr_median",
     "snr_max",
     "snr_cv",
+    # Is it one object moving, or noise linked up by the tracker?
+    "motion_residual",
+    "sudden_jump",
 )
+
+
+JUMP_PACE = 3.0  # a step this many times faster than the track's average is a jump
+
+
+def motion_residual(frames: np.ndarray, pos: np.ndarray) -> float:
+    """Median distance (px) of each inner detection from where its two neighbours put it,
+    interpolating in time. A real object moves smoothly, so this is its centroid noise:
+    0.2-0.5 px for 23 real satellite passes in compressed 1080p video. Noise the tracker
+    picked up lands anywhere in its search window (8-21 px for noise taken for meteors)."""
+    if len(pos) < 3:
+        return 0.0
+    w = (frames[1:-1] - frames[:-2]) / (frames[2:] - frames[:-2])
+    predicted = pos[:-2] + w[:, None] * (pos[2:] - pos[:-2])
+    return float(np.median(np.hypot(*(pos[1:-1] - predicted).T)))
+
+
+def sudden_jump(frames: np.ndarray, step_len: np.ndarray) -> float:
+    """Largest share of the path covered by one step taken much faster than the track's
+    average pace. A track that sits at one spot, jumps, then sits at another is two
+    specks (twinkling stars, noise) joined up, not an object; a real object that fades
+    for a while and reappears further on moves at its usual pace across the gap."""
+    total, span = float(step_len.sum()), float(frames[-1] - frames[0])
+    if len(step_len) < 2 or total <= 0 or span <= 0:
+        return 0.0
+    share = step_len / total
+    fast = share / (np.diff(frames) / span) > JUMP_PACE
+    return float(share[fast].max()) if fast.any() else 0.0
 
 
 def path_deviation(pos: np.ndarray, percentile: float = 80.0) -> float:
@@ -193,6 +224,8 @@ def extract_features(
         "snr_median": float(np.median(snr)),
         "snr_max": float(snr.max()),
         "snr_cv": float(snr.std() / snr.mean()) if snr.mean() > 0 else 0.0,
+        "motion_residual": motion_residual(frames, pos),
+        "sudden_jump": sudden_jump(frames, step_len),
         **flash_features(track),
         "speed_frac_per_s": avg_speed * track.fps / diag,
         # ~1 on clear sky; well above 3 when the "object" is moving cloud texture.

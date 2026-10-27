@@ -42,6 +42,17 @@ same labels give: rules 27/31 real objects right (23/24 satellites) with 13 junk
 called real; model 19/31 with 11 (`tools/score_labels.py --labelled-run`). The rules
 still win.
 
+The rules then gained three tests against noise the tracker links into tracks
+(October 2026, found on a dark, compressed 1080p recording where they cut false objects
+from 467 to 71 in 10 minutes): points must lie where their neighbours put them
+(`motion_residual`, px), there must be no sudden jump between two spots (`sudden_jump`),
+and a satellite or aircraft must be seen in 30% of its frames or 40 times. Re-analysed,
+the same labels give **27/31 real objects right (23/24 satellites) with 7 junk tracks
+called real** instead of 13. The limits come from measurements on two other recordings,
+but these labels were also looked at while choosing between versions of the tests, so
+they are not a fully independent check. The learned model keeps its own measurements; its
+answers change only through the rule scores it also reads.
+
 Real-footage labels: a random sample of 200 tracks plus every track either classifier
 called a real object, labelled **blind** (from trail images, without seeing either
 answer); 21 tracks too ambiguous to call were left out. Score with

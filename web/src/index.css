@@ -272,3 +272,15 @@ input[type='file'], input[type='datetime-local'] {
 .icon-btn svg { width: 16px; height: 16px; }
 .remove-box { border-top: 1px solid var(--line); padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; font-size: 13px; background: rgba(255, 93, 108, 0.05); }
 .btn.danger { border-color: var(--bad); color: var(--bad); }
+
+/* Upload page: speed choice and analysis controls */
+.speed { border: 0; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
+.speed legend { padding: 0; margin-bottom: 6px; }
+.segmented { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; width: fit-content; }
+.segmented button { all: unset; cursor: pointer; padding: 6px 14px; font-size: 13px; color: var(--muted); }
+.segmented button + button { border-left: 1px solid var(--line); }
+.segmented button.active { background: var(--accent); color: #fff; }
+.segmented button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.chip.stopped { color: var(--muted); }
+.job .event-row { align-items: center; gap: 8px; }
+.job .event-row strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }

@@ -28,6 +28,11 @@ class FrameSource(Protocol):
     def close(self) -> None: ...
 
 
+# Threads for decoding video files: 0 lets FFmpeg choose (about one per core). A
+# background analysis lowers it (api/worker.py).
+DECODE_THREADS = 0
+
+
 class VideoFile:
     """A video file read with PyAV (FFmpeg): decoded on several threads, and straight to
     greyscale when colour isn't needed (on 1080p H.264, 2.7 ms a frame against 10.5 ms
@@ -43,6 +48,8 @@ class VideoFile:
             raise ValueError(f"Could not open video file: {self.path}") from exc
         s = self._stream
         s.thread_type = "AUTO"  # decode several frames at once
+        if DECODE_THREADS:
+            s.thread_count = DECODE_THREADS
         self.fps = float(s.average_rate or s.guessed_rate or 30.0)
         seconds = (
             float(s.duration * s.time_base)
@@ -103,11 +110,15 @@ class FileSource:
         start_time: datetime | None = None,
         from_s: float = 0.0,
         to_s: float | None = None,
-        gray: bool = False,
+        gray: bool = True,
     ):
         """``from_s``/``to_s`` limit processing to part of the video. Frame indices and
-        timestamps stay those of the full video. ``gray`` yields 2-D greyscale frames
-        (faster; all the analysis needs unless clips are kept in colour)."""
+        timestamps stay those of the full video. Frames are 2-D greyscale, all the
+        analysis needs (and faster to decode), unless ``gray=False`` (colour clips).
+
+        Star calibration reads the same greyscale: for some videos the decoder's own
+        greyscale and a converted colour frame differ slightly (0.06 mag in zero point on
+        OpenCV-written files), which would shift every magnitude."""
         self.path = Path(path)
         self.from_s, self.to_s = from_s, to_s
         self.gray = gray

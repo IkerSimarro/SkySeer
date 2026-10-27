@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import cv2
 import numpy as np
 
@@ -9,11 +11,29 @@ from .config import DetectorConfig
 from .models import Detection, Frame
 
 
+def _median(a: np.ndarray) -> float:
+    """``np.median`` of a small 1-D array, the same value without its overhead (it was
+    called twice for every blob, hundreds of times a frame on a noisy sky)."""
+    s = np.sort(a)
+    h = s.size // 2
+    return float(s[h]) if s.size % 2 else (float(s[h - 1]) + float(s[h])) / 2
+
+
+def _centroid(weights: np.ndarray) -> tuple[float, float, float]:
+    """(x, y) of the weighted centre within ``weights``, and the total weight."""
+    total = float(weights.sum())
+    x = float(weights.sum(axis=0) @ np.arange(weights.shape[1])) / total
+    y = float(weights.sum(axis=1) @ np.arange(weights.shape[0])) / total
+    return x, y, total
+
+
 class MotionDetector:
     """Finds moving blobs with MOG2 background subtraction.
 
-    Detection can run on a downscaled image (``process_scale``) to save CPU on small
-    boards; coordinates, boxes and areas are always reported in full-resolution pixels.
+    Detection can run on a downscaled image (``process_scale``) to save CPU: the reduced
+    image only finds the blobs. Positions and brightness are measured on the
+    full-resolution image, and coordinates, boxes and areas are reported in
+    full-resolution pixels.
     """
 
     @staticmethod
@@ -37,6 +57,16 @@ class MotionDetector:
             varThreshold=self.config.mog2_var_threshold,
             detectShadows=False,
         )
+
+    def _apply(self, image: np.ndarray) -> np.ndarray:
+        """The background model's mask of changed pixels: on the graphics card when there
+        is one (the same mask to within rounding: 0.6 of 2 million pixels differed per
+        1080p frame, and 4x faster), else on the processor."""
+        if self.gpu:
+            # OpenCV's type hints don't know that a UMat goes in and comes back out.
+            on_gpu: Any = self._subtractor.apply(cv2.UMat(image))  # type: ignore[call-overload]
+            return np.asarray(on_gpu.get())
+        return self._subtractor.apply(image)
 
     @property
     def changed_fraction(self) -> float:
@@ -63,6 +93,7 @@ class MotionDetector:
         self._max_area = config.max_area_fraction * width * height * area_factor
         self.last_mask: np.ndarray | None = None
         self._noise: float | None = None
+        self.gpu = config.gpu and cv2.ocl.haveOpenCL()
 
     def detect(self, frame: Frame, border: int = 0) -> list[Detection]:
         """Moving blobs in ``frame``. ``border`` px at each edge are ignored (after
@@ -77,7 +108,7 @@ class MotionDetector:
         k = self.config.blur_kernel
         blurred = cv2.GaussianBlur(gray, (k, k), 0) if k > 1 else gray
 
-        mask = self._subtractor.apply(blurred)
+        mask = self._apply(blurred)
         if self.config.morph_kernel > 1:
             mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, self._kernel)
             mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, self._kernel)
@@ -94,6 +125,7 @@ class MotionDetector:
         grouped = mask if self._group_kernel is None else cv2.dilate(mask, self._group_kernel)
         n, labels, stats, _ = cv2.connectedComponentsWithStats(grouped, connectivity=8)
         inv = 1.0 / self.scale
+        saturation = self._saturation_level(gray_full)
         detections: list[Detection] = []
         if n > 1 and (self._noise is None or frame.index % 15 == 0):
             self._noise = self._sky_noise(gray)
@@ -110,11 +142,8 @@ class MotionDetector:
             # Brightness-weighted centroid: sub-pixel positions for the astrometry.
             comp = group[rows[0] : rows[-1] + 1, cols[0] : cols[-1] + 1]
             roi_w = gray[y : y + h, x : x + w].astype(np.float32)
-            weights = np.where(comp, roi_w - roi_w[comp].min() + 1.0, 0.0)
-            yy, xx = np.mgrid[0:h, 0:w]
-            total = float(weights.sum())
-            cx = x + float((xx * weights).sum()) / total
-            cy = y + float((yy * weights).sum()) / total
+            dx, dy, _ = _centroid(np.where(comp, roi_w - roi_w[comp].min() + 1.0, 0.0))
+            cx, cy = x + dx, y + dy
 
             # Contrast against a ring of sky around the blob (not the whole frame), so
             # strobe flashes stand out even when the sky brightness varies.
@@ -122,17 +151,29 @@ class MotionDetector:
             ring = gray[y0 : y + h + 3, x0 : x + w + 3]
             inside = labels[y0 : y + h + 3, x0 : x + w + 3] == i
             around = ring[~inside]
-            sky = float(np.median(around)) if around.size else float(ring.min())
+            sky = _median(around) if around.size else float(ring.min())
             contrast = float(roi_w[comp].max()) - sky
             # Spread of the surroundings relative to this camera's own sky noise: ~1 on a
             # clear sky whatever the camera, several times higher inside cloud texture.
-            spread = 1.4826 * float(np.median(np.abs(around - sky))) if around.size else 0.0
+            spread = 1.4826 * _median(np.abs(around - sky)) if around.size else 0.0
             texture = spread / max(self._noise or 0.0, 0.5)
 
             # Map back to full resolution for brightness and reporting.
             fx, fy = int(x * inv), int(y * inv)
             fw, fh = max(1, int(round(w * inv))), max(1, int(round(h * inv)))
             roi = gray_full[fy : fy + fh, fx : fx + fw]
+            if self.scale < 1.0 and roi.size:
+                # The same centroid on the full image's pixels: the reduced image's
+                # pixels are 1/scale times coarser, too coarse for the astrometry.
+                member = cv2.resize(
+                    comp.astype(np.uint8), roi.shape[::-1], interpolation=cv2.INTER_NEAREST
+                ).astype(bool)
+                if member.any():
+                    full_w = roi.astype(np.float32)
+                    dx, dy, _ = _centroid(
+                        np.where(member, full_w - full_w[member].min() + 1.0, 0.0)
+                    )
+                    cx, cy = (fx + dx) * self.scale, (fy + dy) * self.scale
             # Total brightness above the local sky in a box 2 px around the blob, at full
             # resolution, comparable with the star photometry used for the zero point.
             bx0, by0 = max(0, fx - 2), max(0, fy - 2)
@@ -152,7 +193,7 @@ class MotionDetector:
                     contrast=contrast,
                     texture=texture,
                     flux=flux,
-                    saturated=peak >= self._saturation_level(gray_full),
+                    saturated=peak >= saturation,
                     snr=contrast / max(self._noise or 0.0, 0.5),
                 )
             )

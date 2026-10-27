@@ -35,6 +35,9 @@ def step(name: str, cmd: list[str]) -> bool:
     ok = proc.returncode == 0
     print(f"{'PASS' if ok else 'FAIL'}  {name}  ({time.perf_counter() - t:.0f}s)")
     if not ok:
+        # Test output can hold characters a Windows console can't show: replace them
+        # rather than crash before the failure is shown.
+        sys.stdout.reconfigure(errors="replace")  # type: ignore[union-attr]
         print((proc.stdout + proc.stderr).strip()[-3000:])
     return ok
 

@@ -205,15 +205,19 @@ def load_sky_image(
     at_seconds: float = 0.0,
     seconds: float = 2.0,
     max_frames: int = 30,
+    gray: bool = True,
 ) -> tuple[np.ndarray, datetime]:
-    """A clean grayscale star image and its UTC time, from a video (stacked) or a photo."""
+    """A clean grayscale star image and its UTC time, from a video (stacked) or a photo.
+    ``gray`` must match how the analysis reads the video (``FileSource``), so stars and
+    objects are measured on the same greyscale."""
     import cv2
 
     from ..sources import FileSource
 
     path = Path(path)
     if path.suffix.lower() in VIDEO_SUFFIXES:
-        source = FileSource(path, start_time)
+        # It seeks to ``at_seconds`` (not decoding everything before it).
+        source = FileSource(path, start_time, from_s=at_seconds, gray=gray)
         first = int(at_seconds * source.fps)
         last = first + max(1, int(seconds * source.fps))
         step = max(1, (last - first) // max_frames)
@@ -223,7 +227,8 @@ def load_sky_image(
                 if frame.index >= last:
                     break
                 if frame.index >= first and (frame.index - first) % step == 0:
-                    frames.append(cv2.cvtColor(frame.image, cv2.COLOR_BGR2GRAY))
+                    pic = frame.image
+                    frames.append(pic if pic.ndim == 2 else cv2.cvtColor(pic, cv2.COLOR_BGR2GRAY))
                     times.append(frame.timestamp)
         finally:
             source.close()

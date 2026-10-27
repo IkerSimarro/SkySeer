@@ -54,8 +54,9 @@ class _ActiveTrack:
         return float(np.median([d.area for d in self.track.detections[-10:]]))
 
     def predicted_position(self, frame_index: int) -> np.ndarray:
-        state, _ = self.kf.predict(frame_index - self.last_frame)
-        return state[:2]
+        # The filter's prediction, x + dt * v, without its uncertainty (not needed here).
+        dt = frame_index - self.last_frame
+        return self.kf.state[:2] + dt * self.kf.state[2:]
 
     def add(self, det: Detection) -> None:
         dt = det.frame_index - self.last_frame
@@ -128,11 +129,13 @@ class Tracker:
     def _associate(self, detections: list[Detection], frame_index: int) -> None:
         unmatched = set(range(len(detections)))
         if self._active and detections:
-            cost = np.full((len(self._active), len(detections)), _UNMATCHABLE)
+            # Every track against every detection at once (a busy sky can have hundreds
+            # of each): distance to each track's predicted position, within its window.
             det_xy = np.array([(d.x, d.y) for d in detections])
-            for i, active in enumerate(self._active):
-                dist = np.linalg.norm(det_xy - active.predicted_position(frame_index), axis=1)
-                cost[i] = np.where(dist <= self._gate(active, frame_index), dist, _UNMATCHABLE)
+            predicted = np.array([a.predicted_position(frame_index) for a in self._active])
+            gates = np.array([self._gate(a, frame_index) for a in self._active])
+            dist = np.linalg.norm(det_xy[None, :, :] - predicted[:, None, :], axis=2)
+            cost = np.where(dist <= gates[:, None], dist, _UNMATCHABLE)
             for c in self._merged(detections, cost):
                 cost[:, c] = _UNMATCHABLE  # neither object's position: both coast past it
                 unmatched.discard(c)
@@ -157,12 +160,13 @@ class Tracker:
         ratio = self.config.merge_area_ratio
         if ratio <= 0:
             return []
-        established = [i for i, a in enumerate(self._active) if a.hits >= 3]
+        established = np.array([i for i, a in enumerate(self._active) if a.hits >= 3], dtype=int)
+        if len(established) < 2:
+            return []
+        near = cost[established] < _UNMATCHABLE  # (established tracks, detections)
         merged = []
-        for c, det in enumerate(detections):
-            near = [i for i in established if cost[i, c] < _UNMATCHABLE]
-            if len(near) >= 2 and det.area > ratio * max(
-                self._active[i].typical_area() for i in near
-            ):
-                merged.append(c)
+        for c in np.flatnonzero(near.sum(axis=0) >= 2):  # in two tracks' windows
+            tracks = established[near[:, c]]
+            if detections[c].area > ratio * max(self._active[i].typical_area() for i in tracks):
+                merged.append(int(c))
         return merged

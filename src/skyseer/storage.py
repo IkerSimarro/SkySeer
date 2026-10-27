@@ -48,6 +48,12 @@ CREATE INDEX IF NOT EXISTS events_time ON events (start_time);
 CREATE INDEX IF NOT EXISTS events_label ON events (label);
 -- Run folders a person removed from SkySeer: never imported again.
 CREATE TABLE IF NOT EXISTS removed_runs (folder TEXT PRIMARY KEY);
+-- Analyses of uploaded videos (api/jobs.py), kept across restarts.
+CREATE TABLE IF NOT EXISTS jobs (
+    id TEXT PRIMARY KEY,
+    created TEXT NOT NULL,
+    data TEXT NOT NULL                  -- the job as JSON: state, progress, video, ...
+);
 """
 
 
@@ -76,6 +82,24 @@ class Store:
                 yield db
         finally:
             db.close()
+
+    # ---------------------------------------------------------------- jobs
+    def save_job(self, job: dict[str, Any]) -> None:
+        with self._lock, self._connect() as db:
+            db.execute(
+                "INSERT INTO jobs (id, created, data) VALUES (?, ?, ?) "
+                "ON CONFLICT (id) DO UPDATE SET data = excluded.data",
+                (job["id"], job["created"], json.dumps(job)),
+            )
+
+    def jobs(self) -> list[dict[str, Any]]:
+        with self._connect() as db:
+            rows = db.execute("SELECT data FROM jobs ORDER BY created DESC").fetchall()
+        return [json.loads(r["data"]) for r in rows]
+
+    def delete_job(self, job_id: str) -> None:
+        with self._lock, self._connect() as db:
+            db.execute("DELETE FROM jobs WHERE id = ?", (job_id,))
 
     # ---------------------------------------------------------------- sessions
     def add_session(

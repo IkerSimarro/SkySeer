@@ -9,6 +9,35 @@ The first complete release: SkySeer rebuilt from a Streamlit prototype into a te
 installable system, with an astronomy layer, a web dashboard and the software for an
 unattended Raspberry Pi station.
 
+### Faster analysis that keeps the computer usable (2026-10-27)
+- A 1080p30 recording now analyses at about its own speed: 19.4 → 33.7 frames/s on a
+  dark sky and 12.2 → 30.3 on a light-polluted one with many satellites (Intel
+  i7-7700, clips included), so 4.2 h instead of 7.3 h, and 6.1 h instead of 15.8 h.
+  The star filter no longer recomputes every track's motion for each comparison
+  (27.1 → 4.3 ms a frame), tracking compares all tracks at once (13.8 → 5.1 ms), the
+  background model runs on the graphics card when there is one (OpenCL), and video is
+  read with PyAV on several threads straight to greyscale.
+- Same results: on 5 minutes of real video the processor path gives exactly the same
+  5,404 tracks as before; the graphics card's rounding changes 3%, nearly all noise,
+  and all 24 long satellite passes are found either way.
+- Dashboard analyses run in their own low-priority process on half the processor's
+  threads (all 8 were no faster than 4), can be stopped and resumed (progress is saved
+  every 5 minutes of video), and the list of analyses survives a restart. "Quick look"
+  searches a half-size picture: 2.6x faster, but it found only 10 of 24 faint
+  satellites on a bright sky, so it is not the default.
+- Detecting on a smaller picture now measures positions on the full one: 0.08 px error
+  on 1080p test scenes instead of 0.71 px (it matters for the Pi profile's half size).
+- Noise linked into tracks is no longer reported as satellites and meteors. Three new
+  tests: the points must lie where their neighbours put them (smooth motion), with no
+  sudden jump between two spots, and a satellite or aircraft must be seen in 30% of its
+  frames or 40 times. On a dark, heavily compressed recording: 467 → 71 false objects in
+  10 minutes (the rest are sparse specks these tests can't separate from a faint
+  satellite). All 23 real satellite passes of another recording are kept, and the blind
+  by-eye labels give the same 27/31 real objects with 7 junk tracks called real, not 13.
+  The benchmark stays at 100% / 100% / 0.
+- Calibration and detection always read the same greyscale (on OpenCV-written videos the
+  two kinds differed by 0.06 mag in zero point, shifting every magnitude).
+
 ### A station kit under budget (2026-10-21)
 - `docs/hardware.md` now lists a budget kit of about €170-220 (Raspberry Pi prices rose
   three times since December 2025): a 2 GB Pi 5, the HQ camera and 6 mm f/1.2 lens, a
