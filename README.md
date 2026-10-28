@@ -245,7 +245,7 @@ unattended dusk-to-dawn station). To set up a Raspberry Pi, see
 
 ## Engineering
 
-- **128 automated tests:**
+- **175 automated tests:**
   - unit tests
   - end-to-end runs on synthetic video with known truth
   - simulated skies from the real star catalogue
@@ -254,6 +254,10 @@ unattended dusk-to-dawn station). To set up a Raspberry Pi, see
   - a real web server streaming events over a WebSocket
 - **CI on Linux and Windows** (Python 3.11 and 3.12): lint (ruff), type checks (mypy),
   tests with coverage, dashboard lint and build, and the benchmark.
+- **CI on the Raspberry Pi's software:** 64-bit ARM with Raspberry Pi OS's own packages
+  (trixie and bookworm), the real camera library, the install script's own Python step
+  and every test. It found two problems the Pi would have hit: numpy 2 breaking the
+  camera library's JPEG code on bookworm, and an old PyAV leaving phone videos sideways.
 - **A quality gate** (`tools/validate.py`) compares accuracy with an accepted baseline
   before every commit, so a change can't quietly make detection worse.
 - **Typed configuration:** every threshold is a documented setting in

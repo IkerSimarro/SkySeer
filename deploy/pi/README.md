@@ -6,8 +6,10 @@ the dashboard on your home network. Parts list and build notes: [docs/hardware.m
 
 ## 1. Prepare the Pi
 
-1. Flash **Raspberry Pi OS (64-bit, Bookworm)** with Raspberry Pi Imager. In its settings
-   set a hostname (e.g. `skyseer`), your Wi-Fi and SSH.
+1. Flash **Raspberry Pi OS (64-bit)** with Raspberry Pi Imager: the current version
+   (trixie) is best; bookworm works too. CI installs and tests SkySeer on both, with
+   their own packages. In Imager's settings set a hostname (e.g. `skyseer`), your Wi-Fi
+   and SSH.
 2. Connect the HQ camera to a camera port (power off first) and boot. Check it is seen:
    ```
    rpicam-hello --list-cameras
