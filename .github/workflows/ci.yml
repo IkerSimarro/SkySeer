@@ -37,6 +37,55 @@ jobs:
         if: failure() && hashFiles('pytest.xml') != ''
         run: uv run python tools/ci_failures.py pytest.xml
 
+  pi:
+    # The Pi's own software: 64-bit ARM, Raspberry Pi OS packages (including the real
+    # camera library) and SkySeer installed the way deploy/pi/install.sh does it.
+    name: pi (Raspberry Pi OS ${{ matrix.release }})
+    runs-on: ubuntu-24.04-arm
+    container: debian:${{ matrix.release }}
+    strategy:
+      fail-fast: false
+      matrix:
+        release: [trixie, bookworm]
+    env:
+      DEBIAN_FRONTEND: noninteractive
+    steps:
+      - name: Raspberry Pi package archive
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends ca-certificates curl gpg
+          curl -fsSL https://archive.raspberrypi.com/debian/raspberrypi.gpg.key             | gpg --dearmor -o /usr/share/keyrings/raspberrypi.gpg
+          echo "deb [signed-by=/usr/share/keyrings/raspberrypi.gpg] http://archive.raspberrypi.com/debian/ ${{ matrix.release }} main"             > /etc/apt/sources.list.d/raspberrypi.list
+          apt-get update
+      - name: System packages (as install.sh)
+        run: apt-get install -y python3-picamera2 python3-venv python3-dev git
+      - uses: actions/checkout@v7
+      - name: Python environment (as install.sh)
+        run: |
+          python3 --version
+          python3 -m venv --system-site-packages .venv
+          .venv/bin/pip install --upgrade pip
+          .venv/bin/pip install -e . --group dev
+      - name: Camera library loads next to SkySeer's packages
+        run: |
+          .venv/bin/python -c "
+          import platform, numpy, cv2, av, picamera2, subprocess
+          apt = subprocess.run(['dpkg-query', '-W', '-f=\${Version}', 'python3-picamera2'],
+                               capture_output=True, text=True).stdout
+          print('::notice title=Pi environment::Python', platform.python_version(),
+                platform.machine(), '| numpy', numpy.__version__, 'from', numpy.__file__,
+                '| opencv', cv2.__version__, '| av', av.__version__, '| picamera2', apt)"
+      - name: Cache star catalogue and solver databases
+        uses: actions/cache@v6
+        with:
+          path: data/astro
+          key: astro-pi-${{ hashFiles('src/skyseer/astro/catalog.py', 'src/skyseer/astro/_vendor/tetra3.py') }}
+      - name: Tests
+        run: .venv/bin/python -m pytest -q -rs --junitxml=pytest.xml
+      - name: Show failed tests
+        if: failure() && hashFiles('pytest.xml') != ''
+        run: .venv/bin/python tools/ci_failures.py pytest.xml
+
   dashboard:
     runs-on: ubuntu-latest
     defaults:

@@ -1,5 +1,8 @@
-"""The Raspberry Pi camera source, against a stand-in for picamera2 (no Pi needed)."""
+"""The Raspberry Pi camera source, against a stand-in for picamera2 (no Pi needed), and
+against the real camera library where it is installed (Raspberry Pi OS, and the CI job
+that reproduces it)."""
 
+import inspect
 import sys
 import time
 import types
@@ -106,3 +109,26 @@ def test_frames_are_brightness_only_with_sensor_timestamps(fake_picamera2):
     assert abs((times[0] - datetime.now(UTC)).total_seconds()) < 1.0
     assert [f.index for f in frames] == list(range(20))
     source.close()
+
+
+def test_the_real_camera_library_takes_these_settings():
+    """Every control the driver sets exists in libcamera, and picamera2 has the calls it
+    makes. Runs only where the real library is installed (no camera needed)."""
+    picamera2 = pytest.importorskip("picamera2")
+    from libcamera import controls as lc
+    from picamera2.request import CompletedRequest
+
+    source = PiCameraSource.__new__(PiCameraSource)  # its settings, without a camera
+    source.settings, source.exposure_us = PiCameraSettings(), 95_000
+    known = set(dir(lc)) | set(dir(lc.draft))
+    assert [name for name in source.controls() if name not in known] == []
+    noise = getattr(lc, "NoiseReductionModeEnum", None) or lc.draft.NoiseReductionModeEnum
+    assert noise.Off == source.controls()["NoiseReductionMode"]
+
+    camera = picamera2.Picamera2
+    takes = inspect.signature(camera.create_video_configuration).parameters
+    assert {"main", "buffer_count", "controls"} <= set(takes)
+    for name in ("configure", "start", "capture_request", "stop", "close"):
+        assert callable(getattr(camera, name)), name
+    for name in ("make_array", "get_metadata", "release"):
+        assert callable(getattr(CompletedRequest, name)), name
