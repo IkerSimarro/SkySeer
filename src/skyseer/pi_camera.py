@@ -63,7 +63,6 @@ class PiCameraSource:
 
         self.settings = s = settings or PiCameraSettings()
         self.fps = s.fps
-        self.width, self.height = s.width, s.height
         frame_us = int(round(1e6 / s.fps))
         self.exposure_us = s.exposure_us or int(0.95 * frame_us)
         self._camera = Picamera2(camera_num=s.camera_num)
@@ -73,13 +72,20 @@ class PiCameraSource:
             controls=self.controls(),
         )
         self._camera.configure(config)
+        # libcamera may adjust a requested size (alignment): use the size it delivers.
+        size = self._camera.camera_configuration()["main"]["size"]
+        self.width, self.height = int(size[0]), int(size[1])
+        if (self.width, self.height) != (s.width, s.height):
+            log.warning(
+                "Pi camera gives %dx%d instead of %dx%d", self.width, self.height, s.width, s.height
+            )
         self._camera.start()
         self.start_time = datetime.now(UTC)
         log.info(
             "Pi camera %d: %dx%d at %.1f fps, exposure %.1f ms, gain %.1f",
             s.camera_num,
-            s.width,
-            s.height,
+            self.width,
+            self.height,
             s.fps,
             self.exposure_us / 1000,
             s.gain,

@@ -41,6 +41,7 @@ class FakeRequest:
 
 class FakePicamera2:
     instances: list = []
+    delivers: tuple[int, int] | None = None  # a size libcamera adjusted the request to
 
     def __init__(self, camera_num=0):
         self.camera_num = camera_num
@@ -52,7 +53,12 @@ class FakePicamera2:
         return kwargs
 
     def configure(self, config):
+        if FakePicamera2.delivers is not None:
+            config = {**config, "main": {**config["main"], "size": FakePicamera2.delivers}}
         self.config = config
+
+    def camera_configuration(self):
+        return self.config
 
     def start(self):
         self.started = True
@@ -77,6 +83,7 @@ def fake_picamera2(monkeypatch):
     module.Picamera2 = FakePicamera2
     monkeypatch.setitem(sys.modules, "picamera2", module)
     FakePicamera2.instances.clear()
+    FakePicamera2.delivers = None
     return FakePicamera2
 
 
@@ -111,6 +118,15 @@ def test_frames_are_brightness_only_with_sensor_timestamps(fake_picamera2):
     source.close()
 
 
+def test_frames_have_the_size_the_camera_delivers(fake_picamera2):
+    fake_picamera2.delivers = (2016, 1520)  # e.g. rounded for alignment
+    source = PiCameraSource(PiCameraSettings(width=2028, height=1520))
+    assert (source.width, source.height) == (2016, 1520)
+    frame = next(iter(source))
+    assert frame.image.shape == (1520, 2016)
+    source.close()
+
+
 def test_the_real_camera_library_takes_these_settings():
     """Every control the driver sets exists in libcamera, and picamera2 has the calls it
     makes. Runs only where the real library is installed (no camera needed)."""
@@ -128,7 +144,7 @@ def test_the_real_camera_library_takes_these_settings():
     camera = picamera2.Picamera2
     takes = inspect.signature(camera.create_video_configuration).parameters
     assert {"main", "buffer_count", "controls"} <= set(takes)
-    for name in ("configure", "start", "capture_request", "stop", "close"):
+    for name in ("configure", "camera_configuration", "start", "capture_request", "stop", "close"):
         assert callable(getattr(camera, name)), name
     for name in ("make_array", "get_metadata", "release"):
         assert callable(getattr(CompletedRequest, name)), name

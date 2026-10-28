@@ -21,6 +21,8 @@ work was done. Full detail is in the commit messages.
     keeps numpy on the system's major version.
   - PyAV older than 14.1 (bookworm ships 12.3) can't turn phone videos upright, so
     SkySeer now requires 14.1.
+- The Pi camera driver uses the frame size the camera reports after setup, in case
+  libcamera adjusts the requested 2028x1520 (it warns if so).
 - A first-light plan for the station build ([docs/first-light.md](docs/first-light.md)).
 
 ## [1.0.0] - 2026-10-28
