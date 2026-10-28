@@ -1,8 +1,9 @@
 import { api, sessionTitle, duration, mag, utcDate, utcTime } from '../api'
 import { Timeline } from '../components/charts'
-import { Failed, Loading, SessionSelect, SimTag } from '../components/common'
+import { Failed, Loading, SimTag } from '../components/common'
 import { DownloadIcon } from '../components/Icons'
-import { href, navigate, useAsync } from '../hooks'
+import { href, useAsync } from '../hooks'
+import type { Scope } from '../scope'
 
 function fmtSeconds(s: number): string {
   return `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`
@@ -14,22 +15,23 @@ const TIME_SOURCE: Record<string, string> = {
   unknown: 'unknown: satellites, aircraft and showers were not identified',
 }
 
-export default function ReportPage({ id }: { id?: number }) {
-  const sessions = useAsync(api.sessions, [])
-  const session = id ?? sessions.data?.[0]?.id
+export default function ReportPage({ scope }: { scope: Scope }) {
+  // A report covers one session: with "all sessions", the one added last.
+  const current = scope.session ?? scope.visible[0]
+  const session = current?.id
   const report = useAsync(
     () => (session === undefined ? Promise.resolve(undefined) : api.report(session)),
     [session],
   )
-  if (sessions.error) return <Failed error={sessions.error} />
-  if (!sessions.data) return <Loading what="sessions" />
+  if (scope.error) return <Failed error={scope.error} />
+  if (!scope.loaded) return <Loading what="sessions" />
   if (session === undefined) return <div className="empty">Nothing recorded yet.</div>
   const r = report.data
   return (
     <>
       <div className="page-head">
         <div>
-          <h1>Night report {sessions.data.find((s) => s.id === session)?.meta.simulated && <SimTag />}</h1>
+          <h1>Night report {current?.meta.simulated && <SimTag />}</h1>
           {r && (
             <div className="muted mono">
               {sessionTitle(r.session)} · {r.start ? `${utcDate(r.start)} ${utcTime(r.start)}` : ''}
@@ -39,8 +41,6 @@ export default function ReportPage({ id }: { id?: number }) {
         </div>
         <div className="spacer" />
         <div className="no-print toolbar" style={{ margin: 0 }}>
-          <SessionSelect sessions={sessions.data} value={session}
-            onChange={(sid) => sid !== undefined && navigate(href(`report/${sid}`))} />
           <a className="btn" href={api.exportUrl(session, 'csv')}><DownloadIcon /> CSV</a>
           <a className="btn" href={api.exportUrl(session, 'json')}><DownloadIcon /> JSON</a>
           <button className="btn" onClick={() => window.print()}>Print / PDF</button>

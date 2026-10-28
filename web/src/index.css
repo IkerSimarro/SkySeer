@@ -136,7 +136,7 @@ h3 { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spa
 .btn[aria-pressed='true'] { border-color: var(--accent); color: var(--accent); }
 .btn:disabled { opacity: 0.45; cursor: default; }
 
-select, input[type='text'] {
+select, input[type='text'], input[type='search'] {
   background: var(--panel-2); border: 1px solid var(--line-2); color: var(--text);
   border-radius: 8px; padding: 6px 10px; font: inherit;
 }
@@ -284,3 +284,66 @@ input[type='file'], input[type='datetime-local'] {
 .chip.stopped { color: var(--muted); }
 .job .event-row { align-items: center; gap: 8px; }
 .job .event-row strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+
+/* ---------- top bar: the session every page shows ---------- */
+.session-switcher { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 12px; }
+.session-switcher select { max-width: 380px; min-width: 0; font-size: 13px; }
+
+/* ---------- home ---------- */
+.hero {
+  display: grid; grid-template-columns: minmax(0, 3fr) minmax(260px, 2fr); gap: 24px;
+  align-items: center; padding: 18px;
+}
+.hero.all { grid-template-columns: 1fr; padding: 22px; }
+.hero-pics {
+  display: grid; gap: 4px; grid-template-columns: 2fr 1fr; grid-template-rows: 1fr 1fr;
+  aspect-ratio: 16 / 7.4; border-radius: 8px; overflow: hidden; background: #000;
+}
+.hero-pics.n0, .hero-pics.n1 { grid-template-columns: 1fr; grid-template-rows: 1fr; aspect-ratio: 16 / 9; }
+.hero-pics.n2 { grid-template-rows: 1fr; }
+.hero-pics a { position: relative; display: block; min-height: 0; }
+.hero-pics .main { grid-row: 1 / -1; }
+.hero-pics img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform 0.2s; }
+.hero-pics a:hover img { transform: scale(1.03); }
+.hero-pic-label {
+  position: absolute; left: 8px; bottom: 6px; font-size: 12px; font-weight: 600;
+  text-shadow: 0 1px 3px #000, 0 0 8px #000;
+}
+.empty-cover { display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 12px; height: 100%; }
+.hero-info { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.hero-kicker {
+  display: flex; gap: 8px; align-items: center; font-size: 11px; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.1em;
+}
+.hero-info h1 { font-size: 24px; overflow-wrap: anywhere; }
+.hero-file { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hero-counts { display: flex; gap: 30px; margin: 10px 0; }
+.hero-counts > div { display: flex; flex-direction: column; gap: 6px; }
+.section { margin-top: 28px; }
+.section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.panel .section-head { align-items: center; margin-bottom: 10px; }
+.welcome { text-align: center; padding: 48px 20px; display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.welcome p { max-width: 560px; margin: 0; }
+
+/* ---------- sessions page ---------- */
+.toolbar input[type='search'] { min-width: 230px; }
+
+/* ---------- phones: the sidebar becomes a row of links under the top bar ---------- */
+.mobile-nav { display: none; }
+@media (max-width: 760px) {
+  .topbar { flex-wrap: wrap; gap: 8px 12px; padding: 8px 12px; }
+  .topbar .chip:not(:first-of-type) { display: none; }
+  .content { padding: 14px 12px; }
+  .session-switcher { flex: 1 1 100%; }
+  .session-switcher select { flex: 1; max-width: none; }
+  .mobile-nav {
+    display: flex; gap: 4px; overflow-x: auto; padding: 6px 10px; background: var(--panel);
+    border-bottom: 1px solid var(--line); scrollbar-width: none;
+  }
+  .mobile-nav a { padding: 6px 10px; border-radius: 8px; color: var(--muted); white-space: nowrap; font-size: 13px; }
+  .mobile-nav a.active { background: var(--panel-2); color: var(--text); box-shadow: inset 0 -2px var(--accent); }
+  .hero { grid-template-columns: 1fr; padding: 12px; gap: 14px; }
+  .card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .hero-counts { gap: 22px; }
+  .toolbar input[type='search'] { min-width: 0; flex: 1 1 100%; }
+}

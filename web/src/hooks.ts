@@ -77,3 +77,28 @@ export function useUtcNow(): Date {
   }, [])
   return now
 }
+
+/** A setting kept in this browser (localStorage), such as a filter. Works without
+ * storage too (private windows): it then lasts until the page is reloaded. */
+export function useStoredState<T>(key: string, initial: T): [T, (value: T) => void] {
+  const [value, setValue] = useState<T>(() => {
+    try {
+      const raw = window.localStorage.getItem(key)
+      return raw === null ? initial : (JSON.parse(raw) as T)
+    } catch {
+      return initial
+    }
+  })
+  const store = useCallback(
+    (next: T) => {
+      setValue(next)
+      try {
+        window.localStorage.setItem(key, JSON.stringify(next))
+      } catch {
+        // storage unavailable: keep it for this visit only
+      }
+    },
+    [key],
+  )
+  return [value, store]
+}

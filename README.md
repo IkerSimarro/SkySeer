@@ -63,10 +63,14 @@ data is tagged SIMULATION everywhere in the dashboard.</sub>
 | Named from its orbit: NORAD ID, height, range, speed, how well the path matched, and the camera's clock error. | Matched to the Orionid shower's radiant, with its calibrated brightness through the flight. A **Clean** switch hides the box and trail. |
 
 <details>
-<summary>More: night report and overview</summary>
+<summary>More: night report and home page</summary>
 
 <img src="docs/images/dashboard-report.png" alt="Night report: counts, activity through the night, meteors brightest first, showers and station details" width="100%">
-<img src="docs/images/dashboard-overview.png" alt="Overview: totals, latest detections with trail images, and sessions" width="100%">
+<img src="docs/images/dashboard-home.png" alt="Home: the chosen session's three best satellite passes, named, with its counts and latest detections; a session switcher in the top bar" width="100%">
+
+<sub>One session switcher in the top bar drives every page. Sessions can be renamed and
+removed (optionally with their files) on the Sessions page; test sessions from the
+simulators are hidden unless asked for.</sub>
 
 </details>
 

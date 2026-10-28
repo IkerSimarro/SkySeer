@@ -1,23 +1,28 @@
 import { api } from './api'
+import { SessionSwitcher } from './components/common'
 import {
   AnalyzeIcon,
   EventsIcon,
   LiveIcon,
   OverviewIcon,
   ReportIcon,
+  SessionsIcon,
   SkyIcon,
 } from './components/Icons'
 import { href, useAsync, useRoute, useUtcNow } from './hooks'
 import AnalyzePage from './pages/AnalyzePage'
 import EventPage from './pages/EventPage'
 import EventsPage from './pages/EventsPage'
+import HomePage from './pages/HomePage'
 import LivePage from './pages/LivePage'
-import Overview from './pages/Overview'
 import ReportPage from './pages/ReportPage'
+import SessionsPage from './pages/SessionsPage'
 import SkyPage from './pages/SkyPage'
+import { useScope } from './scope'
 
 const NAV = [
-  { path: '', label: 'Overview', icon: OverviewIcon },
+  { path: '', label: 'Home', icon: OverviewIcon },
+  { path: 'sessions', label: 'Sessions', icon: SessionsIcon },
   { path: 'events', label: 'Events', icon: EventsIcon },
   { path: 'sky', label: 'Sky map', icon: SkyIcon },
   { path: 'report', label: 'Night report', icon: ReportIcon },
@@ -57,20 +62,24 @@ function UtcClock() {
 
 export default function App() {
   const route = useRoute()
+  const scope = useScope(route) // the session every page shows
   const [page, id] = route.parts
   let body
   switch (page) {
+    case 'sessions':
+      body = <SessionsPage scope={scope} />
+      break
     case 'events':
-      body = <EventsPage query={route.query} />
+      body = <EventsPage query={route.query} scope={scope} />
       break
     case 'event':
       body = <EventPage id={Number(id)} />
       break
     case 'sky':
-      body = <SkyPage query={route.query} />
+      body = <SkyPage scope={scope} />
       break
     case 'report':
-      body = <ReportPage id={id ? Number(id) : undefined} />
+      body = <ReportPage scope={scope} />
       break
     case 'live':
       body = <LivePage />
@@ -79,7 +88,7 @@ export default function App() {
       body = <AnalyzePage />
       break
     default:
-      body = <Overview query={route.query} />
+      body = <HomePage scope={scope} />
   }
   const active = page === 'event' ? 'events' : (page ?? '')
   return (
@@ -104,10 +113,16 @@ export default function App() {
       </nav>
       <div className="main">
         <header className="topbar">
-          <UtcClock />
+          <SessionSwitcher scope={scope} />
           <div className="spacer" />
+          <UtcClock />
           <StationStatus />
         </header>
+        <nav className="mobile-nav" aria-label="Pages">
+          {NAV.map(({ path, label }) => (
+            <a key={path} href={href(path)} className={active === path ? 'active' : ''}>{label}</a>
+          ))}
+        </nav>
         <main className="content">{body}</main>
       </div>
     </div>

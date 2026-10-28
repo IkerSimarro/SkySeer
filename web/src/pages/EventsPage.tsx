@@ -1,32 +1,34 @@
 import { useState } from 'react'
-import { ALL_CLASSES, api, REAL_CLASSES, type ObjectClass } from '../api'
-import { EventCard, Failed, Loading, SessionSelect } from '../components/common'
+import { ALL_CLASSES, api, REAL_CLASSES, sessionTitle, type ObjectClass } from '../api'
+import { EventCard, Failed, Loading } from '../components/common'
 import { href, navigate, useAsync } from '../hooks'
+import type { Scope } from '../scope'
 
 const PAGE = 120
 
-export default function EventsPage({ query }: { query: URLSearchParams }) {
-  const session = query.get('session') ? Number(query.get('session')) : undefined
+export default function EventsPage({ query, scope }: { query: URLSearchParams; scope: Scope }) {
+  const session = scope.session?.id
+  const realOnly = session === undefined && !scope.showTests
   const classes = (query.get('classes')?.split(',').filter(Boolean) as ObjectClass[]) ?? []
   const shown = classes.length ? classes : REAL_CLASSES
   const review = query.get('review') ?? 'all'
   const [limit, setLimit] = useState(PAGE)
 
-  const sessions = useAsync(api.sessions, [])
   const events = useAsync(
     () =>
       api.events({
         session_id: session,
+        simulated: realOnly ? false : undefined,
         label: shown,
         reviewed: review === 'all' ? undefined : review === 'reviewed',
         limit,
       }),
-    [session, shown.join(), review, limit],
+    [session, realOnly, shown.join(), review, limit],
   )
+  const titles = new Map(scope.all.map((s) => [s.id, sessionTitle(s)]))
 
   const go = (changes: Record<string, string | number | undefined>) => {
     navigate(href('events', {
-      session,
       classes: classes.join(','),
       review: review === 'all' ? undefined : review,
       ...changes,
@@ -41,12 +43,11 @@ export default function EventsPage({ query }: { query: URLSearchParams }) {
     <>
       <div className="page-head">
         <div>
-          <h1>Events</h1>
+          <h1>Events{scope.session && <span className="muted">: {sessionTitle(scope.session)}</span>}</h1>
           <div className="muted">Every detection with its trail image. Open one to watch its clip and check it.</div>
         </div>
       </div>
       <div className="toolbar">
-        <SessionSelect sessions={sessions.data ?? []} value={session} onChange={(id) => go({ session: id })} />
         <div className="btn-group">
           {ALL_CLASSES.map((c) => (
             <button key={c} className={`btn small c-${c}`} aria-pressed={shown.includes(c)} onClick={() => toggle(c)}>
@@ -71,7 +72,11 @@ export default function EventsPage({ query }: { query: URLSearchParams }) {
         <div className="empty">No events match these filters.</div>
       ) : (
         <>
-          <div className="card-grid">{events.data.map((e) => <EventCard key={e.id} e={e} />)}</div>
+          <div className="card-grid">
+            {events.data.map((e) => (
+              <EventCard key={e.id} e={e} session={session === undefined ? titles.get(e.session_id) : undefined} />
+            ))}
+          </div>
           {events.data.length >= limit && (
             <div style={{ textAlign: 'center', marginTop: 18 }}>
               <button className="btn" onClick={() => setLimit(limit + PAGE)}>Show more</button>

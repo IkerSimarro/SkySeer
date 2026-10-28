@@ -283,11 +283,15 @@ def create_app(
         since: str | None = None,
         until: str | None = None,
         include_junk: bool = False,
+        simulated: bool | None = None,
         limit: Annotated[int, Query(ge=1, le=1000)] = 100,
         offset: Annotated[int, Query(ge=0)] = 0,
     ) -> list[dict[str, Any]]:
+        """``simulated=false`` leaves out test sessions (made by SkySeer's simulators)."""
         labels = label or (None if include_junk else list(REAL))
-        events = store.events(session_id, labels, reviewed, since, until, limit, offset)
+        events = store.events(
+            session_id, labels, reviewed, since, until, limit, offset, simulated=simulated
+        )
         flags = {x["id"]: x["meta"] for x in store.sessions()}
         return [_flagged(_with_urls(summary(e)), flags.get(e["session_id"], {})) for e in events]
 

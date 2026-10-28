@@ -1,6 +1,7 @@
-import type { EventSummary, ObjectClass, Session } from '../api'
-import { duration, mag, sessionTitle, utcDate, utcTime } from '../api'
+import type { EventSummary, ObjectClass } from '../api'
+import { duration, isTest, mag, sessionTitle, utcDate, utcTime } from '../api'
 import { href } from '../hooks'
+import type { Scope } from '../scope'
 
 export function ClassBadge({ label }: { label: ObjectClass }) {
   return (
@@ -43,24 +44,25 @@ export function EventCard({ e, session }: { e: EventSummary; session?: string })
   )
 }
 
-export function SessionSelect({
-  sessions,
-  value,
-  onChange,
-}: {
-  sessions: Session[]
-  value: number | undefined
-  onChange: (id: number | undefined) => void
-}) {
+/** The top bar's session choice: every page shows the session picked here. */
+export function SessionSwitcher({ scope }: { scope: Scope }) {
+  const { session, visible } = scope
+  if (!scope.all.length) return null
+  // A test session chosen by a link stays listed even while tests are hidden.
+  const options = session && !visible.includes(session) ? [session, ...visible] : visible
   return (
-    <select value={value ?? ''} onChange={(ev) => onChange(ev.target.value ? Number(ev.target.value) : undefined)}>
-      <option value="">All sessions</option>
-      {sessions.map((s) => (
-        <option key={s.id} value={s.id}>
-          {s.started ? `${utcDate(s.started)} · ` : ''}{sessionTitle(s)}
-        </option>
-      ))}
-    </select>
+    <label className="session-switcher" title="Every page shows this session">
+      <span className="faint">Session</span>
+      <select value={session?.id ?? 'all'}
+        onChange={(ev) => scope.choose(ev.target.value === 'all' ? 'all' : Number(ev.target.value))}>
+        {options.map((s) => (
+          <option key={s.id} value={s.id}>
+            {sessionTitle(s)}{s.started ? ` · ${utcDate(s.started)}` : ''}{isTest(s) ? ' · test' : ''}
+          </option>
+        ))}
+        {options.length > 1 && <option value="all">All sessions together</option>}
+      </select>
+    </label>
   )
 }
 

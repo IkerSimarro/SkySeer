@@ -3,7 +3,7 @@ import { ALL_CLASSES, api, duration, mag, type EventDetail, type Media, type Obj
 import { LightCurve } from '../components/charts'
 import { ClassBadge, Failed, Loading, SimTag } from '../components/common'
 import { BackIcon } from '../components/Icons'
-import { href, useAsync } from '../hooks'
+import { href, useAsync, useStoredState } from '../hooks'
 
 const SOURCE: Record<string, string> = {
   rules: 'hand-written rules',
@@ -137,6 +137,7 @@ function Scores({ e }: { e: EventDetail }) {
 export default function EventPage({ id }: { id: number }) {
   const ev = useAsync(() => api.event(id), [id])
   const [review, setReview] = useState<ObjectClass | null | undefined>(undefined)
+  const [details, setDetails] = useStoredState('skyseer.eventDetails', false) // technical measurements
   if (ev.error) return <Failed error={ev.error} />
   if (!ev.data) return <Loading what="event" />
   const e = { ...ev.data, review: review === undefined ? ev.data.review : review }
@@ -147,7 +148,7 @@ export default function EventPage({ id }: { id: number }) {
   return (
     <>
       <div className="page-head">
-        <a className="btn small" href={href('events', { session: e.session_id })}><BackIcon /> Events</a>
+        <a className="btn small" href={href('events')}><BackIcon /> Events</a>
         <div>
           <h1>
             <ClassBadge label={e.label} /> {(e.label === 'Plane' && plane?.name) || ident?.name || (typeof shower === 'object' ? `${shower.name} meteor` : `Event #${e.event_id}`)}
@@ -234,7 +235,13 @@ export default function EventPage({ id }: { id: number }) {
             </section>
           )}
           <section className="panel">
-            <h3>Measurements</h3>
+            <div className="section-head">
+              <h3>Measurements</h3>
+              <button className="btn small" aria-pressed={details} onClick={() => setDetails(!details)}
+                title="How it moved and why it got its class">
+                {details ? 'Hide details' : 'Details'}
+              </button>
+            </div>
             <dl className="kv">
               {e.photometry && <><dt>Peak brightness</dt><dd>{e.photometry.saturated ? 'brighter than ' : ''}{mag(e.photometry.peak_magnitude)} mag</dd></>}
               {sky?.start.alt !== undefined && sky.end.alt !== undefined && (
@@ -244,15 +251,19 @@ export default function EventPage({ id }: { id: number }) {
                 </>
               )}
               {sky && <><dt>Angular speed</dt><dd>{sky.angular_speed_deg_s.toFixed(2)} °/s</dd></>}
-              <dt>Speed on screen</dt><dd>{(100 * e.features.speed_frac_per_s).toFixed(1)}% of the frame per second</dd>
-              <dt>Straightness</dt><dd>{(100 * e.features.path_deviation_max).toFixed(2)}% max deviation</dd>
-              <dt>Seen in</dt><dd>{Math.round(100 * e.features.detection_rate)}% of frames</dd>
-              <dt>Strobe rhythm</dt><dd>{e.features.flash_score > 0 ? `${e.features.flash_rate_hz.toFixed(2)} Hz (score ${e.features.flash_score.toFixed(2)})` : 'none'}</dd>
               {e.periodicity && <><dt>Blinks every</dt><dd>{e.periodicity.period_s.toFixed(2)} s{e.label === 'Plane' ? ' (its lights)' : ' (tumbling?)'}</dd></>}
-              <dt>Detections</dt><dd>{e.track.length} (frames {e.first_frame}–{e.last_frame})</dd>
+              {details && (
+                <>
+                  <dt>Speed on screen</dt><dd>{(100 * e.features.speed_frac_per_s).toFixed(1)}% of the frame per second</dd>
+                  <dt>Straightness</dt><dd>{(100 * e.features.path_deviation_max).toFixed(2)}% max deviation</dd>
+                  <dt>Seen in</dt><dd>{Math.round(100 * e.features.detection_rate)}% of frames</dd>
+                  <dt>Strobe rhythm</dt><dd>{e.features.flash_score > 0 ? `${e.features.flash_rate_hz.toFixed(2)} Hz (score ${e.features.flash_score.toFixed(2)})` : 'none'}</dd>
+                  <dt>Detections</dt><dd>{e.track.length} (frames {e.first_frame}–{e.last_frame})</dd>
+                </>
+              )}
             </dl>
           </section>
-          <Scores e={e} />
+          {details && <Scores e={e} />}
         </div>
       </div>
     </>

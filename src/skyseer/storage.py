@@ -238,13 +238,21 @@ class Store:
         until: str | None = None,
         limit: int = 200,
         offset: int = 0,
+        simulated: bool | None = None,
     ) -> list[dict[str, Any]]:
-        """Events, newest first, filtered by session, class, review state and time."""
+        """Events, newest first, filtered by session, class, review state and time;
+        ``simulated`` keeps only those from simulated (True) or real (False) sessions."""
         where: list[str] = []
         args: list[Any] = []
         if session_id is not None:
             where.append("session_id = ?")
             args.append(session_id)
+        if simulated is not None:
+            where.append(
+                "session_id IN (SELECT id FROM sessions"
+                " WHERE COALESCE(json_extract(meta, '$.simulated'), 0) = ?)"
+            )
+            args.append(int(simulated))
         if labels:
             where.append(f"label IN ({','.join('?' * len(labels))})")
             args.extend(labels)

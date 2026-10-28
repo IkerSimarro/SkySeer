@@ -1,31 +1,31 @@
-import { api, REAL_CLASSES } from '../api'
+import { api, REAL_CLASSES, sessionTitle } from '../api'
 import { SkyMap } from '../components/charts'
-import { ClassBadge, Failed, Loading, SessionSelect, SimTag } from '../components/common'
-import { href, navigate, useAsync } from '../hooks'
+import { ClassBadge, Failed, Loading, SimTag } from '../components/common'
+import { useAsync } from '../hooks'
+import type { Scope } from '../scope'
 
-export default function SkyPage({ query }: { query: URLSearchParams }) {
-  const sessions = useAsync(api.sessions, [])
-  const all = sessions.data ?? []
-  const fromQuery = query.get('session') ? Number(query.get('session')) : undefined
-  const session = fromQuery ?? all.find((s) => s.meta.pointing)?.id
+export default function SkyPage({ scope }: { scope: Scope }) {
+  // One session at a time (each has its own pointing): with "all sessions", the last
+  // one added that has a star calibration.
+  const current = scope.session ?? scope.visible.find((s) => s.meta.pointing)
+  const session = current?.id
   const events = useAsync(
     () => (session === undefined ? Promise.resolve([]) : api.events({ session_id: session, limit: 1000 })),
     [session],
   )
-  const current = all.find((s) => s.id === session)
-  if (sessions.error) return <Failed error={sessions.error} />
-  if (!sessions.data) return <Loading what="sessions" />
+  if (scope.error) return <Failed error={scope.error} />
+  if (!scope.loaded) return <Loading what="sessions" />
   const placed = (events.data ?? []).filter((e) => e.sky?.path)
   return (
     <>
       <div className="page-head">
         <div>
-          <h1>Sky map {current?.meta.simulated && <SimTag />}</h1>
-          <div className="muted">Where each object crossed the sky, from the star calibration. Click a path to open it.</div>
+          <h1>Sky map{current && <span className="muted">: {sessionTitle(current)}</span>} {current?.meta.simulated && <SimTag />}</h1>
+          <div className="muted">
+            Where each object crossed the sky, from the star calibration. Click a path to open it.
+            {!scope.session && current && ' The map shows one session at a time: choose another in the top bar.'}
+          </div>
         </div>
-        <div className="spacer" />
-        <SessionSelect sessions={all} value={session}
-          onChange={(id) => navigate(href('sky', { session: id }))} />
       </div>
       <div className="grid sky-grid">
         <section className="panel sky-panel">

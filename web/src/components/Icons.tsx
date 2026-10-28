@@ -39,3 +39,6 @@ export const EditIcon = () => (
 export const TrashIcon = () => (
   <Icon><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" /></Icon>
 )
+export const SessionsIcon = () => (
+  <Icon><rect x="3" y="4" width="8" height="7" rx="1.5" /><rect x="13" y="4" width="8" height="7" rx="1.5" /><rect x="3" y="13" width="8" height="7" rx="1.5" /><rect x="13" y="13" width="8" height="7" rx="1.5" /></Icon>
+)

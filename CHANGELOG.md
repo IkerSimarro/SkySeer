@@ -9,6 +9,20 @@ The first complete release: SkySeer rebuilt from a Streamlit prototype into a te
 installable system, with an astronomy layer, a web dashboard and the software for an
 unattended Raspberry Pi station.
 
+### A tidier dashboard (2026-10-28)
+- One session switcher in the top bar drives every page (Home, Events, Sky map, Night
+  report) instead of a selector on each, remembered in the browser; links still open a
+  given session.
+- The Overview became two pages: **Home** (the chosen session's best moments as large
+  pictures, its counts and latest detections) and **Sessions** (cards with pictures of
+  each session's most striking events, search, filters, sorting, rename and remove,
+  optionally deleting SkySeer's own files for it).
+- Test sessions made by the simulators are hidden unless "Show test sessions" is ticked,
+  including from "all sessions" views (`/api/events?simulated=false`).
+- Event pages keep the clip, identification and key measurements in view; rule scores and
+  the technical measurements are behind a **Details** switch.
+- Works on a phone: the side menu becomes a row of links and event cards sit two a row.
+
 ### Faster analysis that keeps the computer usable (2026-10-27)
 - A 1080p30 recording now analyses at about its own speed: 19.4 → 33.7 frames/s on a
   dark sky and 12.2 → 30.3 on a light-polluted one with many satellites (Intel

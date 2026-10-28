@@ -345,3 +345,27 @@ def test_sessions_come_with_their_most_striking_events(client):
     labels = [p["label"] for p in picks]
     if "Meteor" in labels:  # meteors are the most striking, so they come first
         assert labels[0] == "Meteor"
+
+
+def test_events_can_leave_out_test_sessions(analysed, tmp_path):
+    """The "all sessions" views hide simulations unless asked: the filter is by session."""
+    import shutil
+
+    out, _ = analysed
+    store = Store(tmp_path / "test.db")
+
+    def night(name: str, simulated: bool) -> int:
+        folder = tmp_path / name
+        shutil.copytree(out, folder)
+        info = json.loads((folder / "run.json").read_text())
+        (folder / "run.json").write_text(json.dumps({**info, "simulated": simulated}))
+        session = store.import_run(folder)
+        assert session is not None
+        return session
+
+    real, sim = night("real_night", False), night("sim_night", True)
+    client = TestClient(create_app(load_config(), store, static_dir=None))
+    sessions_of = lambda q: {e["session_id"] for e in client.get("/api/events", params=q).json()}  # noqa: E731
+    assert sessions_of({}) == {real, sim}
+    assert sessions_of({"simulated": "false"}) == {real}
+    assert sessions_of({"simulated": "true"}) == {sim}

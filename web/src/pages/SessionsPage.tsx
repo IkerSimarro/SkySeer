@@ -1,11 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import { api, duration, type Session, type SessionFiles, sessionTitle, utcDate, utcTime } from '../api'
-import { EventCard, Failed, Loading, SimTag } from '../components/common'
+import { api, isTest, type Session, type SessionFiles, sessionLength, sessionTitle, utcDate, utcTime } from '../api'
+import { Failed, Loading } from '../components/common'
 import { EditIcon, TrashIcon } from '../components/Icons'
 import { href, navigate, useAsync } from '../hooks'
-
-const length = (s: Session) =>
-  s.started && s.ended ? duration((Date.parse(s.ended) - Date.parse(s.started)) / 1000) : null
+import type { Scope } from '../scope'
 
 const size = (mb: number) => (mb >= 1000 ? `${(mb / 1000).toFixed(1)} GB` : `${Math.max(mb, 0.1).toFixed(1)} MB`)
 
@@ -61,7 +59,7 @@ function SessionCard({
   s: Session
   selected: boolean
   onSelect: () => void
-  onChanged: (removed: boolean) => void
+  onChanged: () => void
 }) {
   const [renaming, setRenaming] = useState(false)
   const [draft, setDraft] = useState('')
@@ -77,12 +75,12 @@ function SessionCard({
       await api.renameSession(s.id, draft)
       setRenaming(false)
       setError(undefined)
-      onChanged(false)
+      onChanged()
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     }
   }
-  const len = length(s)
+  const len = sessionLength(s)
   return (
     <div className={`session-card${selected ? ' selected' : ''}`}>
       <button className={`session-cover${pics.length === 1 ? ' single' : ''}`} onClick={onSelect}
@@ -92,7 +90,7 @@ function SessionCard({
           <img key={p.id} className={i === 0 ? 'main' : ''} src={p.thumbnail} alt={`${p.label} ${p.name ?? ''}`} loading="lazy" />
         ))}
         <span className="tags">
-          {s.meta.simulated && <span className="sim-tag">SIM</span>}
+          {isTest(s) && <span className="sim-tag">TEST</span>}
           {s.kind === 'live' && <span className="chip">live</span>}
         </span>
       </button>
@@ -130,112 +128,90 @@ function SessionCard({
         </div>
       </div>
       {removing && (
-        <RemoveBox s={s} onCancel={() => setRemoving(false)} onDone={() => { setRemoving(false); onChanged(true) }} />
+        <RemoveBox s={s} onCancel={() => setRemoving(false)} onDone={() => { setRemoving(false); onChanged() }} />
       )}
     </div>
   )
 }
 
-/** One session at a time (by default the one added last), or every session together. */
-export default function Overview({ query }: { query: URLSearchParams }) {
-  const sessions = useAsync(api.sessions, [])
-  const param = query.get('session')
-  const all = [...(sessions.data ?? [])].sort((a, b) => b.id - a.id) // newest first
-  const selected: Session | undefined =
-    param === 'all' ? undefined : param ? all.find((s) => s.id === Number(param)) : all[0]
-  const loaded = sessions.data !== undefined
-  const recent = useAsync(
-    () => (loaded ? api.events({ session_id: selected?.id, limit: 10 }) : Promise.resolve([])),
-    [loaded, selected?.id],
-  )
-  if (sessions.error) return <Failed error={sessions.error} />
-  if (!sessions.data) return <Loading what="sessions" />
-  const titles = new Map(all.map((s) => [s.id, sessionTitle(s)]))
-  const shown = selected ? [selected] : all
-  const totals = shown.reduce(
-    (t, s) => ({ sat: t.sat + s.satellites, met: t.met + s.meteors, pla: t.pla + s.planes }),
-    { sat: 0, met: 0, pla: 0 },
-  )
-  const choose = (id: number | undefined) => navigate(href('', { session: id ?? 'all' }))
-  const changed = (removedId?: number) => {
-    if (removedId !== undefined && removedId === selected?.id) navigate(href(''))
-    sessions.reload()
-    recent.reload()
+type Kind = 'all' | 'file' | 'live'
+type Sort = 'added' | 'detections' | 'longest'
+const length = (s: Session) => (s.started && s.ended ? Date.parse(s.ended) - Date.parse(s.started) : 0)
+const ORDER: Record<Sort, (a: Session, b: Session) => number> = {
+  added: (a, b) => b.id - a.id,
+  detections: (a, b) => b.satellites + b.meteors + b.planes - (a.satellites + a.meteors + a.planes),
+  longest: (a, b) => length(b) - length(a),
+}
+
+/** Every session as a card: find, rename and remove them, and pick the one to show. */
+export default function SessionsPage({ scope }: { scope: Scope }) {
+  const [search, setSearch] = useState('')
+  const [kind, setKind] = useState<Kind>('all')
+  const [sort, setSort] = useState<Sort>('added')
+  if (scope.error) return <Failed error={scope.error} />
+  if (!scope.loaded) return <Loading what="sessions" />
+  const words = search.toLowerCase().split(/\s+/).filter(Boolean)
+  const shown = scope.visible
+    .filter((s) => kind === 'all' || s.kind === kind)
+    .filter((s) => {
+      const text = `${sessionTitle(s)} ${s.name} ${s.source ?? ''}`.toLowerCase()
+      return words.every((w) => text.includes(w))
+    })
+    .sort(ORDER[sort])
+  const hidden = scope.all.length - scope.visible.length
+  const open = (id: number) => {
+    scope.choose(id)
+    navigate(href(''))
   }
-  const selectedLength = selected ? length(selected) : null
 
   return (
     <>
       <div className="page-head">
         <div>
-          <h1>
-            Overview{selected && <span className="muted">: {sessionTitle(selected)}</span>}
-            {selected?.kind === 'live' && <> <span className="chip">live</span></>}
-            {selected?.meta.simulated && <> <SimTag /></>}
-          </h1>
-          <div className="muted">
-            {selected ? (
-              <>
-                {selected.started ? `${utcDate(selected.started)} ${utcTime(selected.started)} UTC` : 'date unknown'}
-                {selectedLength && ` · ${selectedLength}`}
-                {selected.source && ` · ${selected.source.split(/[\\/]/).pop()}`}
-                {' · '}
-                <a href={href('events', { session: selected.id })}>Events</a> ·{' '}
-                <a href={href('sky', { session: selected.id })}>Sky map</a> ·{' '}
-                <a href={href(`report/${selected.id}`)}>Night report</a>
-              </>
-            ) : (
-              `All ${all.length} session${all.length === 1 ? '' : 's'} together`
-            )}
-          </div>
+          <h1>Sessions</h1>
+          <div className="muted">Each analysed recording or live night. Pick one to show it on every page.</div>
         </div>
       </div>
-
-      <div className="grid cols-4">
-        <div className="panel stat"><span className="stat-value c-Satellite">{totals.sat}</span><span className="stat-label">Satellites</span></div>
-        <div className="panel stat"><span className="stat-value c-Meteor">{totals.met}</span><span className="stat-label">Meteors</span></div>
-        <div className="panel stat"><span className="stat-value c-Plane">{totals.pla}</span><span className="stat-label">Aircraft</span></div>
-        <div className="panel stat"><span className="stat-value">{shown.length}</span><span className="stat-label">{shown.length === 1 ? 'Session' : 'Sessions'}</span></div>
+      <div className="toolbar">
+        <input type="search" placeholder="Search names and files" value={search} aria-label="Search sessions"
+          onChange={(e) => setSearch(e.target.value)} />
+        <div className="segmented" role="radiogroup" aria-label="Kind of session">
+          {(['all', 'file', 'live'] as Kind[]).map((k) => (
+            <button key={k} type="button" role="radio" aria-checked={kind === k}
+              className={kind === k ? 'active' : ''} onClick={() => setKind(k)}>
+              {k === 'all' ? 'All' : k === 'file' ? 'Recordings' : 'Live nights'}
+            </button>
+          ))}
+        </div>
+        <select value={sort} onChange={(e) => setSort(e.target.value as Sort)} aria-label="Sort by">
+          <option value="added">Added last first</option>
+          <option value="detections">Most detections</option>
+          <option value="longest">Longest</option>
+        </select>
+        <div className="spacer" />
+        <label className="check" title="Sessions made by SkySeer's simulators, not a real sky">
+          <input type="checkbox" checked={scope.showTests} onChange={(e) => scope.setShowTests(e.target.checked)} />
+          Show test sessions{!scope.showTests && hidden ? ` (${hidden} hidden)` : ''}
+        </label>
       </div>
-
-      <section className="panel">
-        <div className="page-head" style={{ marginBottom: 12 }}>
-          <h2>Latest detections{selected ? '' : ', all sessions'}</h2>
-          <div className="spacer" />
-          <a href={href('events', selected ? { session: selected.id } : undefined)}>All events →</a>
+      {scope.all.length === 0 ? (
+        <div className="empty">
+          Nothing recorded yet. <a href={href('analyze')}>Analyse a video</a> or start the live camera.
         </div>
-        {recent.data && recent.data.length > 0 ? (
-          <div className="card-grid">
-            {recent.data.map((e) => (
-              <EventCard key={e.id} e={e} session={selected ? undefined : titles.get(e.session_id)} />
-            ))}
-          </div>
-        ) : (
-          <div className="empty">No detections yet. Analyse a video or start the live camera.</div>
-        )}
-      </section>
-
-      <section className="panel">
-        <div className="page-head" style={{ marginBottom: 12 }}>
-          <h2>Sessions</h2>
-          <div className="spacer" />
-          {all.length > 1 && (
-            <button className="btn small" aria-pressed={!selected} onClick={() => choose(undefined)}>All sessions together</button>
-          )}
+      ) : shown.length === 0 ? (
+        <div className="empty">
+          {scope.visible.length === 0
+            ? `Only test sessions so far (${hidden}): tick "Show test sessions" to see them.`
+            : 'No session matches.'}
         </div>
-        {all.length === 0 ? (
-          <div className="empty">
-            Nothing recorded yet. <a href={href('analyze')}>Analyse a video</a> or start the live camera.
-          </div>
-        ) : (
-          <div className="session-grid">
-            {all.map((s) => (
-              <SessionCard key={s.id} s={s} selected={s.id === selected?.id}
-                onSelect={() => choose(s.id)} onChanged={(removed) => changed(removed ? s.id : undefined)} />
-            ))}
-          </div>
-        )}
-      </section>
+      ) : (
+        <div className="session-grid">
+          {shown.map((s) => (
+            <SessionCard key={s.id} s={s} selected={s.id === scope.session?.id}
+              onSelect={() => open(s.id)} onChanged={scope.reload} />
+          ))}
+        </div>
+      )}
     </>
   )
 }

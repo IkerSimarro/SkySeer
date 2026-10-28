@@ -41,6 +41,13 @@ export interface Session {
 /** What to call a session: the name a person gave it, else its folder's name. */
 export const sessionTitle = (s: Pick<Session, 'name' | 'title'>) => s.title || s.name
 
+/** Test sessions: made by SkySeer's simulators, not a real sky. Hidden unless asked for. */
+export const isTest = (s: Pick<Session, 'meta'>) => Boolean(s.meta.simulated)
+
+/** How long a session lasted, e.g. "4 h 43 min" (null if unknown). */
+export const sessionLength = (s: Pick<Session, 'started' | 'ended'>) =>
+  s.started && s.ended ? duration((Date.parse(s.ended) - Date.parse(s.started)) / 1000) : null
+
 export interface SessionFiles {
   folder: string | null // inside SkySeer's data folders, else null (never deleted)
   folder_mb: number
@@ -211,6 +218,7 @@ async function get<T>(url: string): Promise<T> {
 
 export interface EventQuery {
   session_id?: number
+  simulated?: boolean // false: leave out test sessions
   label?: ObjectClass[]
   reviewed?: boolean
   include_junk?: boolean
@@ -226,6 +234,7 @@ export const api = {
   events: (q: EventQuery = {}) => {
     const p = new URLSearchParams()
     if (q.session_id !== undefined) p.set('session_id', String(q.session_id))
+    if (q.simulated !== undefined) p.set('simulated', String(q.simulated))
     for (const l of q.label ?? []) p.append('label', l)
     if (q.reviewed !== undefined) p.set('reviewed', String(q.reviewed))
     if (q.include_junk) p.set('include_junk', 'true')
