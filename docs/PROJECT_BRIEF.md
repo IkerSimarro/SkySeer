@@ -89,8 +89,9 @@ used for robustness testing.
 - **Target device:** Raspberry Pi 5 (2 GB) + HQ camera (IMX477) + 6 mm f/1.2 lens, a
   budget kit of about €170-220 (GPS, dew heater and an aircraft receiver are later
   upgrades; time from the internet, aircraft from OpenSky).
-- **Source:** public GitHub repository. The work lives on a feature branch and nothing
-  is pushed without the author's approval.
+- **Source:** public GitHub repository (v1.0.0 and v1.0.1 released in October 2026). CI
+  tests every push on Windows and Linux, and on Raspberry Pi OS (trixie and bookworm)
+  on 64-bit ARM with the real camera library.
 
 ## Roadmap
 

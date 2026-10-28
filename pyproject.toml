@@ -1,6 +1,6 @@
 [project]
 name = "skyseer"
-version = "1.0.0"
+version = "1.0.1"
 description = "Detect, track and classify satellites and meteors in night-sky video, offline or live from a camera."
 readme = "README.md"
 authors = [{ name = "Iker Simarro" }]
