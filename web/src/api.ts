@@ -35,6 +35,7 @@ export interface Session {
     disturbances?: [number, number][]
     discarded_tracks?: number
     simulated?: boolean
+    interrupted?: boolean // the station was cut off mid-night (see live.close_interrupted)
   }
 }
 

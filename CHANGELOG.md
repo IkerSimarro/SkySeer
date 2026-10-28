@@ -3,6 +3,15 @@
 What changed, phase by phase, with the measured effect of each change. Dates are when the
 work was done. Full detail is in the commit messages.
 
+## [Unreleased]
+
+### Ready for the station build (2026-10-28)
+- **A night cut off by a power cut or crash is closed properly.** A running night
+  records its latest frame time once a minute; when a station next starts, any night
+  left open with no heartbeat for 5 minutes ends at that time (not days later at the
+  next disk clean-up), gets its events.json and run.json, and shows **cut off** in
+  the dashboard.
+
 ## [1.0.0] - 2026-10-28
 
 The first complete release: SkySeer rebuilt from a Streamlit prototype into a tested,

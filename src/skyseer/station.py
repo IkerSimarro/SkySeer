@@ -83,6 +83,11 @@ class Station:
 
     # ------------------------------------------------------------------ control
     def start(self) -> None:
+        from .live import close_interrupted
+
+        # A night cut off by a power cut ends at its last recorded frame (heartbeats are
+        # wall-clock times, so this uses the real clock, not self.clock).
+        close_interrupted(self.store, datetime.now(UTC))
         if self.gps is not None:
             self.gps.start()
         self._thread = threading.Thread(target=self._run, name="station", daemon=True)

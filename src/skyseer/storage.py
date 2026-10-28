@@ -133,6 +133,20 @@ class Store:
                 (ended, json.dumps(merged), session_id),
             )
 
+    def update_session(self, session_id: int, meta: dict[str, Any]) -> None:
+        """Merge ``meta`` into a session's details, leaving it open."""
+        with self._lock, self._connect() as db:
+            old = db.execute("SELECT meta FROM sessions WHERE id = ?", (session_id,)).fetchone()
+            if old is not None:
+                merged = {**json.loads(old["meta"]), **meta}
+                db.execute(
+                    "UPDATE sessions SET meta = ? WHERE id = ?", (json.dumps(merged), session_id)
+                )
+
+    def open_live_sessions(self) -> list[dict[str, Any]]:
+        """Live sessions with no end yet: running now, or cut off (a crash or power cut)."""
+        return [s for s in self.sessions() if s["kind"] == "live" and not s["ended"]]
+
     def sessions(self) -> list[dict[str, Any]]:
         with self._connect() as db:
             rows = db.execute(

@@ -3,12 +3,13 @@
 import asyncio
 import json
 import time
+from datetime import UTC, datetime, timedelta
 
 from fastapi.testclient import TestClient
 
 from skyseer.api import create_app
 from skyseer.config import load_config
-from skyseer.live import LiveStation
+from skyseer.live import LiveStation, close_interrupted
 from skyseer.sources import ReplaySource
 from skyseer.storage import Store
 
@@ -133,3 +134,50 @@ def test_a_real_server_streams_events_over_websocket(synth_clip, tmp_path):
         station.stop()
         server.should_exit = True
         thread.join(10)
+
+
+def test_a_night_cut_off_by_a_power_cut_ends_at_its_last_frame(tmp_path):
+    store = Store(tmp_path / "db.sqlite")
+    beat = datetime(2026, 12, 12, 23, 0, tzinfo=UTC)
+    folder = tmp_path / "cut"
+    folder.mkdir()
+    cut = store.add_session(
+        "cut",
+        "live",
+        folder,
+        "0",
+        "2026-12-12T18:30:00+00:00",
+        {"heartbeat": beat.isoformat(), "last_frame": "2026-12-12T22:59:58+00:00"},
+    )
+    # An older session from before heartbeats: it ends at its last event.
+    old = store.add_session("old", "live", tmp_path / "gone", "0", "2026-12-10T18:30:00+00:00")
+    event = {"id": 1, "start_time": "2026-12-10T20:00:00+00:00", "label": "Meteor"}
+    store.add_event(old, event | {"end_time": "2026-12-10T20:00:01+00:00"})
+    # Still beating 2 minutes ago: running (perhaps in another process), left alone.
+    alive = store.add_session(
+        "alive",
+        "live",
+        tmp_path / "alive",
+        "0",
+        "2026-12-12T18:30:00+00:00",
+        {"heartbeat": (beat + timedelta(minutes=8)).isoformat()},
+    )
+
+    assert sorted(close_interrupted(store, beat + timedelta(minutes=10))) == [cut, old]
+    s = store.session(cut)
+    assert s["ended"] == "2026-12-12T22:59:58+00:00" and s["meta"]["interrupted"] is True
+    assert json.loads((folder / "run.json").read_text())["interrupted"] is True
+    assert (folder / "events.json").exists()
+    assert store.session(old)["ended"] == "2026-12-10T20:00:01+00:00"
+    assert store.session(alive)["ended"] is None
+    assert close_interrupted(store, beat + timedelta(minutes=10)) == []  # once only
+
+
+def test_a_running_station_records_a_heartbeat(synth_clip, tmp_path):
+    path, _ = synth_clip
+    station, store = _station(path, tmp_path)
+    station.start()
+    station.wait()
+    meta = store.sessions()[0]["meta"]
+    assert meta["last_frame"] and meta["heartbeat"] and meta["frames"] >= 1
+    assert "interrupted" not in meta

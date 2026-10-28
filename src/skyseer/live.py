@@ -6,6 +6,10 @@ is appended to ``events.jsonl`` in the night's folder (a crash-safe log) and is 
 every open dashboard over a WebSocket. A small annotated preview frame is kept for the
 live video view. On stop, the folder gets events.json and run.json, like an analysed
 recording, so it can be re-imported anywhere.
+
+A running session records a heartbeat (its latest frame time) every minute. If the
+station is cut off (a crash or a power cut) the session is closed at that time the next
+time a station starts, and marked "interrupted" (``close_interrupted``).
 """
 
 from __future__ import annotations
@@ -44,6 +48,8 @@ log = logging.getLogger(__name__)
 PREVIEW_WIDTH = 960
 PREVIEW_FPS = 5.0
 SHOWN_EVENTS_S = 6.0  # finished events stay drawn on the preview this long
+HEARTBEAT_S = 60.0  # how often a running session records its latest frame time
+STALE_S = 300.0  # no heartbeat for this long: the station that ran it has stopped
 
 _Queue = asyncio.Queue[dict[str, Any]]
 
@@ -110,6 +116,7 @@ class LiveStation:
             "fps": self.source.fps,
             "frame_size": [self.source.width, self.source.height],
             "simulated": self.simulated,
+            "heartbeat": self.started_at.isoformat(),
         }
         if self.observer is not None:
             info["observer"] = {
@@ -117,6 +124,7 @@ class LiveStation:
                 "lon": self.observer.longitude,
                 "elevation_m": self.observer.elevation_m,
             }
+        close_interrupted(self.store, self.started_at)
         self.session_id = self.store.add_session(
             self.folder.name,
             "live",
@@ -215,7 +223,7 @@ class LiveStation:
         self._pipeline = pipeline
         recorder = ClipRecorder(self.folder, cfg.clips, source.fps) if self.clips else None
         window: deque[float] = deque()
-        next_preview = 0.0
+        next_preview = next_heartbeat = 0.0
         try:
             for frame in source:
                 if self._stop.is_set():
@@ -236,6 +244,9 @@ class LiveStation:
                 if now >= next_preview:
                     self._preview = self._draw_preview(frame, pipeline)
                     next_preview = now + 1.0 / PREVIEW_FPS
+                if now >= next_heartbeat:
+                    self._heartbeat()
+                    next_heartbeat = now + HEARTBEAT_S
             for event in pipeline.finish():
                 self._emit(event, recorder)
         except Exception as exc:  # report it in the dashboard rather than dying silently
@@ -385,20 +396,19 @@ class LiveStation:
             if cal.observer is not None:
                 meta["pointing"] = cal.camera.pointing_altaz()
         self.store.finish_session(self.session_id, ended.isoformat(), meta)
-        session = self.store.session(self.session_id) or {}
-        events = self.store.events(session_id=self.session_id, limit=1_000_000)
-        reports = sorted(
-            (
-                {k: v for k, v in e.items() if k not in ("session_id", "review", "event_id")}
-                | {"id": e["event_id"]}
-                for e in events
-            ),
-            key=lambda e: e["start_time"],
-        )
-        (self.folder / "events.json").write_text(json.dumps(reports, indent=1), encoding="utf-8")
-        info = {**session.get("meta", {}), "started": session.get("started")}
-        (self.folder / "run.json").write_text(json.dumps(info, indent=2), encoding="utf-8")
+        write_run_files(self.store, self.session_id, self.folder)
         log.info("Live session %s closed: %d frames", self.session_id, self.frames)
+
+    def _heartbeat(self) -> None:
+        assert self.session_id is not None and self._last_time is not None
+        self.store.update_session(
+            self.session_id,
+            {
+                "heartbeat": datetime.now(UTC).isoformat(),
+                "last_frame": self._last_time.isoformat(),
+                "frames": self.frames,
+            },
+        )
 
     def _draw_preview(self, frame: Frame, pipeline: Pipeline) -> bytes | None:
         """The current view, small, with tracked objects bracketed and recent events
@@ -452,6 +462,49 @@ class LiveStation:
         )
         ok, jpeg = cv2.imencode(".jpg", view, [cv2.IMWRITE_JPEG_QUALITY, 75])
         return jpeg.tobytes() if ok else None
+
+
+def write_run_files(store: Store, session_id: int, folder: Path) -> None:
+    """events.json and run.json: the folder describes itself, like an analysed recording."""
+    session = store.session(session_id) or {}
+    events = store.events(session_id=session_id, limit=1_000_000)
+    reports = sorted(
+        (
+            {k: v for k, v in e.items() if k not in ("session_id", "review", "event_id")}
+            | {"id": e["event_id"]}
+            for e in events
+        ),
+        key=lambda e: e["start_time"],
+    )
+    (folder / "events.json").write_text(json.dumps(reports, indent=1), encoding="utf-8")
+    info = {**session.get("meta", {}), "started": session.get("started")}
+    (folder / "run.json").write_text(json.dumps(info, indent=2), encoding="utf-8")
+
+
+def close_interrupted(store: Store, now: datetime, stale_s: float = STALE_S) -> list[int]:
+    """Close live sessions whose station was cut off (no heartbeat for ``stale_s``).
+
+    Each ends at its last recorded frame (or its last event, or its start) and is marked
+    ``interrupted``. Returns the ids of the sessions closed.
+    """
+    closed = []
+    for s in store.open_live_sessions():
+        meta = s["meta"]
+        beat = meta.get("heartbeat")
+        if beat and (now - datetime.fromisoformat(beat)).total_seconds() < stale_s:
+            continue  # still running, perhaps in another process
+        events = store.events(session_id=s["id"], limit=1_000_000)
+        ends = [e["end_time"] for e in events if e.get("end_time")]
+        ended = meta.get("last_frame") or max(ends, default=None) or s["started"]
+        if ended is None:
+            continue
+        store.finish_session(s["id"], ended, {"ended": ended, "interrupted": True})
+        folder = Path(s["folder"])
+        if folder.is_dir():
+            write_run_files(store, s["id"], folder)
+        log.warning("Session %s was cut off; closed at its last frame, %s", s["name"], ended)
+        closed.append(s["id"])
+    return closed
 
 
 def _moving(tracks: list[Any]) -> bool:

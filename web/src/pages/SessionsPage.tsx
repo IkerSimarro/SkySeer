@@ -92,6 +92,11 @@ function SessionCard({
         <span className="tags">
           {isTest(s) && <span className="sim-tag">TEST</span>}
           {s.kind === 'live' && <span className="chip">live</span>}
+          {s.meta.interrupted && (
+            <span className="chip" title="The station stopped mid-night (a crash or power cut); the session ends at its last recorded frame.">
+              cut off
+            </span>
+          )}
         </span>
       </button>
       <div className="session-body">
