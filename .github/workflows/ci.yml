@@ -51,11 +51,18 @@ jobs:
       DEBIAN_FRONTEND: noninteractive
     steps:
       - name: Raspberry Pi package archive
+        # The archive's key, from the same package Raspberry Pi OS installs it from: its
+        # 2025 copy is signed with SHA-512 (trixie's apt rejects the old SHA-1 signatures).
         run: |
           apt-get update
-          apt-get install -y --no-install-recommends ca-certificates curl gpg
-          curl -fsSL https://archive.raspberrypi.com/debian/raspberrypi.gpg.key             | gpg --dearmor -o /usr/share/keyrings/raspberrypi.gpg
-          echo "deb [signed-by=/usr/share/keyrings/raspberrypi.gpg] http://archive.raspberrypi.com/debian/ ${{ matrix.release }} main"             > /etc/apt/sources.list.d/raspberrypi.list
+          apt-get install -y --no-install-recommends ca-certificates curl
+          deb=raspberrypi-archive-keyring_2025.1+rpt1_all.deb
+          curl -fsSLO https://archive.raspberrypi.com/debian/pool/main/r/raspberrypi-archive-keyring/$deb
+          echo "2e727149d7acb8cc7f604e66d0049161039c8aa1eaf1175e54f9e69d963d60e4  $deb" | sha256sum -c
+          dpkg -i $deb
+          archive="http://archive.raspberrypi.com/debian/ ${{ matrix.release }} main"
+          keyring=/usr/share/keyrings/raspberrypi-archive-keyring.pgp
+          echo "deb [signed-by=$keyring] $archive" > /etc/apt/sources.list.d/raspberrypi.list
           apt-get update
       - name: System packages (as install.sh)
         run: apt-get install -y python3-picamera2 python3-venv python3-dev git
@@ -68,13 +75,20 @@ jobs:
           .venv/bin/pip install -e . --group dev
       - name: Camera library loads next to SkySeer's packages
         run: |
-          .venv/bin/python -c "
-          import platform, numpy, cv2, av, picamera2, subprocess
-          apt = subprocess.run(['dpkg-query', '-W', '-f=\${Version}', 'python3-picamera2'],
+          .venv/bin/python - <<'PY'
+          import platform, subprocess, traceback
+          try:
+              import av, cv2, numpy, picamera2
+          except Exception:
+              text = traceback.format_exc().replace('%', '%25').replace(chr(10), '%0A')
+              print('::error title=Camera library::' + text)
+              raise SystemExit(1)
+          apt = subprocess.run(['dpkg-query', '-W', '-f=${Version}', 'python3-picamera2'],
                                capture_output=True, text=True).stdout
           print('::notice title=Pi environment::Python', platform.python_version(),
                 platform.machine(), '| numpy', numpy.__version__, 'from', numpy.__file__,
-                '| opencv', cv2.__version__, '| av', av.__version__, '| picamera2', apt)"
+                '| opencv', cv2.__version__, '| av', av.__version__, '| picamera2', apt)
+          PY
       - name: Cache star catalogue and solver databases
         uses: actions/cache@v6
         with:
