@@ -66,10 +66,13 @@ aerospace recruiter or engineer will think when they see it on GitHub**. That me
 | Detection / classification benchmark (clean scenes) | 100% detection, 100% classification, 0 false alarms |
 | Camera shake (simulated wobble up to 6 px, 5 Hz) | 0 false alarms (416 without correction at 4 px) |
 | Learned classifier, 150 held-out *difficult* simulated nights | 96.7% classified right vs 69.5% for the rules; 1 false alarm vs 59 |
-| Learned classifier, real YouTube footage (224 blind by-eye labels) | behind the rules: 19/31 real objects right vs 25/31 (sim-to-real gap; rules stay default) |
+| Learned classifier, real YouTube footage (224 blind by-eye labels) | behind the rules: 19/31 real objects right vs 27/31 (sim-to-real gap; rules stay default) |
+| Noise linked into fake objects (real 1080p recording) | 467 → 71 in 10 minutes; all 23 real satellite passes kept; junk called real 13 → 7 of 193 |
+| Aircraft identification (ADS-B, simulated flights) | 150/150 named among 20 others; 0/90 false names |
 | Meteor shower identification | ~96% of shower meteors correct; ~5% of random meteors matched by chance |
 | Meteor brightness | ±0.1 magnitude |
 | Sun position for the night schedule (vs NASA JPL DE421) | median 0.003°, max 0.012° |
+| Analysing a 1080p30 recording (Intel i7-7700) | 30-34 fps, about real time (was 12-19) |
 | Live station throughput at 2028×1520 (Intel i7-7700) | 23.8 fps full, 41.5 fps half resolution (Pi 5 not yet measured) |
 
 All tested against real data so far: ESA's tetra3 sample sky images, the user's own

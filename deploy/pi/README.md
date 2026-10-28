@@ -83,7 +83,7 @@ USB ADS-B receiver running readsb (`source: readsb`) works offline with no limit
 
 | Want to... | Do |
 |---|---|
-| See what it saw | the dashboard: Overview, Events, Night report |
+| See what it saw | the dashboard: Home, Sessions, Events, Night report |
 | Watch live | the Live page (from nautical dusk) |
 | Check it is running | `systemctl status skyseer` |
 | Read its log | `journalctl -u skyseer -f` |

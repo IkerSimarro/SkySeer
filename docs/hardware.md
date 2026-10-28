@@ -2,7 +2,8 @@
 
 **Status:** not built yet (planned for December 2026). The software side is ready and
 tested without the hardware (camera driver against a stand-in, GPS against recorded
-messages, the scheduler with a simulated clock).
+messages, the scheduler with a simulated clock). The plan for the first nights, and the
+measurements they should produce: [first-light.md](first-light.md).
 
 **Prices** are rough euro figures from October 2026; check current ones. Raspberry Pi
 raised its prices three times between December 2025 and April 2026 (memory chips got

@@ -142,7 +142,7 @@ Every number below has a test, a benchmark or a recorded experiment behind it.
 
 | What | Result | How it was measured |
 |---|---|---|
-| Detection and classification | 100% of 100 objects found, 100% classified correctly, 0 false alarms, ~130 frames/s | 20 synthetic scenes with known truth, re-run on every change (`tools/validate.py`) |
+| Detection and classification | 100% of 100 objects found, 100% classified correctly, 0 false alarms, 190-230 frames/s (Intel i7-7700) | 20 synthetic scenes with known truth, re-run on every change (`tools/validate.py`) |
 | Camera pointing from the stars | ≤ 15″ error on 30 of 30 skies; random-dot images never accepted as a sky | simulated skies rendered from the Hipparcos catalogue at random places, times and lenses |
 | Real-sky plate solving | author's own footage: 80 stars matched, 1.14 px residual. ESA's sample photos: within ~1° of their recorded mount pointing | real images |
 | Satellite identification | 6/6 named among ~16,000; 0 of 300 random satellite-like paths named | passes simulated from a frozen CelesTrak snapshot (real orbits) |
@@ -287,7 +287,7 @@ tests/  tools/        tests; validation, benchmarks, simulators, footage tools
 | 5 | Database, web API and mission-control dashboard (replacing a Streamlit prototype) | done |
 | 6 | Station software: night schedule, GPS, Pi camera driver, install kit | done |
 | 7 | v1.0 release | done |
-| 8 | **Station build:** Pi 5 + HQ camera outdoors, first-light results, real throughput ([parts](docs/hardware.md)) | December 2026 |
+| 8 | **Station build:** Pi 5 + HQ camera outdoors, first-light results, real throughput ([parts](docs/hardware.md), [first-light plan](docs/first-light.md)) | December 2026 |
 | next | Retrain the classifier on the station's own orbit-matched satellites; a second station to triangulate meteors | |
 
 ## Limitations
