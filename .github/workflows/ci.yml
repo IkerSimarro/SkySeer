@@ -67,12 +67,8 @@ jobs:
       - name: System packages (as install.sh)
         run: apt-get install -y python3-picamera2 python3-venv python3-dev git
       - uses: actions/checkout@v7
-      - name: Python environment (as install.sh)
-        run: |
-          python3 --version
-          python3 -m venv --system-site-packages .venv
-          .venv/bin/pip install --upgrade pip
-          .venv/bin/pip install -e . --group dev
+      - name: Python environment (install.sh's own step)
+        run: ./deploy/pi/setup-python.sh --group dev
       - name: Camera library loads next to SkySeer's packages
         run: |
           .venv/bin/python - <<'PY'

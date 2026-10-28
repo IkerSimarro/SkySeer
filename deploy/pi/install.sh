@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Set up a SkySeer station on a Raspberry Pi 5 (Raspberry Pi OS Bookworm, 64-bit).
+# Set up a SkySeer station on a Raspberry Pi 5 (Raspberry Pi OS 64-bit, trixie or bookworm).
 #
 #   git clone https://github.com/IkerSimarro/SkySeer.git ~/skyseer
 #   cd ~/skyseer && ./deploy/pi/install.sh [--gps]
@@ -23,12 +23,8 @@ if (( WITH_GPS )); then
 fi
 
 step "Python environment"
-# --system-site-packages lets the environment see picamera2/libcamera, which come from
-# the operating system and can't be installed with pip.
 cd "$DIR"
-python3 -m venv --system-site-packages .venv
-.venv/bin/pip install --upgrade pip
-.venv/bin/pip install -e .
+./deploy/pi/setup-python.sh  # also tested in CI, on Raspberry Pi OS's own packages
 
 step "Dashboard"
 if [[ -f src/skyseer/api/static/index.html ]]; then
