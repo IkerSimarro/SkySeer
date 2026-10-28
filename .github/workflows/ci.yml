@@ -95,6 +95,29 @@ jobs:
       - name: Show failed tests
         if: failure() && hashFiles('pytest.xml') != ''
         run: .venv/bin/python tools/ci_failures.py pytest.xml
+      - name: The service's command starts the station (no camera here)
+        run: |
+          .venv/bin/skyseer station --config configs/pi.yaml --port 8000 \
+            --lat 40.42 --lon -3.70 > station.log 2>&1 &
+          pid=$!
+          for i in $(seq 1 90); do
+            curl -fsS http://127.0.0.1:8000/api/health > health.json 2>/dev/null && break
+            sleep 2
+          done
+          kill $pid || true
+          .venv/bin/python - <<'PY'
+          import json, pathlib
+          log = pathlib.Path('station.log').read_text(errors='replace')[-1500:]
+          try:
+              live = json.loads(pathlib.Path('health.json').read_text())['live']
+              assert live['mode'] in ('waiting', 'observing') and live['location'], live
+          except Exception as exc:
+              text = f'{exc!r} / log: {log}'.replace('%', '%25').replace(chr(10), '%0A')
+              print('::error title=Station did not start::' + text)
+              raise SystemExit(1)
+          print('::notice title=Station::mode', live['mode'], '| sun', live['sun_altitude'],
+                '| error', live['station_error'])
+          PY
 
   dashboard:
     runs-on: ubuntu-latest
