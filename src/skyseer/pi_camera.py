@@ -65,6 +65,12 @@ class PiCameraSource:
         self.fps = s.fps
         frame_us = int(round(1e6 / s.fps))
         self.exposure_us = s.exposure_us or int(0.95 * frame_us)
+        found = Picamera2.global_camera_info()
+        if len(found) <= s.camera_num:  # picamera2 itself only says "list index out of range"
+            raise RuntimeError(
+                f"No camera {s.camera_num} found ({len(found)} connected): check the ribbon "
+                "cable (power off first), then `rpicam-hello --list-cameras`"
+            )
         self._camera = Picamera2(camera_num=s.camera_num)
         config = self._camera.create_video_configuration(
             main={"size": (s.width, s.height), "format": "YUV420"},

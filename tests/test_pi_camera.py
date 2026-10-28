@@ -42,6 +42,11 @@ class FakeRequest:
 class FakePicamera2:
     instances: list = []
     delivers: tuple[int, int] | None = None  # a size libcamera adjusted the request to
+    connected = [{"Model": "imx477", "Num": 0}]
+
+    @staticmethod
+    def global_camera_info():
+        return FakePicamera2.connected
 
     def __init__(self, camera_num=0):
         self.camera_num = camera_num
@@ -84,6 +89,7 @@ def fake_picamera2(monkeypatch):
     monkeypatch.setitem(sys.modules, "picamera2", module)
     FakePicamera2.instances.clear()
     FakePicamera2.delivers = None
+    FakePicamera2.connected = [{"Model": "imx477", "Num": 0}]
     return FakePicamera2
 
 
@@ -127,6 +133,13 @@ def test_frames_have_the_size_the_camera_delivers(fake_picamera2):
     source.close()
 
 
+def test_no_camera_says_what_to_check(fake_picamera2):
+    fake_picamera2.connected = []  # a loose ribbon cable
+    with pytest.raises(RuntimeError, match="No camera 0 found .0 connected.: check the ribbon"):
+        PiCameraSource()
+    assert fake_picamera2.instances == []  # never opened
+
+
 def test_the_real_camera_library_takes_these_settings():
     """Every control the driver sets exists in libcamera, and picamera2 has the calls it
     makes. Runs only where the real library is installed (no camera needed)."""
@@ -144,7 +157,8 @@ def test_the_real_camera_library_takes_these_settings():
     camera = picamera2.Picamera2
     takes = inspect.signature(camera.create_video_configuration).parameters
     assert {"main", "buffer_count", "controls"} <= set(takes)
-    for name in ("configure", "camera_configuration", "start", "capture_request", "stop", "close"):
+    names = ("global_camera_info", "configure", "camera_configuration", "start", "capture_request")
+    for name in (*names, "stop", "close"):
         assert callable(getattr(camera, name)), name
     for name in ("make_array", "get_metadata", "release"):
         assert callable(getattr(CompletedRequest, name)), name
