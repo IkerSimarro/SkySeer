@@ -184,7 +184,8 @@ Real footage has tested, and led to fixes in, several stages:
   Before the fixes it reported 47 "meteors" and 12 "satellites", almost all false. After
   them: 4 clean meteors and 28 complete satellite passes, with 29 scene changes ignored.
   In 224 tracks labelled blind by eye, 27 of 31 real objects are classified right (23 of
-  24 satellites), and 13 of 193 junk tracks are wrongly reported as real.
+  24 satellites), and 7 of 193 junk tracks are wrongly reported as real (13 before the
+  noise tests of October 2026).
 - **Not yet done:** naming a satellite in real footage. That needs a recording with
   accurate time and place, and orbits from the same week. It is the station's first job.
 
