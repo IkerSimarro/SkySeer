@@ -11,6 +11,17 @@ work was done. Full detail is in the commit messages.
   left open with no heartbeat for 5 minutes ends at that time (not days later at the
   next disk clean-up), gets its events.json and run.json, and shows **cut off** in
   the dashboard.
+- **CI now reproduces the Raspberry Pi's software.** It runs on 64-bit ARM, with
+  Raspberry Pi OS's own packages (including the real camera library, picamera2). It
+  installs SkySeer with the Pi install script's own Python step and runs every test.
+  It passes on trixie, which new Pi images ship (Python 3.13, OpenCV 5.0, in 13 min).
+  The camera driver's eight night settings are checked against the real libcamera
+  controls. Two problems the Pi would have hit in December were found and fixed:
+  - On bookworm, pip's numpy 2 broke the camera library's JPEG code. The install now
+    keeps numpy on the system's major version.
+  - PyAV older than 14.1 (bookworm ships 12.3) can't turn phone videos upright, so
+    SkySeer now requires 14.1.
+- A first-light plan for the station build ([docs/first-light.md](docs/first-light.md)).
 
 ## [1.0.0] - 2026-10-28
 

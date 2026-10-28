@@ -1516,7 +1516,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "av", specifier = ">=12" },
+    { name = "av", specifier = ">=14.1" },
     { name = "fastapi", specifier = ">=0.115" },
     { name = "numpy", specifier = ">=1.26" },
     { name = "opencv-python-headless", specifier = ">=4.9" },

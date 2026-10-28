@@ -89,15 +89,19 @@ def _rotated_video(path: Path) -> None:
     path.write_bytes(bytes(data))
 
 
-def test_rotated_video_comes_out_upright_like_opencv(tmp_path):
+def test_rotated_video_comes_out_upright(tmp_path):
     path = tmp_path / "phone.mp4"
     _rotated_video(path)
-    ref = _opencv_frames(path)[0]
     video = VideoFile(path)
     _, image = next(video.frames())
     _, grey = next(video.frames(gray=True))
     video.close()
-    assert ref.shape == (64, 32, 3)  # OpenCV turns it upright
     assert (video.width, video.height) == (32, 64)
-    assert image.shape == ref.shape and grey.shape == ref.shape[:2]
-    assert np.abs(image.astype(int) - ref).mean() < 2
+    assert image.shape == (64, 32, 3) and grey.shape == (64, 32)
+    # A quarter turn clockwise: the band on the left of the stored picture is now on top.
+    assert grey[:14].mean() > 240 and grey[18:].mean() < 15
+    # OpenCV builds that read the rotation agree pixel for pixel (OpenCV 4.11's ARM wheel
+    # leaves the picture sideways, so it isn't the reference).
+    ref = _opencv_frames(path)[0]
+    if ref.shape == image.shape:
+        assert np.abs(image.astype(int) - ref).mean() < 2
