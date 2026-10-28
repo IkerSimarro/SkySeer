@@ -89,7 +89,7 @@ USB ADS-B receiver running readsb (`source: readsb`) works offline with no limit
 | Watch live | the Live page (from nautical dusk) |
 | Check it is running | `systemctl status skyseer` |
 | Read its log | `journalctl -u skyseer -f` |
-| Update SkySeer | `cd ~/skyseer && git pull && .venv/bin/pip install -e . && sudo systemctl restart skyseer` |
+| Update SkySeer | `cd ~/skyseer && git pull && ./deploy/pi/setup-python.sh && sudo systemctl restart skyseer` (not a bare `pip install`: it would replace the numpy the camera library needs) |
 | Stop it | `sudo systemctl stop skyseer` (and `disable` to stop it starting at boot) |
 
 Disk space looks after itself: clips of live nights older than 30 days, or the oldest

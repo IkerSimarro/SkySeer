@@ -19,7 +19,7 @@ It assumes the parts in [hardware.md](hardware.md) and the install guide in
    not just in CI.
    ```
    cd ~/skyseer
-   .venv/bin/pip install -e . --group dev
+   ./deploy/pi/setup-python.sh --group dev   # adds pytest; keeps the camera library working
    .venv/bin/python -m pytest -q
    ```
    Write down: tests passed, and how long they took.
