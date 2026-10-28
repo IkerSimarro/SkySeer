@@ -45,7 +45,7 @@ for December 2026.
 | **Detection and tracking**: background modelling, plus a Kalman filter with optimal assignment. It works as a stream, so each event is reported as soon as the object leaves the view, with a zoomed clip and trail image. | 100% found, 100% classified, 0 false alarms on the benchmark |
 | **Camera-shake correction**, star-tracker style: the image offset is measured from star positions and removed. | 0.05 px accuracy in 0.7 ms per frame; false alarms from a 4 px wobble 416 → 0 |
 | **Classification**: hand-written rules by default. An optional machine-learning model is trained on simulated nights and tested honestly against real footage. | the model wins in simulation (96.7% vs 69.5%) but loses on real footage, so the rules stay the default |
-| **Mission-control dashboard**: live camera view, event pages, all-sky map, night reports, and review buttons whose answers become training data. | |
+| **Mission-control dashboard**: live camera view, event pages, all-sky map, night reports, and review buttons whose answers become training data. Uploaded recordings are analysed in the background at low priority, and can be stopped and resumed. | a 1080p30 recording analysed at about its own speed (30-34 frames/s) |
 | **Aircraft identification**: matches each path against the positions aircraft broadcast (ADS-B), from the free OpenSky Network or a local receiver, the same way as satellites. | 150/150 simulated flights named among 20 others; 0 of 90 false paths named |
 | **Unattended station**: observes from dusk to dawn, takes position and time from GPS, starts itself at boot and cleans up its own disk. | Sun position within 0.012° of NASA JPL's ephemeris |
 

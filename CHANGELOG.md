@@ -3,7 +3,7 @@
 What changed, phase by phase, with the measured effect of each change. Dates are when the
 work was done. Full detail is in the commit messages.
 
-## [1.0.0] - unreleased
+## [1.0.0] - 2026-10-28
 
 The first complete release: SkySeer rebuilt from a Streamlit prototype into a tested,
 installable system, with an astronomy layer, a web dashboard and the software for an

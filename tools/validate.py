@@ -100,7 +100,8 @@ def main() -> int:
     )
 
     if args.update_baseline or not BASELINE.exists():
-        BASELINE.write_text(json.dumps({"scenes": args.scenes, **current}, indent=2) + "\n")
+        text = json.dumps({"scenes": args.scenes, **current}, indent=2) + "\n"
+        BASELINE.write_text(text, newline="\n")  # the same file on Windows and Linux
         print(f"Baseline saved to {BASELINE.relative_to(ROOT)}")
     else:
         baseline = json.loads(BASELINE.read_text())
