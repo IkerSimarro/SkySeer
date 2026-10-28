@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
+from fractions import Fraction
 from pathlib import Path
 from typing import Protocol
 
@@ -51,8 +52,10 @@ class VideoFile:
         if DECODE_THREADS:
             s.thread_count = DECODE_THREADS
         self.fps = float(s.average_rate or s.guessed_rate or 30.0)
+        # Timestamps are counted in this unit (containers set it; MPEG's 1/90000 if not).
+        self._tb = s.time_base or Fraction(1, 90000)
         seconds = (
-            float(s.duration * s.time_base)
+            float(s.duration * self._tb)
             if s.duration
             else float(self._container.duration or 0) / 1e6
         )
@@ -73,7 +76,7 @@ class VideoFile:
         """(index, image) from frame ``first`` up to (not including) ``last``; images
         are BGR, or 2-D greyscale with ``gray``."""
         s = self._stream
-        tb = s.time_base
+        tb = self._tb
         # To the keyframe at or before ``first``, then decode forward.
         self._container.seek(self._pts0 + int(first / self.fps / tb), stream=s)
         fmt = "gray" if gray else "bgr24"
@@ -88,7 +91,7 @@ class VideoFile:
                 continue
             if last is not None and index >= last:
                 break
-            image = frame.to_ndarray(format=fmt)
+            image: np.ndarray = frame.to_ndarray(format=fmt)
             if self._turns:
                 image = np.ascontiguousarray(np.rot90(image, self._turns))
             yield index, image

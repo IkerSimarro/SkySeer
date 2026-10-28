@@ -1,9 +1,13 @@
+import hashlib
+import io
 import math
+import urllib.error
 from datetime import UTC, datetime, timedelta
 
 import numpy as np
 import pytest
 
+from skyseer.astro import catalog as star_catalog
 from skyseer.astro.calibrate import Calibration, CalibrationError, _solver, calibrate, find_stars
 from skyseer.astro.camera import CameraModel, fit_camera, wahba_rotation
 from skyseer.astro.frames import (
@@ -235,3 +239,37 @@ def test_star_names_point_at_bright_stars(catalog):
     vega = idx[91262]
     assert catalog.ra[vega] == pytest.approx(279.23, abs=0.05)
     assert catalog.dec[vega] == pytest.approx(38.78, abs=0.05)
+
+
+# --------------------------------------------------------------------------- catalogue download
+def _fake_servers(monkeypatch, replies):
+    """Stand in for the network: each URL either raises or returns some bytes."""
+    tried = []
+
+    def urlopen(url, timeout):
+        tried.append(url)
+        reply = replies[url]
+        if isinstance(reply, Exception):
+            raise reply
+        return io.BytesIO(reply)
+
+    monkeypatch.setattr(star_catalog.urllib.request, "urlopen", urlopen)
+    return tried
+
+
+def test_catalogue_download_falls_back_to_the_mirror(tmp_path, monkeypatch):
+    main, mirror = star_catalog.HIPPARCOS_URLS
+    good = b"118218 stars"
+    monkeypatch.setattr(star_catalog, "HIPPARCOS_SHA256", hashlib.sha256(good).hexdigest())
+    tried = _fake_servers(monkeypatch, {main: urllib.error.URLError("timed out"), mirror: good})
+    path = star_catalog.ensure_hipparcos(tmp_path)
+    assert tried == [main, mirror]
+    assert path.read_bytes() == good
+
+
+def test_a_damaged_catalogue_is_never_kept(tmp_path, monkeypatch):
+    main, mirror = star_catalog.HIPPARCOS_URLS
+    _fake_servers(monkeypatch, {main: b"half a file", mirror: b"an error page"})
+    with pytest.raises(OSError, match="differs from the published catalogue"):
+        star_catalog.ensure_hipparcos(tmp_path)
+    assert list(tmp_path.iterdir()) == []

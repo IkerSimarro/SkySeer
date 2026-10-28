@@ -9,6 +9,14 @@ The first complete release: SkySeer rebuilt from a Streamlit prototype into a te
 installable system, with an astronomy layer, a web dashboard and the software for an
 unattended Raspberry Pi station.
 
+### Release checks (2026-10-28)
+- The star catalogue download falls back to the Harvard mirror when the CDS archive in
+  Strasbourg doesn't answer (it timed out on every try on 28 October), and every copy is
+  checked against the catalogue's SHA-256 before use.
+- CI posts each failed test's traceback as a public annotation (job logs need a GitHub
+  sign-in), type-checks cleanly on Python 3.11 as well as 3.12, and uses the Node 24
+  versions of its GitHub Actions.
+
 ### A tidier dashboard (2026-10-28)
 - One session switcher in the top bar drives every page (Home, Events, Sky map, Night
   report) instead of a selector on each, remembered in the browser; links still open a

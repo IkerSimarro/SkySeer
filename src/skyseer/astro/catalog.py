@@ -6,8 +6,8 @@ built once from the Hipparcos catalogue (ESA, 118,218 stars) and cached on disk.
 
 from __future__ import annotations
 
+import hashlib
 import logging
-import shutil
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
@@ -19,7 +19,13 @@ from .frames import radec_to_vec
 
 log = logging.getLogger(__name__)
 
-HIPPARCOS_URL = "https://cdsarc.cds.unistra.fr/ftp/cats/I/239/hip_main.dat"
+# The CDS archive in Strasbourg, then its mirror at Harvard (CfA): the same file, byte for
+# byte. Any copy is checked against this SHA-256 before it is used.
+HIPPARCOS_URLS = (
+    "https://cdsarc.cds.unistra.fr/ftp/cats/I/239/hip_main.dat",
+    "https://vizier.cfa.harvard.edu/ftp/cats/I/239/hip_main.dat",
+)
+HIPPARCOS_SHA256 = "58ceabb104d647160d9437ce6e513a02a036bb4ad9f8879a5a22fd52943616e0"
 DEFAULT_DATA_DIR = Path("data/astro")
 
 
@@ -27,18 +33,40 @@ def hipparcos_path(data_dir: Path = DEFAULT_DATA_DIR) -> Path:
     return data_dir / "hip_main.dat"
 
 
+def _download(url: str, out: Path) -> str:
+    """Save ``url`` to ``out`` and return the file's SHA-256."""
+    digest = hashlib.sha256()
+    with urllib.request.urlopen(url, timeout=60) as resp, open(out, "wb") as fh:
+        while chunk := resp.read(1 << 20):
+            digest.update(chunk)
+            fh.write(chunk)
+    return digest.hexdigest()
+
+
 def ensure_hipparcos(data_dir: Path = DEFAULT_DATA_DIR) -> Path:
-    """Download the Hipparcos main catalogue (~51 MB) if it isn't cached yet."""
+    """Download the Hipparcos main catalogue (~51 MB) if it isn't cached yet.
+
+    Tries each server in turn, so one archive being down doesn't stop a first run.
+    """
     path = hipparcos_path(data_dir)
     if path.exists() and path.stat().st_size > 50_000_000:
         return path
     data_dir.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".part")
-    log.warning("Downloading Hipparcos catalogue from %s (~51 MB)...", HIPPARCOS_URL)
-    with urllib.request.urlopen(HIPPARCOS_URL, timeout=120) as resp, open(tmp, "wb") as out:
-        shutil.copyfileobj(resp, out)
-    tmp.replace(path)
-    return path
+    problems = []
+    for url in HIPPARCOS_URLS:
+        log.warning("Downloading Hipparcos catalogue from %s (~51 MB)...", url)
+        try:
+            sha = _download(url, tmp)
+        except OSError as err:  # URLError, timeouts and refused connections are OSErrors
+            problems.append(f"{url}: {err}")
+            continue
+        if sha == HIPPARCOS_SHA256:
+            tmp.replace(path)
+            return path
+        problems.append(f"{url}: the file differs from the published catalogue")
+    tmp.unlink(missing_ok=True)
+    raise OSError("Could not download the Hipparcos catalogue:\n  " + "\n  ".join(problems))
 
 
 @dataclass(frozen=True)
