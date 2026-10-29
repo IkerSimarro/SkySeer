@@ -245,7 +245,7 @@ unattended dusk-to-dawn station). To set up a Raspberry Pi, see
 
 ## Engineering
 
-- **175 automated tests:**
+- **177 automated tests:**
   - unit tests
   - end-to-end runs on synthetic video with known truth
   - simulated skies from the real star catalogue
