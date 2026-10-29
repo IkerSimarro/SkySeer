@@ -5,7 +5,8 @@
         --lat 40.42 --lon -3.70 --alt 50 --az 250 --out data/sim/sats.mp4
 
     # The same with the Moon where it really is (disc, glare, lens ghost, moonlit noise):
-    python tools/simulate_scenario.py satellites --date 2026-10-23T19:00:00         --lat 40.42 --lon -3.70 --alt 45 --az 135 --moon --out data/sim/moon.mp4
+    python tools/simulate_scenario.py satellites --date 2026-10-23T19:00:00 \
+        --lat 40.42 --lon -3.70 --alt 45 --az 135 --moon --out data/sim/moon.mp4
 
     # Meteors from a shower plus sporadics (shower must be active on that date):
     python tools/simulate_scenario.py meteors --shower ORI --count 6 \
