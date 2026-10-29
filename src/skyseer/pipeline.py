@@ -217,6 +217,11 @@ class Pipeline:
             from .astro.sky import sky_path
 
             event.sky = sky_path(track, self.calibration)
+            observer = self.calibration.observer
+            if self.config.moon.enabled and observer is not None:
+                from .astro.moon import moon_near_path
+
+                event.moon = moon_near_path(event.sky, observer, self.config.moon.near_deg)
             if self.aircraft is not None and label is not ObjectClass.STAR:
                 self._check_aircraft(event)
             if (

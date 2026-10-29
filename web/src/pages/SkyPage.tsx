@@ -29,7 +29,7 @@ export default function SkyPage({ scope }: { scope: Scope }) {
       </div>
       <div className="grid sky-grid">
         <section className="panel sky-panel">
-          {events.data ? <SkyMap events={placed} pointing={current?.meta.pointing} /> : <Loading what="events" />}
+          {events.data ? <SkyMap events={placed} pointing={current?.meta.pointing} moon={current?.meta.moon} /> : <Loading what="events" />}
         </section>
         <section className="panel">
           <h3>Legend</h3>
@@ -38,6 +38,7 @@ export default function SkyPage({ scope }: { scope: Scope }) {
               <div key={c}><ClassBadge label={c} /> <span className="mono muted">{placed.filter((e) => e.label === c).length}</span></div>
             ))}
             <div className="muted">⌖ where the camera points</div>
+            {current?.meta.moon?.path.length ? <div className="muted">○ the Moon&apos;s path while it was up ({Math.round(100 * current.meta.moon.fraction_lit)}% lit)</div> : null}
           </div>
           {current?.meta.observer && (
             <dl className="kv" style={{ marginTop: 16 }}>

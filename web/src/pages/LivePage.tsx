@@ -50,6 +50,13 @@ function gpsText(gps: NonNullable<LiveStatus['gps']>): string {
   return `${fix.mode === 3 ? '3-D' : '2-D'} fix, ${fix.satellites} satellites${clock}`
 }
 
+function moonNowText(m: NonNullable<LiveStatus['moon']>): string {
+  const lit = `${m.phase}, ${Math.round(100 * m.fraction_lit)}% lit`
+  if (!m.up) return `${lit} · below the horizon`
+  const where = m.in_view === undefined ? '' : m.in_view ? ' · in the picture' : ' · out of the picture'
+  return `${lit} · alt ${m.alt.toFixed(0)}°, az ${m.az.toFixed(0)}°${where}`
+}
+
 function aircraftText(a: NonNullable<LiveStatus['aircraft']>): string {
   const name = a.source === 'opensky' ? 'OpenSky' : 'receiver'
   if (a.error) return `${name}: ${a.error}`
@@ -146,6 +153,7 @@ export default function LivePage() {
               <dt>Location</dt><dd>{s.observer ? `${s.observer.lat.toFixed(3)}°, ${s.observer.lon.toFixed(3)}°` : 'not set: satellites cannot be named'}</dd>
               {s.gps && <><dt>GPS</dt><dd>{gpsText(s.gps)}</dd></>}
               {s.aircraft && <><dt>Aircraft</dt><dd>{aircraftText(s.aircraft)}</dd></>}
+              {s.moon && <><dt>Moon</dt><dd>{moonNowText(s.moon)}</dd></>}
               <dt>Tonight</dt>
               <dd>
                 <span className="c-Satellite">{counts.Satellite ?? 0} satellites</span> ·{' '}
@@ -157,7 +165,12 @@ export default function LivePage() {
           </section>
           <section className="panel">
             <h3>Tonight's sky</h3>
-            <SkyMap events={events} pointing={s.pointing} size={420} />
+            <SkyMap
+              events={events}
+              pointing={s.pointing}
+              moon={s.moon?.up ? { path: [[s.moon.alt, s.moon.az]], fraction_lit: s.moon.fraction_lit } : null}
+              size={420}
+            />
           </section>
         </div>
       </div>

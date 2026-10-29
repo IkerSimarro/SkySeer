@@ -84,6 +84,10 @@ footage**, checked against an independent source.
   - the interrupted night shows **cut off** on the Sessions page, and ends at about
     the time you pulled the plug;
   - observing carries on in a new session.
+- **A moonlit night.** When the Moon crosses the view, open the events marked "near the
+  Moon" and any detection inside the circle on the Live page: are they real objects or
+  glare? Write down how many of each. In simulation the glare added nothing false (a
+  real lens may bloom or ghost differently).
 - **Disk.** `du -sh ~/skyseer/data/live/*`: write down the gigabytes per night. Old
   clips are deleted after 30 days, or sooner if the disk runs low.
 - **Temperature** inside the box on the warmest day (the Pi slows down above ~80 °C).
@@ -109,6 +113,7 @@ footage**, checked against an independent source.
 | Reviewed events | review buttons | __ reviewed, __ false alarms |
 | Power-cut test | Sessions page | cut off at __, restarted: yes / no |
 | Disk per night | `du -sh` | __ GB |
+| A moonlit night | events near the Moon | __ real, __ glare (simulated: 0 glare) |
 
 With these numbers, the README's results table and limitations can be rewritten from
 real skies, using the `portfolio-update` workflow.

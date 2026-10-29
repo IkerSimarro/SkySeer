@@ -251,6 +251,9 @@ export default function EventPage({ id }: { id: number }) {
                 </>
               )}
               {sky && <><dt>Angular speed</dt><dd>{sky.angular_speed_deg_s.toFixed(2)} °/s</dd></>}
+              {e.moon && (
+                <><dt>Near the Moon</dt><dd>{e.moon.separation_deg.toFixed(1)}° from its centre ({Math.round(100 * e.moon.fraction_lit)}% lit): its glare makes brightness and position less precise</dd></>
+              )}
               {e.periodicity && <><dt>Blinks every</dt><dd>{e.periodicity.period_s.toFixed(2)} s{e.label === 'Plane' ? ' (its lights)' : ' (tumbling?)'}</dd></>}
               {details && (
                 <>

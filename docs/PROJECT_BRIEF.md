@@ -71,6 +71,8 @@ aerospace recruiter or engineer will think when they see it on GitHub**. That me
 | Aircraft identification (ADS-B, simulated flights) | 150/150 named among 20 others; 0/90 false names |
 | Meteor shower identification | ~96% of shower meteors correct; ~5% of random meteors matched by chance |
 | Meteor brightness | ±0.1 magnitude |
+| Moon position (vs NASA JPL DE421) | median 0.002°, max 0.006°; fraction lit within 0.0001 |
+| A 93%-lit Moon in view (simulated glare and lens ghost) | 6/6 satellites named, 0 false objects |
 | Sun position for the night schedule (vs NASA JPL DE421) | median 0.003°, max 0.012° |
 | Analysing a 1080p30 recording (Intel i7-7700) | 30-34 fps, about real time (was 12-19) |
 | Live station throughput at 2028×1520 (Intel i7-7700) | 23.8 fps full, 41.5 fps half resolution (Pi 5 not yet measured) |

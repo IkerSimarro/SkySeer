@@ -18,6 +18,7 @@ from ..synth import _stamp
 from .camera import CameraModel
 from .catalog import StarCatalog
 from .frames import Observer, altaz_to_vec, apply_refraction, icrs_to_enu_matrix, radec_to_vec
+from .moon import moon_state
 from .orbits import OrbitCatalog, is_sunlit
 
 
@@ -76,6 +77,41 @@ def render_starfield(
 
 STAR_SIGMA = 1.3
 STAR_SATURATION_MAG = 2.0
+
+
+def render_moon(
+    camera: CameraModel, observer: Observer, when: datetime, sky: float = 20.0
+) -> tuple[np.ndarray, float]:
+    """What the Moon adds to a camera's picture, as a float layer to add to the sky.
+
+    - the disc, saturated (a night exposure overexposes even a crescent);
+    - glare around it, fading with the square of the distance from the disc;
+    - a lens-flare ghost: reflections inside the lens put a faint, blurred copy of the
+      Moon on the opposite side of the picture's centre, moving the opposite way;
+    - moonlight brightening the whole sky, more for a fuller, higher Moon.
+
+    The brightness figures are illustrative, not measured on a real lens. Returns the
+    layer and the sky brightening across the whole picture. Zeros if the Moon is down.
+    """
+    layer = np.zeros((camera.height, camera.width), dtype=np.float32)
+    moon = moon_state(when, observer)
+    if not moon.up:
+        return layer, 0.0
+    lit = moon.fraction
+    glow = 30.0 * lit * max(float(np.sin(np.radians(moon.alt))), 0.0)
+    layer += glow
+    uv, front = camera.vec_to_pixel(moon.enu[None, :])
+    if not front[0]:
+        return layer, glow
+    x, y = (float(c) for c in uv[0])
+    r_disc = camera.f * np.radians(moon.radius_deg)
+    yy, xx = np.mgrid[0 : camera.height, 0 : camera.width].astype(np.float32)
+    d = np.hypot(xx - x, yy - y)
+    layer += 400.0 * lit * (r_disc / np.maximum(d, r_disc)) ** 2
+    layer[d <= r_disc] = 600.0
+    ghost = np.hypot(xx - (2 * camera.cx - x), yy - (2 * camera.cy - y))
+    layer += 25.0 * lit * np.exp(-0.5 * (ghost / (3 * r_disc)) ** 2)
+    return layer, glow
 
 
 def flux_of_magnitude(mag: float, sigma: float = STAR_SIGMA) -> float:
@@ -300,26 +336,36 @@ def render_sky_video(
     satellite_amp: float = 110.0,
     noise: float = 2.5,
     seed: int = 0,
+    moon: bool = False,
 ) -> list[SimulatedPass]:
     """Render a fixed-camera video of the real sky with the chosen catalogue satellites.
 
     Satellites are drawn where SGP4 puts them (apparent, refracted directions) at each
     frame's time. The star layer is re-rendered every ``star_step_s`` seconds so stars drift
-    with the Earth's rotation (15 arcsec/s) like in a real fixed camera.
+    with the Earth's rotation (15 arcsec/s) like in a real fixed camera. With ``moon`` the
+    Moon is drawn where it really is then (:func:`render_moon`), and its light adds noise.
     """
     rng = np.random.default_rng(seed)
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     star_step_s = 2.0
-    star_layers: dict[int, np.ndarray] = {}
+    star_layers: dict[int, tuple[np.ndarray, np.ndarray | float]] = {}
 
-    def sky_at(t_rel: float) -> np.ndarray:
+    def sky_at(t_rel: float) -> tuple[np.ndarray, np.ndarray | float]:
+        """The sky without noise at ``t_rel``, and the noise level (per pixel with a Moon)."""
         block = int(t_rel // star_step_s)
         if block not in star_layers:
             when = start + timedelta(seconds=(block + 0.5) * star_step_s)
-            star_layers[block] = render_starfield(camera, observer, when, stars, noise=0.0).astype(
-                np.float32
-            )
+            layer = render_starfield(camera, observer, when, stars, noise=0.0).astype(np.float32)
+            sigma: np.ndarray | float = noise
+            if moon:
+                light, _ = render_moon(camera, observer, when)
+                layer += light
+                # Photon noise grows with the square root of the light: glare and a moonlit
+                # sky are noisier, which is what hides faint objects near the Moon.
+                sigma = noise * np.sqrt(1 + np.minimum(light, 255.0) / 20.0)
+            star_layers.clear()  # only the current block is needed
+            star_layers[block] = (layer, sigma)
         return star_layers[block]
 
     n = int(seconds * fps)
@@ -334,8 +380,8 @@ def render_sky_video(
         enu, _, r_teme, valid = sub.topocentric(ts, observer)
         for j, when in enumerate(ts):
             frame_index = chunk + j
-            sky = sky_at(frame_index / fps)
-            img = sky + rng.normal(0, noise, sky.shape).astype(np.float32)
+            sky, sigma = sky_at(frame_index / fps)
+            img = sky + (rng.standard_normal(sky.shape) * sigma).astype(np.float32)
             uv, ok = camera.vec_to_pixel(apply_refraction(enu[:, j]))
             vis = camera.in_image(uv, ok, margin=3) & valid[:, j] & is_sunlit(r_teme[:, j], when)
             for i in np.nonzero(vis)[0]:

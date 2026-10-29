@@ -247,6 +247,15 @@ class AircraftConfig(_Section):
     )
 
 
+class MoonConfig(_Section):
+    """Knowing where the Moon is (needs the location and a star calibration)."""
+
+    enabled: bool = True
+    near_deg: float = Field(
+        5.0, gt=0, description="Events passing this close to the Moon's centre are marked near it"
+    )
+
+
 class ShowerConfig(_Section):
     """Associating meteors with showers (IAU Meteor Data Center established showers)."""
 
@@ -438,6 +447,7 @@ class Config(_Section):
     satellites: SatelliteConfig = SatelliteConfig()
     aircraft: AircraftConfig = AircraftConfig()
     showers: ShowerConfig = ShowerConfig()
+    moon: MoonConfig = MoonConfig()
     photometry: PhotometryConfig = PhotometryConfig()
     alerts: AlertConfig = AlertConfig()
     clips: ClipConfig = ClipConfig()

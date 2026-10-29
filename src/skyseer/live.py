@@ -92,6 +92,7 @@ class LiveStation:
         self._fps = 0.0
         self._preview: bytes | None = None
         self._recent: deque[tuple[float, Event]] = deque()
+        self._moon_cache: tuple[float, Any, dict[str, Any] | None] | None = None
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self._pipeline: Pipeline | None = None
@@ -178,10 +179,36 @@ class LiveStation:
             "counts": dict(self.counts),
             "error": self.error,
             "aircraft": None if self.aircraft_feed is None else self.aircraft_feed.status(),
+            "moon": self._moon(),
         }
 
     def preview_jpeg(self) -> bytes | None:
         return self._preview
+
+    def _moon(self) -> dict[str, Any] | None:
+        """The Moon now: where, how lit, and (once calibrated) whether it is in the picture
+        and at which pixel. Worked out at most every 30 s (it moves ~0.5° a minute) and
+        again as soon as the camera is (re)calibrated."""
+        cal = self._pipeline.calibration if self._pipeline is not None else None
+        observer = (cal.observer if cal is not None else None) or self.observer
+        if observer is None or not self.config.moon.enabled:
+            return None
+        now = time.monotonic()
+        cached = self._moon_cache
+        if cached is not None and cached[1] is cal and now - cached[0] < 30.0:
+            return cached[2]
+        from .astro.moon import moon_state
+
+        # The night's own clock (a replay's, before its first frame too), not the computer's.
+        state = moon_state(self._last_time or self.source.start_time, observer)
+        info: dict[str, Any] = dict(state.to_dict())
+        if cal is not None and cal.observer is not None:
+            uv, front = cal.camera.vec_to_pixel(state.enu[None, :])
+            info["in_view"] = state.up and bool(cal.camera.in_image(uv, front)[0])
+            info["pixel"] = [round(float(c), 1) for c in uv[0]] if info["in_view"] else None
+            info["near_px"] = round(cal.camera.f * float(np.radians(self.config.moon.near_deg)))
+        self._moon_cache = (now, cal, info)
+        return info
 
     async def updates(self) -> AsyncGenerator[dict[str, Any], None]:
         """Status now and every 2 s, plus every new event as it happens."""
@@ -395,6 +422,10 @@ class LiveStation:
             meta["calibration"] = cal.summary()
             if cal.observer is not None:
                 meta["pointing"] = cal.camera.pointing_altaz()
+                from .astro.moon import moon_over_night
+
+                start = self.source.start_time
+                meta["moon"] = moon_over_night(start, ended, cal.observer, cal.camera)
         self.store.finish_session(self.session_id, ended.isoformat(), meta)
         write_run_files(self.store, self.session_id, self.folder)
         log.info("Live session %s closed: %d frames", self.session_id, self.frames)
@@ -448,6 +479,14 @@ class LiveStation:
                 color,
                 1,
                 cv2.LINE_AA,
+            )
+        moon = self._moon()
+        if moon and moon.get("pixel"):  # the area where glare makes measurements unreliable
+            x, y = (int(c * scale) for c in moon["pixel"])
+            cv2.circle(view, (x, y), int(moon["near_px"] * scale), (150, 150, 150), 1, cv2.LINE_AA)
+            label = f"Moon {100 * moon['fraction_lit']:.0f}%"
+            cv2.putText(
+                view, label, (x + 6, y - 6), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (200, 200, 200), 1
             )
         stamp = f"{frame.timestamp:%Y-%m-%d %H:%M:%S} UTC  {self._fps:4.1f} fps"
         cv2.putText(

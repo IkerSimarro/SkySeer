@@ -3,6 +3,28 @@
 What changed, phase by phase, with the measured effect of each change. Dates are when the
 work was done. Full detail is in the commit messages.
 
+## [Unreleased]
+
+### The Moon (2026-10-29)
+- **SkySeer knows where the Moon is,** offline: the main terms of Meeus' lunar theory,
+  seen from the observer's place (parallax included). Against NASA JPL's DE421 at 300
+  random times and four places: median 0.002°, worst 0.006° (a fifth of a Pi camera
+  pixel); the fraction lit within 0.0001.
+- **Measured first, then designed.** The simulator now draws the Moon where it really
+  is, with a saturated disc, glare, a lens-flare ghost mirrored through the picture's
+  centre, and noise that grows with the light (the glare figures are illustrative, not
+  measured on a real lens). With a 93%-lit Moon in view over Madrid (23 Oct 2026),
+  today's pipeline still named all 6 satellites and reported nothing false, also with
+  5x the glare; one satellite passed 1.5° from the Moon's centre and was still named.
+  So nothing is masked (a mask would have lost that satellite): the Moon is reported
+  instead.
+- Events passing within 5° of the Moon (`moon.near_deg`) are marked **near the Moon**.
+  Night reports give its phase, how long it was up and in the picture, and how many
+  objects passed near it. The sky map draws its path, and the live view circles it,
+  with its phase on the Live page.
+- A test repeats the measurement on every change: a simulated sky with the Moon in view
+  must give every satellite its right name and nothing false.
+
 ## [1.0.1] - 2026-10-28
 
 ### Ready for the station build (2026-10-28)

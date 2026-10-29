@@ -19,10 +19,13 @@ const CLASS_VAR: Record<string, string> = {
 export function SkyMap({
   events,
   pointing,
+  moon,
   size = 560,
 }: {
   events: EventSummary[]
   pointing?: { alt: number; az: number } | null
+  /** Where the Moon went while it was up (one point: where it is now). */
+  moon?: { path: [number, number][]; fraction_lit: number } | null
   size?: number
 }) {
   const c = size / 2
@@ -65,6 +68,19 @@ export function SkyMap({
             <circle cx={x} cy={y} r={9} />
             <path d={`M${x - 15} ${y}h8M${x + 7} ${y}h8M${x} ${y - 15}v8M${x} ${y + 7}v8`} />
             <title>Camera points here: alt {pointing.alt.toFixed(1)}°, az {pointing.az.toFixed(1)}°</title>
+          </g>
+        )
+      })()}
+      {moon && moon.path.length > 0 && (() => {
+        const pts = moon.path.map(([alt, az]) => xy(alt, az))
+        const [mx, my] = pts[pts.length - 1]
+        const lit = Math.round(moon.fraction_lit * 100)
+        return (
+          <g className="skymap-moon">
+            {pts.length > 1 && <polyline points={pts.map((p) => p.join(',')).join(' ')} fill="none" />}
+            <circle cx={mx} cy={my} r={7} />
+            <text x={mx + 11} y={my + 4}>Moon {lit}%</text>
+            <title>{`The Moon, ${lit}% lit${pts.length > 1 ? ': its path while it was up' : ''}`}</title>
           </g>
         )
       })()}

@@ -47,6 +47,7 @@ for December 2026.
 | **Classification**: hand-written rules by default. An optional machine-learning model is trained on simulated nights and tested honestly against real footage. | the model wins in simulation (96.7% vs 69.5%) but loses on real footage, so the rules stay the default |
 | **Mission-control dashboard**: live camera view, event pages, all-sky map, night reports, and review buttons whose answers become training data. Uploaded recordings are analysed in the background at low priority, and can be stopped and resumed. | a 1080p30 recording analysed at about its own speed (30-34 frames/s) |
 | **Aircraft identification**: matches each path against the positions aircraft broadcast (ADS-B), from the free OpenSky Network or a local receiver, the same way as satellites. | 150/150 simulated flights named among 20 others; 0 of 90 false paths named |
+| **The Moon**: where it is and how much is lit, worked out offline; drawn on the sky map and live view. Objects passing near it are marked, and night reports say how long it was up and in the picture. | position within 0.006° of NASA JPL's ephemeris; with a 93%-lit Moon in view, 6/6 satellites still named and 0 false objects (simulated) |
 | **Unattended station**: observes from dusk to dawn, takes position and time from GPS, starts itself at boot and cleans up its own disk. | Sun position within 0.012° of NASA JPL's ephemeris |
 
 ## The dashboard
@@ -155,6 +156,8 @@ Every number below has a test, a benchmark or a recorded experiment behind it.
 | Learned classifier (optional) | 96.7% vs 69.5% for the rules on 150 hard simulated nights, but 19/31 vs 27/31 on real footage | held-out simulations; 224 tracks labelled by eye without seeing either answer ([details](docs/classifier.md)) |
 | Aircraft identification | 150/150 simulated flights named among 20 others, broadcasts every 10 s (149/150 every 5 s); camera clock error measured to 0.04 s median; 0 of 90 random paths named | random flights over Madrid with GNSS-like noise and up to 2.5 s of clock error |
 | Aircraft direction from a broadcast | within 1″ of Skyfield's independent WGS84 calculation | 50 random positions |
+| Moon position and phase | median 0.002°, max 0.006° from NASA JPL DE421 (parallax included); fraction lit within 0.0001 | 300 random times and four places |
+| The Moon in view | 6/6 satellites named, 0 false objects, including one 1.5° from the Moon's centre; the same with 5x the glare | simulated 93%-lit Moon over Madrid with glare, a lens-flare ghost and moonlit noise (glare figures illustrative) |
 | Sun position (night schedule) | median 0.003°, max 0.012° from NASA JPL DE421; Madrid dusk within 1.5 s | 500 random times and places |
 | Analysing a 1080p30 recording | 30-34 frames/s, about the video's own speed (was 12-19); exactly the same tracks as before on the processor | two real 4.7 h and 6.4 h recordings on an Intel i7-7700 ([details](docs/performance.md#analysing-recordings-on-a-pc-october-2026)) |
 | Throughput at the Pi camera's 2028×1520 | 23.8 frames/s full, 41.5 frames/s half resolution, same objects found | whole live station on an Intel i7-7700; the Pi 5 is not yet measured ([details](docs/performance.md)) |
@@ -245,7 +248,7 @@ unattended dusk-to-dawn station). To set up a Raspberry Pi, see
 
 ## Engineering
 
-- **177 automated tests:**
+- **187 automated tests:**
   - unit tests
   - end-to-end runs on synthetic video with known truth
   - simulated skies from the real star catalogue
@@ -311,6 +314,9 @@ tests/  tools/        tests; validation, benchmarks, simulators, footage tools
 - **One camera sees only a 2D path,** so about 5% of sporadic meteors match a shower by
   chance. Two stations triangulating the path would fix this.
 - **Photometry** has no atmospheric extinction or colour correction yet.
+- **The Moon's glare** has only been tested in simulation, with illustrative figures: a
+  real lens can bloom, flare and ghost differently. The first moonlit nights of the
+  station will show whether anything near it needs masking.
 - **Aircraft:** only aircraft that broadcast ADS-B can be named (many light aircraft,
   helicopters and some military don't). The tests use straight flights; a plane turning
   between OpenSky's 10 s positions strays up to ~150 m from the straight line (~0.3° at

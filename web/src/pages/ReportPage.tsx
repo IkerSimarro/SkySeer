@@ -1,4 +1,4 @@
-import { api, sessionTitle, duration, mag, utcDate, utcTime } from '../api'
+import { api, sessionTitle, duration, mag, moonText, utcDate, utcTime } from '../api'
 import { Timeline } from '../components/charts'
 import { Failed, Loading, SimTag } from '../components/common'
 import { DownloadIcon } from '../components/Icons'
@@ -137,6 +137,11 @@ export default function ReportPage({ scope }: { scope: Scope }) {
               )}
               <dt>Camera pointing</dt>
               <dd>{r.pointing ? `alt ${r.pointing.alt.toFixed(1)}°, az ${r.pointing.az.toFixed(1)}°` : 'not calibrated'}</dd>
+              <dt>Moon</dt>
+              <dd>
+                {r.moon ? moonText(r.moon) : 'not known (needs the location and a star calibration)'}
+                {!!r.near_moon && ` · ${r.near_moon} object${r.near_moon === 1 ? '' : 's'} passed near it`}
+              </dd>
               <dt>Reviewed by a person</dt><dd>{r.reviewed} event{r.reviewed === 1 ? '' : 's'}</dd>
               <dt>Camera moves ignored</dt>
               <dd>{r.disturbances.length === 0 ? 'none' : `${r.disturbances.length} (${r.disturbances.slice(0, 6).map(([a]) => fmtSeconds(a)).join(', ')}${r.disturbances.length > 6 ? ', …' : ''})`}</dd>

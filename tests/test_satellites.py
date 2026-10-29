@@ -151,3 +151,46 @@ def test_old_recordings_need_matching_orbits(orbits):
     path = SkyPath(t, np.zeros(5), np.zeros(5), np.full(5, 45.0), np.linspace(100, 104, 5))
     assert not ident.can_check(path)
     assert ident.identify(path) is None
+
+
+MOON_EVENING = datetime(2026, 10, 16, 18, 30, tzinfo=UTC)  # Moon 33% lit, 17° up, SW
+
+
+def test_the_moon_in_view_hides_nothing_and_adds_nothing(tmp_path, orbits, catalog, test_db):
+    """The Moon in the picture (disc, glare, lens ghost, moonlit noise): every satellite is
+    still found and named, nothing false is reported, and passes near it are marked."""
+    from skyseer.astro.moon import moon_state
+
+    cam = camera_looking_at(30, 205, 0, 1280, 720, 55, k1=-0.05)
+    moon = moon_state(MOON_EVENING, MADRID)
+    uv, front = cam.vec_to_pixel(moon.enu[None, :])
+    assert cam.in_image(uv, front)[0], "the Moon should be in view"
+    passes = find_passes(orbits, MADRID, cam, MOON_EVENING, 20, min_seconds_in_view=6)
+    assert len(passes) >= 2
+    path = tmp_path / "moon.mp4"
+    truth = render_sky_video(
+        path,
+        cam,
+        MADRID,
+        MOON_EVENING,
+        20,
+        10,
+        catalog,
+        orbits,
+        [i for i, _ in passes[:5]],
+        moon=True,
+    )
+    cfg = load_config(satellites={"max_elements_age_days": 15.0})
+    image, when = load_sky_image(path, MOON_EVENING, 0, 2.0)
+    cal = calibrate(image, when, MADRID, fov_estimate=55, fov_max_error=10, database=test_db)
+    ident = SatelliteIdentifier(orbits, MADRID, cfg.satellites)
+    events = list(run(FileSource(path, MOON_EVENING), cfg, calibration=cal, identifier=ident))
+    for p in truth:
+        ev = _event_for(p, events)
+        assert ev is not None and ev.identification is not None, f"{p.name} lost"
+        assert ev.identification.norad_id == p.norad_id
+    real = [e for e in events if str(e.label) in ("Satellite", "Meteor", "Plane")]
+    assert len(real) == len(truth)  # the Moon, its glare and its ghost add nothing
+    for e in real:
+        if e.moon is not None:
+            assert e.moon["separation_deg"] <= cfg.moon.near_deg

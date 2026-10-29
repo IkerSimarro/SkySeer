@@ -12,6 +12,31 @@ export interface Highlight {
   magnitude: number | null
 }
 
+/** The Moon during a session (astro.moon.moon_over_night). */
+export interface MoonNight {
+  fraction_lit: number
+  phase: string
+  hours_up: number
+  max_alt: number
+  path: [number, number][] // (alt, az) every 5 min while up
+  minutes_in_view?: number // how long it was in the picture
+}
+
+/** How close an event passed the Moon, when within moon.near_deg of its centre. */
+export interface NearMoon {
+  separation_deg: number
+  fraction_lit: number
+}
+
+/** e.g. "waxing gibbous, 93% lit · up 3.5 h · in the picture 40 min" */
+export function moonText(m: MoonNight): string {
+  const lit = `${m.phase}, ${Math.round(100 * m.fraction_lit)}% lit`
+  if (m.hours_up <= 0) return `${lit} · below the horizon`
+  const up = m.hours_up >= 1 ? `${m.hours_up.toFixed(1)} h` : `${Math.round(m.hours_up * 60)} min`
+  const seen = m.minutes_in_view ? ` · in the picture ${Math.round(m.minutes_in_view)} min` : ''
+  return `${lit} · up ${up}${seen}`
+}
+
 export interface Session {
   id: number
   name: string // ties it to its folder
@@ -36,6 +61,7 @@ export interface Session {
     discarded_tracks?: number
     simulated?: boolean
     interrupted?: boolean // the station was cut off mid-night (see live.close_interrupted)
+    moon?: MoonNight
   }
 }
 
@@ -87,6 +113,7 @@ export interface EventSummary {
   end_time: string
   duration_s: number
   fireball?: boolean
+  moon?: NearMoon | null
   media: Media | null
   name: string | null
   magnitude: number | null
@@ -160,6 +187,8 @@ export interface Report {
   pointing: Session['meta']['pointing'] | null
   time_source?: 'given' | 'video file' | 'unknown' | null
   disturbances: [number, number][]
+  moon?: MoonNight | null
+  near_moon?: number
 }
 
 export interface Health {
@@ -201,6 +230,14 @@ export interface LiveStatus {
     error: string | null
   } | null
   clock_warning?: string | null
+  moon?: {
+    alt: number
+    az: number
+    fraction_lit: number
+    phase: string
+    up: boolean
+    in_view?: boolean // once the camera is calibrated
+  } | null
   aircraft?: {
     source: string
     authenticated: boolean

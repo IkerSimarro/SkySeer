@@ -224,6 +224,10 @@ def run_info(
                 "elevation_m": obs.elevation_m,
             }
             info["pointing"] = cal.camera.pointing_altaz()
+            from .astro.moon import moon_over_night
+
+            end = started + timedelta(seconds=seconds)
+            info["moon"] = moon_over_night(started, end, obs, cal.camera)
     return info
 
 

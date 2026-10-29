@@ -214,6 +214,9 @@ table.data td.num, table.data th.num { text-align: right; }
 .skymap-track polyline { stroke-linecap: round; opacity: 0.9; }
 .skymap-track:hover polyline { stroke-width: 4; opacity: 1; }
 .skymap-pointing circle, .skymap-pointing path { fill: none; stroke: var(--accent); stroke-width: 1.5; }
+.skymap-moon polyline { stroke: #c9ced8; stroke-width: 1; stroke-dasharray: 2 4; opacity: 0.6; }
+.skymap-moon circle { fill: #e8ebf0; stroke: #8b93a3; }
+.skymap-moon text { fill: #c9ced8; font-size: 11px; }
 .legend { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
 .chart { width: 100%; height: auto; margin-top: 10px; display: block; }
 .chart .axis { fill: var(--faint); font: 11px var(--mono); }

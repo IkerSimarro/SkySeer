@@ -124,6 +124,7 @@ def summary(e: dict[str, Any]) -> dict[str, Any]:
             "end_time",
             "duration_s",
             "fireball",
+            "moon",
             "media",
         )
     } | {
@@ -197,6 +198,8 @@ def night_report(session: dict[str, Any], events: list[dict[str, Any]]) -> dict[
         "pointing": meta.get("pointing"),
         "time_source": meta.get("time_source"),  # given / video file / unknown (recordings)
         "disturbances": meta.get("disturbances", []),
+        "moon": meta.get("moon"),  # phase, hours up, minutes in view (astro.moon)
+        "near_moon": sum(1 for e in real if e.get("moon")),
     }
 
 

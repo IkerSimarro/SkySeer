@@ -142,6 +142,10 @@ showers:                      # meteor shower association (IAU Meteor Data Cente
   max_speed_ratio: 1.5
   min_members: 0              # e.g. 1000 to only use well-observed (major) showers
 
+moon:                         # where the Moon is (needs the location and a star calibration)
+  enabled: true
+  near_deg: 5.0               # events passing this close to its centre are marked near it
+
 photometry:
   fireball_magnitude: -4.0    # this bright or brighter = fireball (Venus is about -4)
   aperture_px: 4.0            # star photometry radius (captures ~99% of a sharp star)

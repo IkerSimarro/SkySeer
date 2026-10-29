@@ -4,6 +4,9 @@
     python tools/simulate_scenario.py satellites --date 2026-10-14T20:00:00 \
         --lat 40.42 --lon -3.70 --alt 50 --az 250 --out data/sim/sats.mp4
 
+    # The same with the Moon where it really is (disc, glare, lens ghost, moonlit noise):
+    python tools/simulate_scenario.py satellites --date 2026-10-23T19:00:00         --lat 40.42 --lon -3.70 --alt 45 --az 135 --moon --out data/sim/moon.mp4
+
     # Meteors from a shower plus sporadics (shower must be active on that date):
     python tools/simulate_scenario.py meteors --shower ORI --count 6 \
         --date 2026-10-21T23:30:00 --lat 40.42 --lon -3.70 --alt 50 --az 100 \
@@ -65,6 +68,9 @@ def main() -> None:
     ap.add_argument("--count", type=int, default=5, help="satellites or meteors to include")
     ap.add_argument("--shower", default=None, help="IAU code, e.g. PER, ORI, GEM")
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument(
+        "--moon", action="store_true", help="satellites: draw the Moon where it really is"
+    )
     ap.add_argument("--out", type=Path, required=True)
     args = ap.parse_args()
     obs = Observer(args.lat, args.lon, args.elevation)
@@ -104,8 +110,27 @@ def main() -> None:
             )
         chosen = [i for i, _ in passes[: args.count]]
         result = render_sky_video(
-            args.out, cam, obs, start, args.seconds, args.fps, stars, orbits, chosen
+            args.out,
+            cam,
+            obs,
+            start,
+            args.seconds,
+            args.fps,
+            stars,
+            orbits,
+            chosen,
+            moon=args.moon,
         )
+        if args.moon:
+            from skyseer.astro.moon import moon_state
+
+            m = moon_state(start, obs)
+            uv, front = cam.vec_to_pixel(m.enu[None, :])
+            truth["moon"] = {
+                **m.to_dict(),
+                "pixel": [round(float(c), 1) for c in uv[0]] if front[0] else None,
+                "in_view": bool(cam.in_image(uv, front)[0]),
+            }
         truth["objects"] = [
             {
                 "type": "satellite",
