@@ -5,6 +5,9 @@ work was done. Full detail is in the commit messages.
 
 ## [Unreleased]
 
+- The README opens with a 40-second video tour (hosted by GitHub, not committed); the
+  animated satellite picture moved to "How it works".
+
 ### The Moon (2026-10-29)
 - **SkySeer knows where the Moon is,** offline: the main terms of Meeus' lunar theory,
   seen from the observer's place (parallax included). Against NASA JPL's DE421 at 300

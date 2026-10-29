@@ -11,11 +11,11 @@
 [![React](https://img.shields.io/badge/React-Dashboard-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev/)
 [![License](https://img.shields.io/badge/License-MIT-lightgrey?style=for-the-badge)](LICENSE)
 
-<img src="docs/images/hero.gif" alt="Six satellites crossing a star field, each boxed and labelled with its catalogue name, riding a dashed line of its predicted orbit" width="100%">
-
-<sub>SkySeer's own output on a simulated test sky built from real data: real catalogue stars, and real satellites placed where their published orbits put them over Madrid.</sub>
-
 </div>
+
+https://github.com/user-attachments/assets/ea970ae7-79d7-4a74-a675-f8341f05958c
+
+<div align="center"><sub>A 40-second tour: plate solving, detection and tracking, identification, then the measured results. The skies, tracks and dashboard in it are SkySeer's own output, on simulated test skies built from real star and orbit data.</sub></div>
 
 ---
 
@@ -91,6 +91,14 @@ flowchart LR
     G & H & I --> J[("SQLite")]
     J --> K["FastAPI + React dashboard<br/>WebSocket live feed"]
 ```
+
+<div align="center">
+
+<img src="docs/images/hero.gif" alt="Six satellites crossing a star field, each boxed and labelled with its catalogue name, riding a dashed line of its predicted orbit" width="100%">
+
+<sub>SkySeer's own output on a simulated test sky built from real data: real catalogue stars, and real satellites placed where their published orbits put them over Madrid.</sub>
+
+</div>
 
 1. **Frames.** Every frame carries a UTC timestamp, from the video's metadata, a given
    start time, or (on the Pi) the camera sensor's own clock.
